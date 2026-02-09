@@ -1,0 +1,9 @@
+﻿{
+    "token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5N2RmNDdhZjRkMjg3YmJmZjgwZGJiYiIsInJvbGUiOiJBZG1pbiIsImlhdCI6MTc2OTg2MjQzNiwiZXhwIjoxNzY5OTQ4ODM2fQ.e0Q-GgGeSpueRU11yAKwDSm_pH0NEnCfgqvPvRWCncY",
+    "user":  {
+                 "id":  "697df47af4d287bbff80dbbb",
+                 "username":  "andria",
+                 "email":  "andria@gmail.com",
+                 "role":  "Admin"
+             }
+}
