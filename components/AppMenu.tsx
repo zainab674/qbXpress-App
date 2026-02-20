@@ -52,7 +52,6 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
                 <DropItem label="Open or Restore Company..." onClick={onOpenCompany} />
                 <DropItem label="Open Previous Company" onClick={onOpenPrevious} />
                 <DropItem label="Back Up Company" border onClick={onBackup} />
-                <DropItem label="Create Copy..." onClick={onCreateCopy} />
                 <DropItem label="Close Company/Log Off" border onClick={onLogOut} />
                 <DropItem label="Utilities" border />
                 <div className="pl-4">
@@ -62,8 +61,7 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
                     <DropItem label="Verify Data" onClick={onVerify} />
                     <DropItem label="Rebuild Data" onClick={onRebuild} />
                 </div>
-                <DropItem label="Print Forms" border onClick={onPrintForms} />
-                <DropItem label="Printer Setup..." onClick={onPrinterSetup} />
+                <DropItem label="Printer Setup..." border onClick={onPrinterSetup} />
                 <DropItem label="Exit" border onClick={onExit} />
             </MenuButton>
 
@@ -91,6 +89,8 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
                     <DropItem label="Terms List" onClick={() => onOpenWindow('TERMS_LIST', 'Terms')} />
                     <DropItem label="Vehicle List" onClick={() => onOpenWindow('VEHICLE_LIST', 'Vehicles')} />
                     <DropItem label="Unit of Measure List" onClick={() => onOpenWindow('UNIT_OF_MEASURE_LIST', 'Unit of Measure List')} />
+                    <DropItem label="Vendor Credit Category List" onClick={() => onOpenWindow('VENDOR_CREDIT_CATEGORY_LIST', 'Vendor Credit Categories')} />
+                    <DropItem label="Customer Credit Category List" onClick={() => onOpenWindow('CUSTOMER_CREDIT_CATEGORY_LIST', 'Customer Credit Categories')} />
                 </div>
             </MenuButton>
 
@@ -113,11 +113,14 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
             <MenuButton label="Customers">
                 <DropItem label="Customer Center" onClick={() => onOpenWindow('CUSTOMER_CENTER', 'Customer Center')} />
                 <DropItem label="Invoice Center" onClick={() => onOpenWindow('INVOICE_CENTER', 'Invoice Center')} />
+                <DropItem label="Sales Order Center" onClick={() => onOpenWindow('SALES_ORDER_CENTER', 'Sales Order Center')} />
                 <DropItem label="Create Estimates" onClick={() => onOpenWindow('ESTIMATE', 'Create Estimates')} />
+                <DropItem label="Create Sales Orders" onClick={() => onOpenWindow('SALES_ORDER', 'Create Sales Orders')} />
                 <DropItem label="Create Invoices" border shortcut="Ctrl+I" onClick={() => onOpenWindow('INVOICE', 'Create Invoices')} />
                 <DropItem label="Create Sales Receipts" onClick={() => onOpenWindow('SALES_RECEIPT', 'Enter Sales Receipts')} />
                 <DropItem label="Receive Payments" border onClick={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payments')} />
                 <DropItem label="Create Credit Memos/Refunds" onClick={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} />
+                <DropItem label="Customer Credit Category List" onClick={() => onOpenWindow('CUSTOMER_CREDIT_CATEGORY_LIST', 'Customer Credit Categories')} />
                 <DropItem label="Create Statements..." border onClick={() => onOpenWindow('STATEMENTS', 'Statements')} />
             </MenuButton>
 
@@ -139,6 +142,7 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
                     <DropItem label="Sales Tax Center" onClick={() => onOpenWindow('SALES_TAX_CENTER', 'Sales Tax Center')} />
                     <DropItem label="Pay Sales Tax" onClick={() => onOpenWindow('PAY_SALES_TAX', 'Pay Sales Tax')} />
                 </div>
+                <DropItem label="Vendor Credit Category List" border onClick={() => onOpenWindow('VENDOR_CREDIT_CATEGORY_LIST', 'Vendor Credit Categories')} />
             </MenuButton>
 
             <MenuButton label="Employees">

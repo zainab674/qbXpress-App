@@ -7,6 +7,7 @@ const Item = require('../models/Item');
 const Account = require('../models/Account');
 const AuditLogEntry = require('../models/AuditLogEntry');
 const PayrollLiability = require('../models/PayrollLiability');
+const InventoryLot = require('../models/InventoryLot');
 
 const transactionService = {
     saveTransaction: async (txData, userRole, userId, companyId) => {
@@ -28,7 +29,7 @@ const transactionService = {
                 // 2. Save/Update Transaction
                 let savedTx;
                 t.userId = userId; t.companyId = companyId;
-                if (t.id && !t.id.includes('.')) {
+                if (t.id) {
                     savedTx = await Transaction.findOneAndUpdate({ id: t.id, userId, companyId }, t, { upsert: true, new: true, session });
                 } else {
                     t.id = t.id || crypto.randomUUID();
@@ -63,7 +64,7 @@ const transactionService = {
                         // Reverse the receipt's impact because the BILL now carries the impact.
                         await transactionService.processAccounting(receipt, session, -1);
                         // Mark receipt as closed so we don't reverse it again if the bill is modified.
-                        await Transaction.findOneAndUpdate({ id: receipt.id }, { status: 'CLOSED' }, { session });
+                        await Transaction.findOneAndUpdate({ _id: receipt._id }, { status: 'CLOSED' }, { session });
                     }
                 }
             }
@@ -88,7 +89,7 @@ const transactionService = {
 
             // Update Accounts Payable Account
             const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
-            if (apAccount) await Account.findOneAndUpdate({ id: apAccount.id }, { $inc: { balance: total } }, { session });
+            if (apAccount) await Account.findOneAndUpdate({ _id: apAccount._id }, { $inc: { balance: total } }, { session });
 
             if (t.type === 'BILL') {
                 await Vendor.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: total } }, { session });
@@ -116,7 +117,7 @@ const transactionService = {
             if (vId) await Vendor.findOneAndUpdate({ id: vId }, { $inc: { balance: -total } }, { session });
 
             const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
-            if (apAccount) await Account.findOneAndUpdate({ id: apAccount.id }, { $inc: { balance: -total } }, { session });
+            if (apAccount) await Account.findOneAndUpdate({ _id: apAccount._id }, { $inc: { balance: -total } }, { session });
 
             if (t.bankAccountId) {
                 await Account.findOneAndUpdate({ id: t.bankAccountId }, { $inc: { balance: -total } }, { session });
@@ -144,8 +145,8 @@ const transactionService = {
             }
         } else if (t.type === 'VENDOR_CREDIT') {
             await Vendor.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: -total } }, { session });
-            const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
-            if (apAccount) await Account.findOneAndUpdate({ id: apAccount.id }, { $inc: { balance: -total } }, { session });
+            const bankAccount = await Account.findOne({ id: t.bankAccountId, userId: t.userId, companyId: t.companyId }).session(session);
+            if (bankAccount) await Account.findOneAndUpdate({ _id: bankAccount._id }, { $inc: { balance: total } }, { session });
         } else if (t.type === 'CHECK') {
             if (t.bankAccountId) {
                 await Account.findOneAndUpdate({ id: t.bankAccountId }, { $inc: { balance: -total } }, { session });
@@ -166,7 +167,7 @@ const transactionService = {
                 await Account.findOneAndUpdate({ id: t.bankAccountId }, { $inc: { balance: total } }, { session });
             }
             const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
-            if (uf) await Account.findOneAndUpdate({ id: uf.id }, { $inc: { balance: -total } }, { session });
+            if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: -total } }, { session });
 
             const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
             for (const item of t.items) {
@@ -183,13 +184,13 @@ const transactionService = {
 
             if (isInvoice) {
                 await Customer.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: total } }, { session });
-                if (arAccount) await Account.findOneAndUpdate({ id: arAccount.id }, { $inc: { balance: total } }, { session });
+                if (arAccount) await Account.findOneAndUpdate({ _id: arAccount._id }, { $inc: { balance: total } }, { session });
             } else if (isPayment) {
                 await Customer.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: -total } }, { session });
-                if (arAccount) await Account.findOneAndUpdate({ id: arAccount.id }, { $inc: { balance: -total } }, { session });
+                if (arAccount) await Account.findOneAndUpdate({ _id: arAccount._id }, { $inc: { balance: -total } }, { session });
 
                 const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
-                if (uf) await Account.findOneAndUpdate({ id: uf.id }, { $inc: { balance: total } }, { session });
+                if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: total } }, { session });
 
                 if (t.appliedCreditIds) {
                     if (multiplier === 1) {
@@ -217,14 +218,15 @@ const transactionService = {
                     await Account.findOneAndUpdate({ id: depositId }, { $inc: { balance: total } }, { session });
                 } else {
                     const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
-                    if (uf) await Account.findOneAndUpdate({ id: uf.id }, { $inc: { balance: total } }, { session });
+                    if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: total } }, { session });
                 }
             }
 
             // Inventory and COGS logic ONLY for Sales/Invoices
             if (isInvoice || isReceipt) {
                 for (const lineItem of t.items) {
-                    const item = await Item.findOne({ id: lineItem.itemId || lineItem.id, userId: t.userId, companyId: t.companyId }).session(session);
+                    const itemSearch = { $or: [{ id: lineItem.itemId || lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId };
+                    const item = await Item.findOne(itemSearch).session(session);
 
                     const amount = (lineItem.amount || 0) * multiplier;
                     const qty = (lineItem.quantity || 0) * multiplier;
@@ -237,21 +239,79 @@ const transactionService = {
 
                     if (item && item.type === 'Inventory Part') {
                         const costVal = qty * (item.cost || 0);
-                        await Item.findOneAndUpdate({ id: item.id }, { $inc: { onHand: -qty } }, { session });
+                        await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: -qty } }, { session });
                         if (item.assetAccountId) await Account.findOneAndUpdate({ id: item.assetAccountId }, { $inc: { balance: -costVal } }, { session });
                         if (item.cogsAccountId) await Account.findOneAndUpdate({ id: item.cogsAccountId }, { $inc: { balance: costVal } }, { session });
+
+                        // FIFO Lot Logic
+                        if (qty !== 0) {
+                            if (multiplier === 1) {
+                                // Deduct from lots
+                                let remainingToDeduct = qty;
+
+                                // If a specific lot was selected by the user, try to deduct from it first
+                                if (lineItem.lotNumber) {
+                                    const specificLot = await InventoryLot.findOne({
+                                        itemId: item.get('id'),
+                                        lotNumber: lineItem.lotNumber,
+                                        companyId: t.companyId,
+                                        userId: t.userId,
+                                        quantityRemaining: { $gt: 0 }
+                                    }).session(session);
+
+                                    if (specificLot) {
+                                        const deduct = Math.min(specificLot.quantityRemaining, remainingToDeduct);
+                                        specificLot.quantityRemaining -= deduct;
+                                        await specificLot.save({ session });
+                                        remainingToDeduct -= deduct;
+                                    }
+                                }
+
+                                // Fallback to FIFO for any remaining quantity
+                                if (remainingToDeduct > 0) {
+                                    const availableLots = await InventoryLot.find({
+                                        itemId: item.get('id'),
+                                        companyId: t.companyId,
+                                        userId: t.userId,
+                                        quantityRemaining: { $gt: 0 }
+                                    }).sort({ dateReceived: 1 }).session(session);
+
+                                    for (const lot of availableLots) {
+                                        if (remainingToDeduct <= 0) break;
+                                        const deduct = Math.min(lot.quantityRemaining, remainingToDeduct);
+                                        lot.quantityRemaining -= deduct;
+                                        await lot.save({ session });
+                                        remainingToDeduct -= deduct;
+
+                                        // Update lineItem.lotNumber for reversal tracking if it wasn't already set
+                                        if (!lineItem.lotNumber) {
+                                            lineItem.lotNumber = lot.lotNumber;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Reversal: Return qty to the lot specified in the line item
+                                if (lineItem.lotNumber) {
+                                    await InventoryLot.findOneAndUpdate(
+                                        { itemId: item.get('id'), lotNumber: lineItem.lotNumber, companyId: t.companyId, userId: t.userId },
+                                        { $inc: { quantityRemaining: -qty } }, // qty is negative here for reversal
+                                        { session }
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             }
         } else if (t.type === 'CREDIT_MEMO') {
             await Customer.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: -total } }, { session });
             const arAccount = await Account.findOne({ name: 'Accounts Receivable', userId: t.userId, companyId: t.companyId }).session(session);
-            if (arAccount) await Account.findOneAndUpdate({ id: arAccount.id }, { $inc: { balance: -total } }, { session });
+            if (arAccount) await Account.findOneAndUpdate({ _id: arAccount._id }, { $inc: { balance: -total } }, { session });
 
             for (const lineItem of t.items) {
-                const item = await Item.findOne({ id: lineItem.id, userId: t.userId, companyId: t.companyId }).session(session);
+                const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId }).session(session);
                 if (item && item.type === 'Inventory Part') {
-                    await Item.findOneAndUpdate({ id: item.id }, { $inc: { onHand: (lineItem.quantity || 0) * multiplier } }, { session });
+                    await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: (lineItem.quantity || 0) * multiplier } }, { session });
                 }
             }
         } else if (t.type === 'TRANSFER') {
@@ -266,7 +326,7 @@ const transactionService = {
                     if (a) {
                         const isNormalDebit = ['Bank', 'Accounts Receivable', 'Other Current Asset', 'Fixed Asset', 'Other Asset', 'Expense', 'Cost of Goods Sold', 'Other Expense'].includes(a.type);
                         const inc = (isNormalDebit ? line.amount : -line.amount) * multiplier;
-                        await Account.findOneAndUpdate({ id: a.id }, { $inc: { balance: inc } }, { session });
+                        await Account.findOneAndUpdate({ _id: a._id }, { $inc: { balance: inc } }, { session });
 
                         if (line.entityId) {
                             if (a.type === 'Accounts Receivable') {
@@ -293,10 +353,10 @@ const transactionService = {
             const employerMed = medTax;
 
             if (payrollLiabAcc) {
-                await Account.findOneAndUpdate({ id: payrollLiabAcc.id }, { $inc: { balance: (fedTax + ssTax + medTax + employerSS + employerMed) * multiplier } }, { session });
+                await Account.findOneAndUpdate({ _id: payrollLiabAcc._id }, { $inc: { balance: (fedTax + ssTax + medTax + employerSS + employerMed) * multiplier } }, { session });
             }
             if (payrollExpAcc) {
-                await Account.findOneAndUpdate({ id: payrollExpAcc.id }, { $inc: { balance: (grossWages + employerSS + employerMed) * multiplier } }, { session });
+                await Account.findOneAndUpdate({ _id: payrollExpAcc._id }, { $inc: { balance: (grossWages + employerSS + employerMed) * multiplier } }, { session });
             }
 
             if (multiplier === 1) {
@@ -316,7 +376,7 @@ const transactionService = {
         } else if (t.type === 'TAX_PAYMENT') {
             if (t.bankAccountId) await Account.findOneAndUpdate({ id: t.bankAccountId }, { $inc: { balance: -total } }, { session });
             const payrollLiabAcc = await Account.findOne({ name: 'Payroll Liabilities', userId: t.userId, companyId: t.companyId }).session(session);
-            if (payrollLiabAcc) await Account.findOneAndUpdate({ id: payrollLiabAcc.id }, { $inc: { balance: -total } }, { session });
+            if (payrollLiabAcc) await Account.findOneAndUpdate({ _id: payrollLiabAcc._id }, { $inc: { balance: -total } }, { session });
 
             if (t.appliedCreditIds && multiplier === 1) {
                 await PayrollLiability.updateMany({ id: { $in: t.appliedCreditIds } }, { status: 'PAID' }, { session });
@@ -325,10 +385,10 @@ const transactionService = {
             }
         } else if (t.type === 'INVENTORY_ADJ') {
             for (const lineItem of t.items) {
-                const item = await Item.findOne({ id: lineItem.id, userId: t.userId, companyId: t.companyId }).session(session);
+                const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId }).session(session);
                 if (item) {
                     const qtyChange = (lineItem.quantity || 0) * multiplier;
-                    await Item.findOneAndUpdate({ id: item.id }, { $inc: { onHand: qtyChange } }, { session });
+                    await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: qtyChange } }, { session });
 
                     // Simple value adjustment if bankAccountId/accountId is provided
                     if (t.bankAccountId && item.assetAccountId) {
@@ -340,12 +400,12 @@ const transactionService = {
             }
         } else if (t.type === 'ASSEMBLY_BUILD') {
             for (const lineItem of t.items) {
-                const assembly = await Item.findOne({ id: lineItem.id, userId: t.userId, companyId: t.companyId }).session(session);
+                const assembly = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId }).session(session);
                 if (assembly && assembly.type === 'Inventory Assembly') {
                     const buildQty = (lineItem.quantity || 0) * multiplier;
 
                     // 1. Add to Assembly On Hand
-                    await Item.findOneAndUpdate({ id: assembly.id }, { $inc: { onHand: buildQty } }, { session });
+                    await Item.findOneAndUpdate({ _id: assembly._id }, { $inc: { onHand: buildQty } }, { session });
 
                     // 2. Deduct from Components
                     if (assembly.assemblyItems) {
@@ -360,14 +420,50 @@ const transactionService = {
     },
 
     receiveInventoryItems: async (t, session, multiplier = 1) => {
+        console.log(`[Inventory] Processing ${t.type} items. Multiplier: ${multiplier}`);
         for (const lineItem of t.items) {
-            const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId }).session(session);
+            const itemSearch = { $or: [{ id: lineItem.itemId || lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId };
+            const item = await Item.findOne(itemSearch).session(session);
+
             if (item && item.type === 'Inventory Part') {
                 const qty = (lineItem.quantity || 0) * multiplier;
                 const amount = (lineItem.amount || 0) * multiplier;
-                await Item.findOneAndUpdate({ id: item.id }, { $inc: { onHand: qty } }, { session });
+                console.log(`[Inventory] Updating item ${item.name} (${item.get('id')}). Qty change: ${qty}`);
+                const updateResult = await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: qty } }, { session, new: true });
+                console.log(`[Inventory] New onHand for ${item.name}: ${updateResult?.onHand}`);
+
                 if (item.assetAccountId) {
                     await Account.findOneAndUpdate({ id: item.assetAccountId }, { $inc: { balance: amount } }, { session });
+                }
+
+                // Create/Update Lot tracking
+                const lotNo = t.lotNumber || lineItem.lotNumber || 'DEFAULT';
+                if (multiplier === 1) {
+                    const existingLot = await InventoryLot.findOne({ itemId: item.get('id'), lotNumber: lotNo, companyId: t.companyId, userId: t.userId }).session(session);
+                    if (existingLot) {
+                        existingLot.quantityReceived += qty;
+                        existingLot.quantityRemaining += qty;
+                        await existingLot.save({ session });
+                    } else {
+                        const newLot = new InventoryLot({
+                            itemId: item.get('id'),
+                            lotNumber: lotNo,
+                            quantityReceived: qty,
+                            quantityRemaining: qty,
+                            dateReceived: t.date ? new Date(t.date) : new Date(),
+                            purchaseOrderId: t.purchaseOrderId || t.id,
+                            companyId: t.companyId,
+                            userId: t.userId
+                        });
+                        await newLot.save({ session });
+                    }
+                } else {
+                    // Reversal
+                    await InventoryLot.findOneAndUpdate(
+                        { itemId: item.get('id'), lotNumber: lotNo, companyId: t.companyId, userId: t.userId },
+                        { $inc: { quantityReceived: -qty, quantityRemaining: -qty } },
+                        { session }
+                    );
                 }
             }
         }

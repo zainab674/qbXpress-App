@@ -16,7 +16,7 @@ const transactionItemSchema = z.object({
 }).passthrough();
 
 const singleTransactionSchema = z.object({
-    type: z.enum(['INVOICE', 'ESTIMATE', 'BILL', 'PURCHASE_ORDER', 'SALES_RECEIPT', 'PAYMENT', 'BILL_PAYMENT', 'CHECK', 'DEPOSIT', 'CREDIT_MEMO', 'VENDOR_CREDIT', 'RECEIVE_ITEM', 'INVENTORY_ADJ', 'ASSEMBLY_BUILD', 'TRANSFER', 'CC_CHARGE', 'JOURNAL_ENTRY', 'PAYCHECK', 'TAX_PAYMENT', 'TAX_ADJUSTMENT']),
+    type: z.enum(['INVOICE', 'ESTIMATE', 'SALES_ORDER', 'BILL', 'PURCHASE_ORDER', 'SALES_RECEIPT', 'PAYMENT', 'BILL_PAYMENT', 'CHECK', 'DEPOSIT', 'CREDIT_MEMO', 'VENDOR_CREDIT', 'RECEIVE_ITEM', 'INVENTORY_ADJ', 'ASSEMBLY_BUILD', 'TRANSFER', 'CC_CHARGE', 'JOURNAL_ENTRY', 'PAYCHECK', 'TAX_PAYMENT', 'TAX_ADJUSTMENT']),
     refNo: z.string().optional(),
     date: z.string().min(1, 'Date is required'),
     entityId: z.string().optional(),

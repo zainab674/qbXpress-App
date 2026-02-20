@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { HomePagePreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, Account } from '../types';
+import { API_BASE_URL } from '../services/api';
 
 interface Props {
   isOpen: boolean;
@@ -20,8 +21,6 @@ interface Props {
   uiPrefs: any;
   setUiPrefs: (p: any) => void;
 }
-
-const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
 
 const PreferencesDialog: React.FC<Props> = ({ isOpen, onClose, homePrefs, setHomePrefs, accPrefs, setAccPrefs, billPrefs, setBillPrefs, checkingPrefs, setCheckingPrefs, closingDate, setClosingDate, userRole, setUserRole, accounts }) => {
   const [activeCategory, setActiveCategory] = useState('Desktop View');

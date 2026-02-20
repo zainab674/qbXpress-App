@@ -7,9 +7,10 @@ interface CustomerTableProps {
     onSelectCustomer: (id: string) => void;
     selectedCustomerId: string;
     onOpenDetail: (customer: Customer) => void;
+    onOpenTransaction?: (id: string, type: string) => void;
 }
 
-const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, onSelectCustomer, selectedCustomerId, onOpenDetail }) => {
+const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, onSelectCustomer, selectedCustomerId, onOpenDetail, onOpenTransaction }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const getCustomerTransactions = (customerId: string) => {
@@ -101,14 +102,19 @@ const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, 
                                                                 <td className="px-4 py-2 text-right font-semibold text-gray-900">${t.total.toLocaleString()}</td>
                                                                 <td className="px-4 py-2 text-center">
                                                                     <span className={`inline-block px-2 py-1 text-[10px] font-bold rounded uppercase ${t.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                                                                            t.status === 'OVERDUE' ? 'bg-red-100 text-red-700' :
-                                                                                'bg-gray-100 text-gray-700'
+                                                                        t.status === 'OVERDUE' ? 'bg-red-100 text-red-700' :
+                                                                            'bg-gray-100 text-gray-700'
                                                                         }`}>
                                                                         {t.status}
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
-                                                                    <button className="text-blue-600 hover:text-blue-800 text-xs">View detail</button>
+                                                                    <button
+                                                                        onClick={() => onOpenTransaction?.(t.id, t.type)}
+                                                                        className="text-blue-600 hover:text-blue-800 text-xs font-bold uppercase tracking-widest"
+                                                                    >
+                                                                        View detail
+                                                                    </button>
                                                                 </td>
                                                             </tr>
                                                         ))}

@@ -1,6 +1,7 @@
 import { AppStore } from '../types';
 
-const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
+/** Single source of truth: from env VITE_API_URL so frontend and server connect in deployed env */
+export const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
 
 const getHeaders = () => {
     const token = localStorage.getItem('authToken');
@@ -173,10 +174,13 @@ export const saveMemorizedReport = (report: any) => post('memorized-reports', re
 export const saveLiability = (liability: any) => post('liabilities', liability);
 export const saveCurrency = (currency: any) => post('currencies', currency);
 export const saveFixedAsset = (asset: any) => post('fixed-assets', asset);
+export const saveRecurringTemplate = (template: any) => post('recurring-templates', template);
+export const deleteRecurringTemplate = (id: string) => remove(`recurring-templates/${id}`);
 export const fetchBankFeeds = () => get('bank-feeds');
 export const saveBankFeed = (feed: any) => post('bank-feeds', feed);
 export const deleteBankFeed = (id: string) => remove(`bank-feeds/${id}`);
 export const condenseData = (cutoffDate: string) => post('utilities/condense', { cutoffDate });
+export const fetchAvailableLots = (itemId: string) => get(`inventory/lots/${itemId}`);
 
 export const fetchReport = async (type: string, params: any = {}) => {
     const query = new URLSearchParams(params).toString();

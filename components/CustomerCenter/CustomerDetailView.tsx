@@ -17,7 +17,7 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
     accounts,
     onOpenTransaction
 }) => {
-    const [activeTab, setActiveTab] = useState<'TRANSACTIONS' | 'DETAILS' | 'NOTES'>('TRANSACTIONS');
+    const [activeTab, setActiveTab] = useState<'TRANSACTIONS' | 'CREDITS' | 'ESTIMATES' | 'DETAILS' | 'NOTES'>('TRANSACTIONS');
     const [newNoteText, setNewNoteText] = useState('');
 
     const customer = customers.find(c => c.id === customerId);
@@ -89,6 +89,20 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                         {activeTab === 'TRANSACTIONS' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full" />}
                     </button>
                     <button
+                        onClick={() => setActiveTab('CREDITS')}
+                        className={`pb-4 text-sm font-bold transition-colors relative ${activeTab === 'CREDITS' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                        Credits
+                        {activeTab === 'CREDITS' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full" />}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('ESTIMATES')}
+                        className={`pb-4 text-sm font-bold transition-colors relative ${activeTab === 'ESTIMATES' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                        Estimates
+                        {activeTab === 'ESTIMATES' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full" />}
+                    </button>
+                    <button
                         onClick={() => setActiveTab('DETAILS')}
                         className={`pb-4 text-sm font-bold transition-colors relative ${activeTab === 'DETAILS' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                     >
@@ -105,8 +119,21 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-                    {activeTab === 'TRANSACTIONS' ? (
+                    {['TRANSACTIONS', 'CREDITS', 'ESTIMATES'].includes(activeTab) ? (
                         <div className="w-full">
+                            {activeTab !== 'TRANSACTIONS' && (
+                                <div className="p-4 bg-slate-50 border-b border-gray-100 flex justify-between items-center">
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                        {activeTab === 'CREDITS' ? 'Credit Memos' : 'Estimates'}
+                                    </h4>
+                                    <button
+                                        onClick={() => onOpenTransaction?.('NEW', activeTab === 'CREDITS' ? 'CREDIT_MEMO' : 'ESTIMATE')}
+                                        className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors uppercase tracking-tighter shadow-sm active:scale-95"
+                                    >
+                                        + New {activeTab === 'CREDITS' ? 'Credit Memo' : 'Estimate'}
+                                    </button>
+                                </div>
+                            )}
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-gray-50 sticky top-0 z-10">
                                     <tr>
@@ -119,38 +146,53 @@ const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
-                                    {customerTransactions.map(tx => (
-                                        <tr key={tx.id} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter ${tx.type === 'INVOICE' ? 'bg-blue-100 text-blue-700' : tx.type === 'PAYMENT' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                                    {tx.type.replace('_', ' ')}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">{tx.date}</td>
-                                            <td className="px-6 py-4 text-sm font-bold text-gray-900">{tx.refNo}</td>
-                                            <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">
-                                                ${tx.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold ${tx.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : tx.status === 'OVERDUE' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                    {tx.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button
-                                                    onClick={() => onOpenTransaction?.(tx.id, tx.type)}
-                                                    className="opacity-0 group-hover:opacity-100 px-3 py-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-all underline decoration-double underline-offset-4"
-                                                >
-                                                    View Details
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {customerTransactions.length === 0 && (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">No transactions found for this customer.</td>
-                                        </tr>
-                                    )}
+                                    {customerTransactions
+                                        .filter(tx => {
+                                            if (activeTab === 'CREDITS') return tx.type === 'CREDIT_MEMO';
+                                            if (activeTab === 'ESTIMATES') return tx.type === 'ESTIMATE';
+                                            return true;
+                                        })
+                                        .map(tx => (
+                                            <tr key={tx.id} className="hover:bg-slate-50 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter ${tx.type === 'INVOICE' ? 'bg-blue-100 text-blue-700' :
+                                                            tx.type === 'PAYMENT' ? 'bg-green-100 text-green-700' :
+                                                                tx.type === 'ESTIMATE' ? 'bg-amber-100 text-amber-700' :
+                                                                    tx.type === 'CREDIT_MEMO' ? 'bg-pink-100 text-pink-700' :
+                                                                        'bg-gray-100 text-gray-700'
+                                                        }`}>
+                                                        {tx.type.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-600">{tx.date}</td>
+                                                <td className="px-6 py-4 text-sm font-bold text-gray-900">{tx.refNo}</td>
+                                                <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">
+                                                    ${tx.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold ${tx.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : tx.status === 'OVERDUE' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                        {tx.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => onOpenTransaction?.(tx.id, tx.type)}
+                                                        className="opacity-0 group-hover:opacity-100 px-3 py-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-all underline decoration-double underline-offset-4"
+                                                    >
+                                                        View Details
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    {customerTransactions.filter(tx => {
+                                        if (activeTab === 'CREDITS') return tx.type === 'CREDIT_MEMO';
+                                        if (activeTab === 'ESTIMATES') return tx.type === 'ESTIMATE';
+                                        return true;
+                                    }).length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">No {activeTab.toLowerCase()} found for this customer.</td>
+                                            </tr>
+                                        )}
                                 </tbody>
                             </table>
                         </div>

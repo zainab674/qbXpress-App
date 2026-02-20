@@ -7,18 +7,36 @@ interface Props {
   items: Item[];
   onSave: (po: Transaction) => void;
   onClose: () => void;
+  initialData?: { itemId: string };
 }
 
-const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose }) => {
+const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose, initialData }) => {
   const [vendorId, setVendorId] = useState('');
   const [poDate, setPoDate] = useState(new Date().toLocaleDateString('en-US'));
   const [expectedDate, setExpectedDate] = useState(new Date().toLocaleDateString('en-US'));
   const [refNo, setRefNo] = useState('PO-' + Math.floor(Math.random() * 9000 + 1000));
   const [memo, setMemo] = useState('');
   const [vendorMessage, setVendorMessage] = useState('');
-  const [orderItems, setOrderItems] = useState<TransactionItem[]>([
-    { id: Math.random().toString(), description: '', quantity: 1, rate: 0, amount: 0, tax: false }
-  ]);
+  const [lotNumber, setLotNumber] = useState('');
+
+  const [orderItems, setOrderItems] = useState<TransactionItem[]>(() => {
+    if (initialData?.itemId) {
+      const item = items.find(i => i.id === initialData.itemId);
+      if (item) {
+        return [{
+          id: Math.random().toString(),
+          description: item.purchaseDescription || item.description || item.name,
+          quantity: 1,
+          rate: item.cost || 0,
+          amount: item.cost || 0,
+          tax: false,
+          actualItemId: item.id
+        } as any];
+      }
+    }
+    return [{ id: Math.random().toString(), description: '', quantity: 1, rate: 0, amount: 0, tax: false }];
+  });
+
 
   const inventoryItems = items.filter(i => i.type === 'Inventory Part' || i.type === 'Non-inventory Part' || i.type === 'Service');
 
@@ -56,7 +74,8 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose })
         itemId: (i as any).actualItemId
       })),
       total: orderItems.reduce((sum, i) => sum + i.amount, 0),
-      status: 'OPEN'
+      status: 'OPEN',
+      lotNumber: lotNumber || undefined
     };
     onSave(po);
     onClose();
@@ -82,7 +101,6 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose })
               <div>
                 <h1 className="text-5xl font-serif italic text-[#003366] drop-shadow-sm flex items-center gap-4">
                   Purchase Order
-                  <span className="text-sm font-sans font-bold uppercase tracking-[0.4em] bg-[#003366] text-white px-3 py-1 rounded-full shadow-lg">QB2016</span>
                 </h1>
               </div>
               <div className="text-right space-y-4">
@@ -97,6 +115,10 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose })
                 <div className="flex items-center justify-end gap-3">
                   <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Expected Date</label>
                   <input className="border-b-2 border-blue-200 p-1 text-sm w-32 bg-blue-50/10 text-right font-bold outline-none focus:border-blue-600" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <label className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Lot Number</label>
+                  <input className="border-b-2 border-purple-200 p-1 text-sm w-32 bg-purple-50/10 text-right font-bold outline-none focus:border-purple-600" placeholder="Optional" value={lotNumber} onChange={e => setLotNumber(e.target.value)} />
                 </div>
               </div>
             </div>

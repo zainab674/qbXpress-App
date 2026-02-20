@@ -14,7 +14,7 @@ const ItemSchema = new mongoose.Schema({
     incomeAccountId: String,
     cogsAccountId: String,
     assetAccountId: String,
-    onHand: Number,
+    onHand: { type: Number, default: 0 },
     reorderPoint: Number,
     taxCode: String,
     customFieldValues: Object,
@@ -23,9 +23,20 @@ const ItemSchema = new mongoose.Schema({
     unitOfMeasure: String,
     preferredVendorId: String,
     vendorId: String,
+    sku: String,
+    category: String,
+    imageUrl: String,
+    isSalesItem: Boolean,
+    isPurchaseItem: Boolean,
+    weight: Number,
+    dimensions: {
+        length: Number,
+        width: Number,
+        height: Number,
+        unit: String
+    },
     assemblyItems: [Object],
     buildPoint: Number,
 }, { timestamps: true });
 
 module.exports = mongoose.model('Item', ItemSchema);
-

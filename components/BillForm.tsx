@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Vendor, Account, Item, Transaction, TransactionItem, Customer, Term, QBClass } from '../types';
+import { Vendor, Account, Item, Transaction, TransactionItem, Customer, Term, QBClass, RecurringTemplate } from '../types';
+import { useData } from '../contexts/DataContext';
+import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 
 interface Props {
   vendors: Vendor[];
@@ -16,6 +18,7 @@ interface Props {
 }
 
 const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms, transactions, classes, onSave, onClose, initialData }) => {
+  const { handleSaveRecurringTemplate } = useData();
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Expenses');
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
@@ -24,19 +27,24 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
   const [selectedTermId, setSelectedTermId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [memo, setMemo] = useState('');
+  const [address, setAddress] = useState(initialData?.BillAddr?.Line1 || '');
+  const [attachments, setAttachments] = useState<any[]>(initialData?.attachments || []);
+  const [lotNumber, setLotNumber] = useState(initialData?.lotNumber || '');
 
   const [expenseRows, setExpenseRows] = useState<any[]>([{ id: Math.random().toString(), accountId: '', amount: 0, memo: '', customerId: '', isBillable: false, classId: '' }]);
   const [itemRows, setItemRows] = useState<TransactionItem[]>([]);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
 
   useEffect(() => {
     if (initialData) {
       setSelectedVendorId(initialData.entityId);
-      setMemo(`Converted from PO #${initialData.refNo || initialData.id}`);
+      setMemo(initialData.memo || `Converted from PO #${initialData.refNo || initialData.id}`);
       if (initialData.type === 'PURCHASE_ORDER') {
         setPurchaseOrderId(initialData.id);
+        setLotNumber(initialData.lotNumber || '');
       }
 
       if (initialData.items) {
@@ -49,7 +57,11 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
     }
   }, [initialData]);
 
-  const allJobs = customers.flatMap(c => (c.jobs || []).map(j => ({ id: j.id, name: `${c.name}: ${j.name}` })));
+  const allCustomers = customers.map(c => ({ id: c.id, name: c.name }));
+  const vendor = vendors.find(v => v.id === selectedVendorId);
+  const total = expenseRows.reduce((s, r) => s + (r.amount || 0), 0) +
+    itemRows.reduce((s, r) => s + (r.amount || 0), 0);
+  const balanceDue = (vendor?.balance || 0) + total;
 
   useEffect(() => {
     const term = terms.find(t => t.id === selectedTermId);
@@ -73,6 +85,9 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
       setSelectedReceiptId(null);
       setShowReceiptDialog(false);
     }
+    if (vendor && !initialData) {
+      setAddress(vendor.address || '');
+    }
   }, [selectedVendorId]);
 
   const handleSelectReceipt = (receipt: Transaction) => {
@@ -88,6 +103,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
     if (!po) return;
     setPurchaseOrderId(po.id);
     setItemRows(po.items.map(i => ({ ...i, id: Math.random().toString() })));
+    setLotNumber(po.lotNumber || '');
     setMemo(`Converted from PO #${po.refNo || po.id}`);
     setActiveTab('Items');
   };
@@ -114,44 +130,59 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
     setItemRows(newRows);
   };
 
-  const total = expenseRows.reduce((s, r) => s + (r.amount || 0), 0) +
-    itemRows.reduce((s, r) => s + (r.amount || 0), 0);
-
   const handleRecord = () => {
     if (!selectedVendorId) return alert("Please select a vendor.");
+    const validItems = [
+      ...expenseRows.filter(r => r.accountId).map(r => ({
+        id: r.id,
+        description: r.memo || memo,
+        quantity: 1,
+        rate: r.amount,
+        amount: r.amount,
+        tax: false,
+        customerId: r.customerId,
+        isBillable: r.isBillable,
+        classId: r.classId,
+        accountId: r.accountId
+      })),
+      ...itemRows.filter(r => r.itemId).map(r => ({
+        ...r,
+        classId: (r as any).classId
+      }))
+    ];
+
+    if (validItems.length === 0) return alert("Please add at least one line item.");
+
     const bill: Transaction = {
-      id: Math.random().toString(),
+      id: initialData?.id || Math.random().toString(),
       type: 'BILL',
       refNo: refNo || 'BILL-' + Date.now().toString().slice(-4),
       date,
       dueDate,
       entityId: selectedVendorId,
-      items: [
-        ...expenseRows.filter(r => r.accountId).map(r => ({
-          id: r.id,
-          description: r.memo || memo,
-          quantity: 1,
-          rate: r.amount,
-          amount: r.amount,
-          tax: false,
-          customerId: r.customerId,
-          isBillable: r.isBillable,
-          classId: r.classId,
-          accountId: r.accountId
-        })),
-        ...itemRows.filter(r => r.itemId).map(r => ({
-          ...r,
-          classId: (r as any).classId
-        }))
-      ],
+      items: validItems,
       total,
       status: 'OPEN',
       itemReceiptId: selectedReceiptId || undefined,
       purchaseOrderId: purchaseOrderId || undefined,
-      classId: selectedClassId || undefined
+      classId: selectedClassId || undefined,
+      memo,
+      attachments,
+      lotNumber: lotNumber || undefined,
+      BillAddr: { Line1: address }
     };
     onSave(bill);
     onClose();
+  };
+
+  const handleSaveRecurring = async (template: RecurringTemplate) => {
+    try {
+      await handleSaveRecurringTemplate(template);
+      alert("Recurring bill template saved successfully!");
+      setShowRecurringModal(false);
+    } catch (err) {
+      alert("Failed to save recurring template");
+    }
   };
 
   return (
@@ -161,6 +192,10 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
           <div className="text-xl">💾</div>
           <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-blue-900">Save & Close</span>
         </button>
+        <button onClick={() => setShowRecurringModal(true)} className="flex flex-col items-center group px-4 py-1 hover:bg-purple-50 rounded-sm border border-transparent hover:border-purple-200 transition-all">
+          <div className="text-xl">🔄</div>
+          <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-purple-900">Memorize</span>
+        </button>
         <button onClick={onClose} className="flex flex-col items-center group px-4 py-1 hover:bg-red-50 rounded-sm border border-transparent hover:border-red-200 transition-all">
           <div className="text-xl">✖</div>
           <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-red-700">Cancel</span>
@@ -169,22 +204,46 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
 
       <div className="flex-1 overflow-y-auto p-6 bg-white border border-gray-300 m-2 rounded shadow-2xl">
         <div className="flex justify-between items-start mb-8">
-          <h1 className="text-4xl font-serif italic text-[#003366] drop-shadow-sm">Enter Bills</h1>
-          <div className="text-right">
-            <div className="text-[10px] font-bold text-gray-500 uppercase italic mb-1 tracking-widest">Vendor Selection</div>
-            <select
-              className="border-b-2 border-blue-200 px-2 py-1 text-sm bg-blue-50/20 outline-none w-72 font-bold focus:border-blue-500 transition-colors"
-              value={selectedVendorId}
-              onChange={e => {
-                setSelectedVendorId(e.target.value);
-                setPurchaseOrderId(null);
-                setSelectedReceiptId(null);
-              }}
-            >
-              <option value="">--Select Vendor--</option>
-              {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+          <div className="flex flex-col gap-4">
+            <h1 className="text-4xl font-serif italic text-[#003366] drop-shadow-sm">Enter Bills</h1>
+            {selectedVendorId && (
+              <div className="flex flex-col gap-1 animate-in slide-in-from-left duration-300">
+                <label className="text-[10px] font-bold text-gray-400 uppercase italic">Vendor Address</label>
+                <textarea
+                  className="border border-gray-200 p-2 text-xs bg-gray-50/50 outline-none w-64 h-20 resize-none font-medium text-gray-600 focus:border-blue-300 rounded shadow-inner"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="Address..."
+                />
+              </div>
+            )}
           </div>
+
+          <div className="flex gap-8">
+            <div className="text-right">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Balance due</div>
+              <div className="text-3xl font-black text-blue-900 drop-shadow-sm">
+                PRs{balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-[10px] font-bold text-gray-500 uppercase italic mb-1 tracking-widest">Vendor Selection</div>
+              <select
+                className="border-b-2 border-blue-200 px-2 py-1 text-sm bg-blue-50/20 outline-none w-72 font-bold focus:border-blue-500 transition-colors"
+                value={selectedVendorId}
+                onChange={e => {
+                  setSelectedVendorId(e.target.value);
+                  setPurchaseOrderId(null);
+                  setSelectedReceiptId(null);
+                }}
+              >
+                <option value="">--Select Vendor--</option>
+                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </div>
+          </div>
+
           {selectedVendorId && openPOs.length > 0 && (
             <div className="text-right">
               <div className="text-[10px] font-bold text-blue-900 uppercase italic mb-1 tracking-widest flex items-center justify-end gap-2">
@@ -245,7 +304,11 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Bill Due Date</label>
             <input className="border-b border-gray-300 p-1 text-xs bg-transparent font-bold text-red-700 outline-none" value={dueDate} onChange={e => setDueDate(e.target.value)} />
           </div>
-          <div className="flex flex-col col-span-3">
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Lot Number</label>
+            <input className="border-b border-gray-300 p-1 text-xs bg-transparent font-bold text-purple-700 outline-none font-mono" placeholder="Optional" value={lotNumber} onChange={e => setLotNumber(e.target.value)} />
+          </div>
+          <div className="flex flex-col col-span-2">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Memo</label>
             <input className="border-b border-gray-300 p-1 text-xs bg-transparent outline-none" value={memo} onChange={e => setMemo(e.target.value)} placeholder="Internal description..." />
           </div>
@@ -262,10 +325,10 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
               <tr>
                 {activeTab === 'Expenses' ? (
                   <>
-                    <th className="px-3 py-2 border-r w-64">Account</th>
+                    <th className="px-3 py-2 border-r w-64">Category</th>
                     <th className="px-3 py-2 border-r w-32 text-right">Amount</th>
                     <th className="px-3 py-2 border-r">Memo</th>
-                    <th className="px-3 py-2 border-r w-64">Customer:Job</th>
+                    <th className="px-3 py-2 border-r w-64">Customer</th>
                     <th className="px-3 py-2 border-r w-32">Class</th>
                     <th className="px-3 py-2 w-16 text-center">B</th>
                     <th className="px-3 py-2 w-8"></th>
@@ -277,7 +340,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                     <th className="px-3 py-2 border-r w-16 text-center">Qty</th>
                     <th className="px-3 py-2 border-r w-24 text-right">Cost</th>
                     <th className="px-3 py-2 border-r w-24 text-right">Amount</th>
-                    <th className="px-3 py-2 border-r w-64">Customer:Job</th>
+                    <th className="px-3 py-2 border-r w-64">Customer</th>
                     <th className="px-3 py-2 border-r w-32">Class</th>
                     <th className="px-3 py-2 w-8 text-center">B</th>
                     <th className="px-3 py-2 w-8"></th>
@@ -293,7 +356,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                       <select className="w-full h-full px-3 bg-transparent outline-none appearance-none" value={r.accountId} onChange={e => {
                         const nr = [...expenseRows]; nr[i].accountId = e.target.value; setExpenseRows(nr);
                       }}>
-                        <option value="">--Select Account--</option>
+                        <option value="">--Select Category--</option>
                         {accounts.filter(a => a.type === 'Expense' || a.type === 'Cost of Goods Sold').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </td>
@@ -307,8 +370,8 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                       <select className="w-full h-full px-3 bg-transparent outline-none appearance-none" value={r.customerId} onChange={e => {
                         const nr = [...expenseRows]; nr[i].customerId = e.target.value; setExpenseRows(nr);
                       }}>
-                        <option value="">&lt;Select Job&gt;</option>
-                        {allJobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                        <option value="">&lt;Select Customer&gt;</option>
+                        {allCustomers.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                       </select>
                     </td>
                     <td className="border-r p-0 bg-blue-50/10">
@@ -348,8 +411,8 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                       <select className="w-full h-full px-3 bg-transparent outline-none appearance-none" value={r.customerId} onChange={e => {
                         const nr = [...itemRows]; nr[i].customerId = e.target.value; setItemRows(nr);
                       }}>
-                        <option value="">&lt;Select Job&gt;</option>
-                        {allJobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                        <option value="">&lt;Select Customer&gt;</option>
+                        {allCustomers.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                       </select>
                     </td>
                     <td className="border-r p-0 bg-blue-50/10">
@@ -373,6 +436,56 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
               {[1, 2, 3].map(i => <tr key={i} className="h-9 border-b border-gray-100 opacity-10"><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td></td></tr>)}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-8 border-t border-gray-200 pt-6">
+          <div className="flex justify-between items-start">
+            <div className="flex-1 max-w-lg">
+              <label className="text-[10px] font-bold text-gray-400 uppercase italic mb-2 block">Attachments</label>
+              <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 flex flex-col items-center justify-center bg-gray-50/30 hover:bg-gray-50 transition-colors group cursor-pointer relative overflow-hidden">
+                <input
+                  type="file"
+                  multiple
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  onChange={e => {
+                    const files = Array.from(e.target.files || []);
+                    const newAttachments = files.map((f: File) => ({
+                      id: Math.random().toString(),
+                      name: f.name,
+                      size: f.size,
+                      type: f.type,
+                      uploadDate: new Date().toLocaleDateString()
+                    }));
+                    setAttachments([...attachments, ...newAttachments]);
+                  }}
+                />
+                <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">📎</div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Drop files here or click to upload</p>
+                <p className="text-[9px] text-gray-400 mt-1">Maximum file size: 20 MB</p>
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full flex items-center gap-2 animate-in zoom-in duration-200">
+                      <span className="text-[10px] font-bold text-blue-700 truncate max-w-[150px]">{att.name}</span>
+                      <button
+                        onClick={() => setAttachments(attachments.filter(a => a.id !== att.id))}
+                        className="text-blue-300 hover:text-red-500 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4 text-right">
+              <button className="px-6 py-2 border border-gray-300 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Clear Splitting</button>
+              <button className="px-6 py-2 bg-blue-900 text-white rounded text-[10px] font-bold uppercase tracking-widest hover:bg-blue-800 transition-colors shadow-lg">Recalculate</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -410,6 +523,43 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
             </div>
           </div>
         </div>
+      )}
+      {showRecurringModal && (
+        <RecurringInvoiceDialog
+          entities={vendors}
+          entityType="Vendor"
+          baseTransaction={{
+            type: 'BILL',
+            refNo: refNo,
+            date: date,
+            dueDate: dueDate,
+            entityId: selectedVendorId,
+            items: [
+              ...expenseRows.filter(r => r.accountId).map(r => ({
+                id: r.id,
+                description: r.memo || memo,
+                quantity: 1,
+                rate: r.amount,
+                amount: r.amount,
+                tax: false,
+                customerId: r.customerId,
+                isBillable: r.isBillable,
+                classId: r.classId,
+                accountId: r.accountId
+              })),
+              ...itemRows.filter(r => r.itemId).map(r => ({
+                ...r,
+                classId: (r as any).classId
+              }))
+            ],
+            total: total,
+            status: 'OPEN',
+            memo: memo,
+            BillAddr: { Line1: address }
+          } as any}
+          onSave={handleSaveRecurring}
+          onClose={() => setShowRecurringModal(false)}
+        />
       )}
     </div>
   );

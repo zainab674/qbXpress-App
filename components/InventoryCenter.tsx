@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Item, Transaction } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Item, Transaction, ViewState } from '../types';
+import { fetchAvailableLots } from '../services/api';
 
 interface InventoryCenterProps {
     items: Item[];
@@ -11,204 +11,375 @@ interface InventoryCenterProps {
     onOpenBuild?: () => void;
     onOpenPO?: () => void;
     onOpenReceive?: () => void;
+    onOpenWindow: (type: ViewState, title: string, params?: any) => void;
 }
 
 const InventoryCenter: React.FC<InventoryCenterProps> = ({
     items,
     transactions,
-    onUpdateItems,
     onOpenForm,
     onOpenAdjustment,
     onOpenBuild,
     onOpenPO,
-    onOpenReceive
+    onOpenReceive,
+    onOpenWindow
 }) => {
-    const [selectedItemId, setSelectedItemId] = useState<string | null>(items[0]?.id || null);
-    const [filter, setFilter] = useState('All');
-    const [showTxMenu, setShowTxMenu] = useState(false);
+    const [activeTab, setActiveTab] = useState<'Products' | 'Adjustments'>('Products');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [expandedLots, setExpandedLots] = useState<Record<string, any[]>>({});
+    const [loadingLots, setLoadingLots] = useState<Record<string, boolean>>({});
 
-    const selectedItem = items.find(i => i.id === selectedItemId);
-    const chartData = selectedItem ? [
-        { name: 'Stock Level', value: selectedItem.onHand || 0, color: (selectedItem.onHand || 0) <= (selectedItem.reorderPoint || 0) ? '#dc2626' : '#2563eb' },
-        { name: 'Reorder Point', value: selectedItem.reorderPoint || 0, color: '#94a3b8' }
-    ] : [];
+    const toggleLots = async (itemId: string) => {
+        if (expandedLots[itemId]) {
+            setExpandedLots(prev => {
+                const updated = { ...prev };
+                delete updated[itemId];
+                return updated;
+            });
+            return;
+        }
 
-    // Filter items to show only inventory-related ones if needed
-    const filteredItems = items.filter(i => {
-        if (filter === 'All') return true;
-        if (filter === 'Low Stock') return (i.onHand || 0) <= (i.reorderPoint || 0);
-        if (filter === 'Out of Stock') return (i.onHand || 0) <= 0;
-        return true;
-    });
+        setLoadingLots(prev => ({ ...prev, [itemId]: true }));
+        try {
+            const lots = await fetchAvailableLots(itemId);
+            setExpandedLots(prev => ({ ...prev, [itemId]: lots }));
+        } catch (err) {
+            console.error('Failed to fetch lots:', err);
+        } finally {
+            setLoadingLots(prev => ({ ...prev, [itemId]: false }));
+        }
+    };
 
-    const itemTransactions = transactions.filter(t =>
-        t.items.some(li => li.id === selectedItemId)
-    );
+    // Filter only inventory items
+    const inventoryItems = useMemo(() =>
+        items.filter(i => i.type === 'Inventory Part' || i.type === 'Inventory Assembly'),
+        [items]);
+
+    // Calculate quantities from transactions
+    const itemQuantities = useMemo(() => {
+        const poQuantities: Record<string, number> = {};
+        const soQuantities: Record<string, number> = {};
+
+        transactions.forEach(tx => {
+            if (tx.status === 'CLOSED' || tx.status === 'Closed') return;
+
+            if (tx.type === 'PURCHASE_ORDER') {
+                tx.items.forEach(li => {
+                    if (li.itemId) {
+                        poQuantities[li.itemId] = (poQuantities[li.itemId] || 0) + li.quantity;
+                    }
+                });
+            } else if (tx.type === 'SALES_ORDER') {
+                tx.items.forEach(li => {
+                    if (li.itemId) {
+                        soQuantities[li.itemId] = (soQuantities[li.itemId] || 0) + li.quantity;
+                    }
+                });
+            }
+        });
+
+        return { poQuantities, soQuantities };
+    }, [transactions]);
+
+    const filteredItems = useMemo(() => {
+        return inventoryItems.filter(item =>
+            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+    }, [inventoryItems, searchTerm]);
+
+    const lowStockCount = useMemo(() => {
+        return inventoryItems.filter(i => (i.onHand || 0) <= (i.reorderPoint || 0)).length;
+    }, [inventoryItems]);
 
     return (
-        <div className="flex flex-col h-full bg-[#f0f4f7] font-sans">
-            <div className="bg-white border-b border-gray-300 p-4 shadow-sm">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-[#003366]">Inventory Center</h1>
-                    <div className="flex gap-2">
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowTxMenu(!showTxMenu)}
-                                className="bg-[#003366] text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-[#002244] transition-colors shadow-sm flex items-center gap-2"
-                            >
-                                New Transaction <span>▼</span>
-                            </button>
-                            {showTxMenu && (
-                                <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-300 shadow-xl z-50 rounded text-gray-800 py-1">
-                                    <button onClick={() => { onOpenAdjustment?.(); setShowTxMenu(false); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-600 hover:text-white transition-colors">Adjust Quantity/Value on Hand</button>
-                                    <button onClick={() => { onOpenBuild?.(); setShowTxMenu(false); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-600 hover:text-white transition-colors">Build Assemblies</button>
-                                    <div className="h-px bg-gray-200 my-1"></div>
-                                    <button onClick={() => { onOpenPO?.(); setShowTxMenu(false); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-600 hover:text-white transition-colors">Purchase Order</button>
-                                    <button onClick={() => { onOpenReceive?.(); setShowTxMenu(false); }} className="w-full text-left px-4 py-2 text-xs hover:bg-blue-600 hover:text-white transition-colors">Receive Items</button>
-                                </div>
-                            )}
-                        </div>
+        <div className="flex flex-col h-full bg-white font-sans text-gray-700">
+            {/* Header */}
+            <header className="p-4 border-b border-gray-200 flex justify-between items-start">
+                <div className="flex flex-col gap-4">
+                    <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
+
+                    {/* Tabs */}
+                    <div className="flex border border-gray-300 rounded overflow-hidden w-fit shadow-sm">
                         <button
-                            onClick={() => onOpenForm()}
-                            className="bg-green-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-green-800 transition-colors shadow-sm"
+                            className={`px-6 py-1.5 text-sm font-bold transition-colors ${activeTab === 'Products' ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                            onClick={() => setActiveTab('Products')}
                         >
-                            New Item
+                            Products
+                        </button>
+                        <button
+                            className={`px-6 py-1.5 text-sm font-bold transition-colors ${activeTab === 'Adjustments' ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                            onClick={() => setActiveTab('Adjustments')}
+                        >
+                            Adjustments
                         </button>
                     </div>
                 </div>
+
+                <div className="flex gap-2">
+                    <button className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-700 rounded text-sm font-bold hover:bg-green-50 transition-colors">
+                        More <span className="text-[10px]">▼</span>
+                    </button>
+                    <div className="flex border border-green-600 rounded bg-green-600 overflow-hidden shadow-sm">
+                        <button
+                            onClick={() => onOpenForm({ type: 'Inventory Part' } as any)}
+                            className="px-4 py-2 text-white text-sm font-bold hover:bg-green-700 transition-colors"
+                        >
+                            Add items
+                        </button>
+                        <div className="w-[1px] bg-green-700"></div>
+                        <button className="px-2 py-2 text-white text-sm font-bold hover:bg-green-700 transition-colors">
+                            ▼
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* Low Stock Alert */}
+            {lowStockCount > 0 && (
+                <div className="px-6 py-2">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 flex justify-between items-start shadow-sm border-l-4 border-l-orange-500">
+                        <div className="flex gap-3">
+                            <div className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">!</div>
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-900">Low stock</h4>
+                                <p className="text-xs text-gray-600 mt-0.5">
+                                    {lowStockCount} item{lowStockCount > 1 ? 's are' : ' is'} running low on stock.
+                                    <button className="text-blue-600 hover:underline ml-1">See all</button>
+                                </p>
+                            </div>
+                        </div>
+                        <button className="text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Toolbar */}
+            <div className="p-4 flex justify-between items-center mt-2">
+                <div className="flex gap-2 items-center">
+                    <div className="relative group">
+                        <input
+                            type="text"
+                            placeholder="Search by name, SKU or category"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 pr-4 py-2 border border-gray-300 rounded text-sm w-80 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                        />
+                        <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+                        Filter <span>▼</span>
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-4 text-gray-400">
+                    <button className="hover:text-gray-600 transition-colors">🖨️</button>
+                    <button className="hover:text-gray-600 transition-colors">📤</button>
+                    <button className="hover:text-gray-600 transition-colors">⚙️</button>
+                </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-                {/* Left Sidebar - Item List */}
-                <div className="w-[300px] border-r border-gray-300 bg-white flex flex-col">
-                    <div className="p-3 bg-gray-50 border-b border-gray-200">
-                        <select
-                            className="w-full text-xs border border-gray-300 p-1.5 rounded outline-none"
-                            value={filter}
-                            onChange={e => setFilter(e.target.value)}
-                        >
-                            <option value="All">All Inventory Items</option>
-                            <option value="Low Stock">Low Stock</option>
-                            <option value="Out of Stock">Out of Stock</option>
-                        </select>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {filteredItems.map(item => (
-                            <div
-                                key={item.id}
-                                onClick={() => setSelectedItemId(item.id)}
-                                className={`p-3 border-b border-gray-100 cursor-default hover:bg-blue-50 transition-colors ${selectedItemId === item.id ? 'bg-[#e0eaf3] border-l-4 border-l-blue-600' : ''}`}
-                            >
-                                <div className="flex justify-between">
-                                    <span className="text-xs font-bold text-gray-800 truncate">{item.name}</span>
-                                    <span className={`text-xs font-mono ${(item.onHand || 0) <= (item.reorderPoint || 0) ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                                        {item.onHand || 0}
-                                    </span>
-                                </div>
-                                <div className="text-[10px] text-gray-500 truncate">{item.type}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+            {/* Table Header Extra Info */}
+            <div className="px-4 py-1 text-right text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                1-{filteredItems.length} of {filteredItems.length} &nbsp; 〈 1 〉
+            </div>
 
-                {/* Main Content - Item Details */}
-                <div className="flex-1 flex flex-col overflow-y-auto">
-                    {selectedItem ? (
-                        <>
-                            <div className="bg-white p-6 border-b border-gray-200 shadow-sm">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-[#003366]">{selectedItem.name}</h2>
-                                        <div className="text-sm text-gray-500 italic mt-1">{selectedItem.description}</div>
-                                    </div>
-                                    <button
-                                        onClick={() => onOpenForm(selectedItem)}
-                                        className="text-blue-600 text-xs font-bold hover:underline"
-                                    >
-                                        Edit Item
-                                    </button>
+            {/* Table */}
+            <div className="flex-1 overflow-auto border-t border-gray-200">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#f8f9fa] border-b border-gray-200 sticky top-0 z-10">
+                        <tr className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                            <th className="px-4 py-4 w-10">
+                                <input type="checkbox" className="rounded border-gray-300" />
+                            </th>
+                            <th className="px-4 py-4 w-16"></th>
+                            <th className="px-4 py-4 min-w-[150px]">
+                                <div className="flex items-center gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    NAME <span>↕</span>
                                 </div>
+                            </th>
+                            <th className="px-4 py-4 min-w-[200px]">SALES DESCRIPTION</th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    QTY ON HAND <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    QTY ON PO <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    QTY ON SO <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    AVAIL QTY <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    REORDER POINT <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    PRICE <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-right">
+                                <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
+                                    COST <span>↕</span>
+                                </div>
+                            </th>
+                            <th className="px-4 py-4 text-center">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {filteredItems.map(item => {
+                            const poQty = itemQuantities.poQuantities[item.id] || 0;
+                            const soQty = itemQuantities.soQuantities[item.id] || 0;
+                            const availQty = (item.onHand || 0) - soQty;
+                            const isLow = (item.onHand || 0) <= (item.reorderPoint || 0);
 
-                                <div className="grid grid-cols-4 gap-6 mt-6">
-                                    <div className="bg-blue-50/50 p-3 rounded border border-blue-100 shadow-inner">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">On Hand</div>
-                                        <div className="text-lg font-black text-blue-900">{selectedItem.onHand || 0}</div>
-                                    </div>
-                                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">Sales Price</div>
-                                        <div className="text-lg font-black text-gray-800">${(selectedItem.salesPrice || 0).toFixed(2)}</div>
-                                    </div>
-                                    <div className="bg-gray-50 p-3 rounded border border-gray-200 col-span-2 row-span-2">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight mb-2">Stock Analysis</div>
-                                        <div className="h-32">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart data={chartData} layout="vertical" margin={{ left: -10, right: 20 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                                    <XAxis type="number" hide />
-                                                    <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#64748b" />
-                                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ fontSize: '10px', borderRadius: '4px', border: '1px solid #e2e8f0' }} />
-                                                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
-                                                        {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </div>
-                                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">Cost</div>
-                                        <div className="text-lg font-black text-gray-800">${(selectedItem.cost || 0).toFixed(2)}</div>
-                                    </div>
-                                    <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">Reorder Point</div>
-                                        <div className="text-lg font-black text-gray-800 text-red-600">{selectedItem.reorderPoint || 0}</div>
-                                    </div>
-                                </div>
-                            </div>
+                            return (
+                                <React.Fragment key={item.id}>
+                                    <tr className={`hover:bg-gray-50 transition-colors group ${expandedLots[item.id] ? 'bg-blue-50/30' : ''}`}>
+                                        <td className="px-4 py-4">
+                                            <input type="checkbox" className="rounded border-gray-300" />
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="w-10 h-10 border border-gray-200 rounded flex items-center justify-center bg-gray-50">
+                                                {item.imageUrl ? (
+                                                    <img src={item.imageUrl} alt="" className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex flex-col">
+                                                <button
+                                                    onClick={() => onOpenForm(item)}
+                                                    className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline text-left"
+                                                >
+                                                    {item.name}
+                                                </button>
+                                                <button
+                                                    onClick={() => toggleLots(item.id)}
+                                                    className="text-[10px] font-black text-gray-400 hover:text-blue-600 uppercase tracking-tighter mt-1 flex items-center gap-1"
+                                                >
+                                                    {loadingLots[item.id] ? 'Loading...' : (expandedLots[item.id] ? 'Hide Lots ▲' : 'Show Lots ▼')}
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-xs text-gray-500">
+                                            {item.description}
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <span className={`text-sm font-bold ${isLow ? 'text-orange-600' : 'text-gray-800'}`}>
+                                                    {item.onHand || 0}
+                                                </span>
+                                                {isLow && (
+                                                    <span
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onOpenWindow('PURCHASE_ORDER', 'Purchase Order', { initialData: { itemId: item.id } });
+                                                        }}
+                                                        className="bg-orange-500 text-white text-[8px] font-black px-1 py-0.5 rounded tracking-tighter uppercase leading-none cursor-pointer hover:bg-orange-600 transition-colors shadow-sm active:scale-95"
+                                                        title="Click to create Purchase Order"
+                                                    >
+                                                        LOW
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{poQty}</td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{soQty}</td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-800 font-bold">{availQty}</td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-500 font-medium italic">{item.reorderPoint || 0}</td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{item.salesPrice || 0}</td>
+                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{item.cost || 0}</td>
+                                        <td className="px-4 py-4 text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                    onClick={() => onOpenForm(item)}
+                                                    className="text-xs font-bold text-green-700 hover:text-green-800"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <div className="w-[1px] h-3 bg-gray-300 mx-1"></div>
+                                                <button className="text-gray-400 hover:text-gray-600">
+                                                    ▼
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {expandedLots[item.id] && (
+                                        <tr className="bg-gray-50/80">
+                                            <td className="px-4 py-2"></td>
+                                            <td className="px-4 py-2" colSpan={10}>
+                                                <div className="p-4 bg-white border border-gray-200 rounded-md shadow-inner m-2">
+                                                    <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                                                        Lot Details Tracking
+                                                    </h5>
+                                                    <div className="grid grid-cols-4 gap-4">
+                                                        {expandedLots[item.id].map(lot => (
+                                                            <div key={lot._id || lot.lotNumber} className="border border-gray-100 p-3 rounded bg-gray-50/50 flex flex-col gap-1 shadow-sm">
+                                                                <div className="flex justify-between items-center mb-1">
+                                                                    <span className="text-xs font-black text-blue-900">{lot.lotNumber}</span>
+                                                                    <span className="text-[10px] font-bold text-gray-400">{new Date(lot.dateReceived).toLocaleDateString()}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-end">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[9px] uppercase font-bold text-gray-400">Remaining</span>
+                                                                        <span className="text-sm font-black text-gray-800">{lot.quantityRemaining} <span className="text-[10px] font-medium text-gray-500">of {lot.quantityReceived}</span></span>
+                                                                    </div>
+                                                                    <div className="w-16 h-1 bg-gray-200 rounded overflow-hidden">
+                                                                        <div
+                                                                            className="h-full bg-blue-500 rounded"
+                                                                            style={{ width: `${(lot.quantityRemaining / lot.quantityReceived) * 100}%` }}
+                                                                        ></div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {expandedLots[item.id].length === 0 && (
+                                                            <div className="col-span-4 py-4 text-center text-xs text-gray-400 italic">
+                                                                No active lots found for this item.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+                        {filteredItems.length === 0 && (
+                            <tr>
+                                <td colSpan={11} className="px-4 py-20 text-center text-gray-400 italic">
+                                    No products or services found.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
 
-                            <div className="flex-1 p-6 flex flex-col min-h-[400px]">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Transaction History</h3>
-                                <div className="flex-1 bg-white border border-gray-300 rounded shadow-sm overflow-auto">
-                                    <table className="w-full text-xs">
-                                        <thead className="bg-gray-100 border-b sticky top-0 font-bold uppercase text-[10px] text-gray-600">
-                                            <tr>
-                                                <th className="px-4 py-2 text-left border-r">Date</th>
-                                                <th className="px-4 py-2 text-left border-r">Type</th>
-                                                <th className="px-4 py-2 text-left border-r">Ref No</th>
-                                                <th className="px-4 py-2 text-right border-r">Qty</th>
-                                                <th className="px-4 py-2 text-right">Balance</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {itemTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(t => {
-                                                const lineItem = t.items.find(li => li.id === selectedItemId);
-                                                return (
-                                                    <tr key={t.id} className="border-b hover:bg-gray-50 transition-colors">
-                                                        <td className="px-4 py-2 border-r">{t.date}</td>
-                                                        <td className="px-4 py-2 border-r font-bold">{t.type}</td>
-                                                        <td className="px-4 py-2 border-r">{t.refNo}</td>
-                                                        <td className={`px-4 py-2 border-r text-right font-bold ${['INVOICE', 'SALES_RECEIPT'].includes(t.type) ? 'text-red-600' : 'text-green-600'}`}>
-                                                            {['INVOICE', 'SALES_RECEIPT'].includes(t.type) ? '-' : '+'}{lineItem?.quantity || 0}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-right font-mono text-gray-400 italic">--</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {itemTransactions.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={5} className="px-4 py-20 text-center text-gray-400 italic">No transactions found for this item.</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-400 italic">
-                            Select an item to view details
-                        </div>
-                    )}
-                </div>
+            {/* Footer Pagination */}
+            <div className="px-4 py-4 border-t border-gray-200 text-right text-xs text-gray-500 bg-white">
+                1-{filteredItems.length} of {filteredItems.length} &nbsp; 〈 <span className="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded">1</span> 〉
             </div>
         </div>
     );

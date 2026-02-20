@@ -6,12 +6,13 @@ interface Props {
   customers: Customer[];
   transactions: Transaction[];
   paymentMethods: string[];
+  customerCreditCategories: any[];
   initialData?: { customerId?: string, invoiceId?: string };
   onSave: (tx: Transaction) => void;
   onClose: () => void;
 }
 
-const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentMethods, initialData, onSave, onClose }) => {
+const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentMethods, customerCreditCategories, initialData, onSave, onClose }) => {
   const [selectedCustId, setSelectedCustId] = useState(initialData?.customerId || '');
   const [amount, setAmount] = useState(0);
   const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
@@ -175,6 +176,7 @@ const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentM
                       <th className="px-3 py-2 border-r w-10 text-center">✓</th>
                       <th className="px-3 py-2 border-r">Date</th>
                       <th className="px-3 py-2 border-r">Memo No.</th>
+                      <th className="px-3 py-2 border-r">Category</th>
                       <th className="px-3 py-2 text-right">Credit Amount</th>
                     </tr>
                   </thead>
@@ -186,6 +188,9 @@ const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentM
                         </td>
                         <td className="px-3 py-2 border-r">{credit.date}</td>
                         <td className="px-3 py-2 border-r">{credit.refNo}</td>
+                        <td className="px-3 py-2 border-r font-bold text-blue-900">
+                          {customerCreditCategories.find(cat => cat.id === (credit.items?.find(item => item.creditCategoryId)?.creditCategoryId))?.name || '---'}
+                        </td>
                         <td className="px-3 py-2 text-right font-mono text-emerald-700 font-bold">${credit.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))}

@@ -14,6 +14,7 @@ interface Props {
   onOpenPayment?: () => void;
   onOpenReceipt?: () => void;
   onOpenEstimate?: () => void;
+  onOpenSalesOrder?: () => void;
   onOpenCredit?: () => void;
 }
 
@@ -27,6 +28,7 @@ const CustomerCenter: React.FC<Props> = ({
   onOpenPayment,
   onOpenReceipt,
   onOpenEstimate,
+  onOpenSalesOrder,
   onOpenCredit
 }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id);
@@ -176,6 +178,9 @@ const CustomerCenter: React.FC<Props> = ({
             <button onClick={onOpenEstimate} className="flex-1 max-w-[150px] bg-white border-2 border-gray-200 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
               Create Estimate
             </button>
+            <button onClick={onOpenSalesOrder} className="flex-1 max-w-[150px] bg-white border-2 border-slate-900 text-slate-900 font-bold py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-sm">
+              Create Sales Order
+            </button>
           </div>
         </div>
 
@@ -187,6 +192,13 @@ const CustomerCenter: React.FC<Props> = ({
             selectedCustomerId={selectedCustomerId}
             onSelectCustomer={setSelectedCustomerId}
             onOpenDetail={(customer) => onOpenWindow('CUSTOMER_DETAIL' as any, customer.name, { customerId: customer.id })}
+            onOpenTransaction={(id, type) => {
+              const viewType = type === 'INVOICE' ? 'INVOICE_DISPLAY' :
+                (type === 'ESTIMATE' ? 'ESTIMATE_DISPLAY' :
+                  (type === 'SALES_ORDER' ? 'SALES_ORDER_DISPLAY' :
+                    (type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any)));
+              onOpenWindow(viewType, `${type.replace('_', ' ')} #${id}`, { transactionId: id });
+            }}
           />
         </div>
       </div>

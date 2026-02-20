@@ -15,6 +15,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
   const [selectedPoId, setSelectedPoId] = useState('');
   const [receiveWithBill, setReceiveWithBill] = useState(true);
   const [refNo] = useState('RECV-' + Date.now().toString().slice(-4));
+  const [lotNumber, setLotNumber] = useState('');
   const [receivedQtys, setReceivedQtys] = useState<Record<string, number>>({});
 
   const vendorPos = transactions.filter(t => t.type === 'PURCHASE_ORDER' && t.entityId === vendorId && t.status === 'OPEN');
@@ -42,7 +43,8 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
       items: currentItems,
       total: currentTotal,
       status: receiveWithBill ? 'OPEN' : 'RECEIVED',
-      purchaseOrderId: selectedPoId
+      purchaseOrderId: selectedPoId,
+      lotNumber: lotNumber || undefined
     };
     onSave(receipt);
     onClose();
@@ -81,7 +83,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-12 bg-white p-8 border-2 border-gray-100 rounded shadow-lg relative">
+          <div className={`grid ${vendorId ? 'grid-cols-3' : 'grid-cols-2'} gap-8 bg-white p-8 border-2 border-gray-100 rounded shadow-lg relative transition-all`}>
             <div className="flex flex-col gap-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic flex items-center gap-2">
                 <span className="w-4 h-4 bg-gray-100 rounded-full flex items-center justify-center text-[8px] not-italic">V</span>
@@ -104,11 +106,31 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
                 <select
                   className="border-b-2 border-blue-200 p-2 text-sm bg-blue-50/20 font-black outline-none focus:border-blue-600 text-[#003366] shadow-sm"
                   value={selectedPoId}
-                  onChange={e => { setSelectedPoId(e.target.value); setReceivedQtys({}); }}
+                  onChange={e => {
+                    const poId = e.target.value;
+                    setSelectedPoId(poId);
+                    setReceivedQtys({});
+                    const po = vendorPos.find(p => p.id === poId);
+                    if (po) setLotNumber(po.lotNumber || '');
+                  }}
                 >
                   <option value="">--Choose PO--</option>
                   {vendorPos.map(p => <option key={p.id} value={p.id}>{p.refNo} ({p.date}) - ${p.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</option>)}
                 </select>
+              </div>
+            )}
+            {vendorId && (
+              <div className="flex flex-col gap-2 animate-in slide-in-from-right-4 duration-300">
+                <label className="text-[10px] font-black text-purple-900 uppercase tracking-widest italic flex items-center gap-2">
+                  <span className="text-lg">🏷️</span> Lot Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Lot Number (Manual or from PO)"
+                  className="border-b-2 border-purple-200 p-2 text-sm bg-purple-50/10 font-black outline-none focus:border-purple-600 text-[#003366] shadow-sm"
+                  value={lotNumber}
+                  onChange={e => setLotNumber(e.target.value)}
+                />
               </div>
             )}
           </div>
@@ -128,7 +150,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
                 <tbody>
                   {selectedPo.items.map((item, i) => (
                     <tr key={i} className="border-b h-10 hover:bg-blue-50/50 group transition-colors">
-                      <td className="p-3 border-r border-gray-200 font-black text-gray-800 uppercase tracking-tighter">{items.find(it => it.id === item.id)?.name}</td>
+                      <td className="p-3 border-r border-gray-200 font-black text-gray-800 uppercase tracking-tighter">{items.find(it => it.id === (item.itemId || item.id))?.name}</td>
                       <td className="p-3 border-r border-gray-200 italic text-gray-500">{item.description}</td>
                       <td className="p-3 border-r border-gray-200 text-center font-bold text-gray-400">{item.quantity}</td>
                       <td className="p-3 border-r border-gray-200 text-center font-black text-blue-900 bg-blue-50/30">

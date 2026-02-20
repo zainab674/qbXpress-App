@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { Customer, Account, Item } from '../types';
+import { fetchAvailableLots } from '../services/api';
+import { Customer, Account, Item, TransactionItem } from '../types';
 
 interface Props {
   customers: Customer[];
@@ -26,10 +27,12 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
   const [shipDate, setShipDate] = useState(initialData?.shipDate || '');
   const [trackingNo, setTrackingNo] = useState(initialData?.trackingNo || '');
   const [fob, setFob] = useState(initialData?.fob || '');
-  const [lineItems, setLineItems] = useState<{ id: string, itemId: string, description: string, quantity: number, rate: number, amount: number }[]>(
+  const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
     initialData?.items?.map((li: any) => ({ ...li, id: li.id || Math.random().toString() })) ||
-    [{ id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0 }]
+    [{ id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0, lotNumber: '' }]
   );
+
+  const [availableLotsMap, setAvailableLotsMap] = useState<Record<string, any[]>>({});
 
   const updateLineItem = (id: string, updates: any) => {
     setLineItems(lineItems.map(item => {
@@ -42,15 +45,31 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
     }));
   };
 
+  const fetchAndSuggestLot = async (id: string, itemId: string) => {
+    try {
+      const lots = await fetchAvailableLots(itemId);
+      setAvailableLotsMap(prev => ({ ...prev, [itemId]: lots }));
+      if (lots && lots.length > 0) {
+        // Suggested earliest lot (FIFO)
+        updateLineItem(id, { lotNumber: lots[0].lotNumber });
+      }
+    } catch (err) {
+      console.error('Error fetching lots:', err);
+    }
+  };
+
   const handleItemSelect = (id: string, itemId: string) => {
     const item = items.find(i => i.id === itemId);
     if (item) {
       updateLineItem(id, { itemId, description: item.description || item.name, rate: item.salesPrice || 0 });
+      if (item.type === 'Inventory Part' || item.type === 'Inventory Assembly') {
+        fetchAndSuggestLot(id, itemId);
+      }
     }
   };
 
   const handleAddItem = () => {
-    setLineItems([...lineItems, { id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0 }]);
+    setLineItems([...lineItems, { id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0, lotNumber: '' }]);
   };
 
   const total = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
@@ -174,25 +193,40 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
             <thead className="bg-[#e8e8e8] border-b border-gray-400">
               <tr>
                 <th className="px-3 py-2 text-left w-16 border-r">Qty</th>
-                <th className="px-3 py-2 text-left border-r">Item</th>
+                <th className="px-3 py-2 text-left border-r w-48">Item</th>
                 <th className="px-3 py-2 text-left border-r">Description</th>
-                <th className="px-3 py-2 text-right border-r">Rate</th>
-                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2 text-left border-r w-32">Lot Number</th>
+                <th className="px-3 py-2 text-right border-r w-24">Rate</th>
+                <th className="px-3 py-2 text-right w-24">Amount</th>
               </tr>
             </thead>
             <tbody>
               {lineItems.map(item => (
                 <tr key={item.id} className="border-b h-8 hover:bg-blue-50/50">
-                  <td className="border-r p-0"><input type="number" className="w-full h-full px-2 outline-none bg-transparent" value={item.quantity || ''} onChange={e => updateLineItem(item.id, { quantity: parseFloat(e.target.value) || 0 })} /></td>
-                  <td className="border-r p-0">
-                    <select className="w-full h-full px-2 outline-none bg-transparent appearance-none" value={item.itemId} onChange={e => handleItemSelect(item.id, e.target.value)}>
+                  <td className="border-r p-0"><input type="number" className="w-full h-full px-2 outline-none bg-transparent" value={item.quantity || ''} onChange={e => updateLineItem(item.id!, { quantity: parseFloat(e.target.value) || 0 })} /></td>
+                  <td className="border-r p-0 text-[10px]">
+                    <select className="w-full h-full px-2 outline-none bg-transparent appearance-none font-bold" value={item.itemId} onChange={e => handleItemSelect(item.id!, e.target.value)}>
                       <option value="">Select Item...</option>
                       {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                     </select>
                   </td>
-                  <td className="border-r p-0"><input className="w-full h-full px-2 outline-none bg-transparent" value={item.description} onChange={e => updateLineItem(item.id, { description: e.target.value })} /></td>
-                  <td className="border-r p-0"><input type="number" className="w-full h-full px-2 outline-none bg-transparent text-right" value={item.rate || ''} onChange={e => updateLineItem(item.id, { rate: parseFloat(e.target.value) || 0 })} /></td>
-                  <td className="px-3 text-right font-bold text-blue-900">${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td className="border-r p-0"><input className="w-full h-full px-2 outline-none bg-transparent text-[10px]" value={item.description} onChange={e => updateLineItem(item.id!, { description: e.target.value })} /></td>
+                  <td className="border-r p-0">
+                    <select
+                      className="w-full h-full px-2 outline-none bg-transparent font-bold text-[10px]"
+                      value={item.lotNumber || ''}
+                      onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
+                    >
+                      <option value="">--Lot--</option>
+                      {availableLotsMap[item.itemId!]?.map(lot => (
+                        <option key={lot.lotNumber} value={lot.lotNumber}>
+                          {lot.lotNumber} ({lot.quantityRemaining})
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border-r p-0"><input type="number" className="w-full h-full px-2 outline-none bg-transparent text-right font-mono" value={item.rate || ''} onChange={e => updateLineItem(item.id!, { rate: parseFloat(e.target.value) || 0 })} /></td>
+                  <td className="px-3 text-right font-bold text-blue-900 font-mono">${(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
               ))}
               {[1, 2, 3].map(i => <tr key={i} className="border-b h-8 opacity-20"><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td></td></tr>)}

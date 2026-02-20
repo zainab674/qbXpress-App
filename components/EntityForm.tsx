@@ -53,7 +53,8 @@ const EntityForm: React.FC<Props> = ({
       AlternatePhone: { FreeFormNumber: '' },
       Mobile: { FreeFormNumber: '' },
       Fax: { FreeFormNumber: '' },
-      PrimaryEmailAddr: { Address: '' },
+      OtherPhone: { FreeFormNumber: '' },
+      PrimaryEmailAddr: { Address: '', Cc: '', Bcc: '' },
       WebAddr: { URI: '' },
       BillAddr: { Line1: '', Line2: '', City: '', CountrySubDivisionCode: '', PostalCode: '', Country: '' },
       ShipAddr: { Line1: '', Line2: '', City: '', CountrySubDivisionCode: '', PostalCode: '', Country: '' },
@@ -65,7 +66,13 @@ const EntityForm: React.FC<Props> = ({
       salary: 0,
       federalTax: { filingStatus: 'Single', allowances: 0, extraWithholding: 0 },
       sickLeave: { accrued: 0, used: 0 },
-      vacation: { accrued: 0, used: 0 }
+      vacation: { accrued: 0, used: 0 },
+      DeliveryMethod: 'None',
+      Language: 'English',
+      TaxRegistrationNumber: '',
+      MarketingOptIn: false,
+      MarketingConsentEmail: '',
+      attachments: []
     };
     return initialData ? { ...defaults, ...initialData } : (defaults as any);
   });
@@ -93,8 +100,8 @@ const EntityForm: React.FC<Props> = ({
   };
 
   const getTabs = () => {
-    if (type === 'CUSTOMER') return ['Address Info', 'Payment Settings', 'Sales Tax Settings', 'Additional Info', 'Notes'];
-    if (type === 'VENDOR') return ['Address Info', 'Payment Settings', 'Tax Settings', 'Account Settings', 'Additional Info', 'Notes'];
+    if (type === 'CUSTOMER') return ['Address Info', 'Payment Settings', 'Sales Tax Settings', 'Additional Info', 'Notes', 'Attachments'];
+    if (type === 'VENDOR') return ['Address Info', 'Payment Settings', 'Tax Settings', 'Account Settings', 'Additional Info', 'Notes', 'Attachments'];
     return ['Personal', 'Address & Contact', 'Payroll Info', 'Employment Info', 'Notes'];
   };
 
@@ -271,20 +278,31 @@ const EntityForm: React.FC<Props> = ({
                   <div className="space-y-4">
                     {[
                       { field: 'PrimaryPhone', label: 'Main Phone' },
-                      { field: 'AlternatePhone', label: 'Alt. Phone' },
+                      { field: 'Mobile', label: 'Mobile' },
                       { field: 'Fax', label: 'Fax' },
-                      { field: 'AlternateContact', label: 'Alt. Contact' },
+                      { field: 'AlternatePhone', label: 'Alt. Phone' },
+                      { field: 'OtherPhone', label: 'Other' },
                       { field: 'PrimaryEmailAddr', label: 'E-mail' },
+                      { field: 'Cc', label: 'Cc', isEmailSub: true },
+                      { field: 'Bcc', label: 'Bcc', isEmailSub: true },
                       { field: 'WebAddr', label: 'Web Address' }
                     ].map(f => (
                       <div key={f.label} className="grid grid-cols-3 items-center gap-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter text-right">{f.label}</label>
                         <input
-                          className="col-span-2 border-b border-gray-100 p-1 text-xs outline-none focus:border-blue-400 bg-[#f8fbff]/50"
-                          value={f.field === 'PrimaryEmailAddr' ? formData.PrimaryEmailAddr?.Address : (f.field === 'WebAddr' ? formData.WebAddr?.URI : (formData as any)[f.field]?.FreeFormNumber || '')}
+                          className={`col-span-2 border-b border-gray-100 p-1 text-xs outline-none focus:border-blue-400 ${f.isEmailSub ? 'bg-blue-50/20' : 'bg-[#f8fbff]/50'}`}
+                          value={
+                            f.field === 'PrimaryEmailAddr' ? formData.PrimaryEmailAddr?.Address :
+                              (f.field === 'Cc' ? formData.PrimaryEmailAddr?.Cc :
+                                (f.field === 'Bcc' ? formData.PrimaryEmailAddr?.Bcc :
+                                  (f.field === 'WebAddr' ? formData.WebAddr?.URI :
+                                    (formData as any)[f.field]?.FreeFormNumber || '')))
+                          }
                           onChange={e => {
                             const val = e.target.value;
-                            if (f.field === 'PrimaryEmailAddr') setFormData({ ...formData, PrimaryEmailAddr: { Address: val } });
+                            if (f.field === 'PrimaryEmailAddr') setFormData({ ...formData, PrimaryEmailAddr: { ...formData.PrimaryEmailAddr, Address: val } });
+                            else if (f.field === 'Cc') setFormData({ ...formData, PrimaryEmailAddr: { ...formData.PrimaryEmailAddr, Cc: val } });
+                            else if (f.field === 'Bcc') setFormData({ ...formData, PrimaryEmailAddr: { ...formData.PrimaryEmailAddr, Bcc: val } });
                             else if (f.field === 'WebAddr') setFormData({ ...formData, WebAddr: { URI: val } });
                             else setFormData({ ...formData, [f.field]: { FreeFormNumber: val } });
                           }}
@@ -293,6 +311,67 @@ const EntityForm: React.FC<Props> = ({
                     ))}
                   </div>
                 </div>
+
+                {type === 'CUSTOMER' && (
+                  <div className="grid grid-cols-2 gap-12 pt-8 border-t border-gray-100">
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic flex items-center justify-between">
+                          <span>Shipping Address</span>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-1.5 text-[8px] font-bold text-gray-600 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={JSON.stringify(formData.BillAddr) === JSON.stringify(formData.ShipAddr)}
+                                onChange={e => {
+                                  if (e.target.checked) setFormData({ ...formData, ShipAddr: { ...formData.BillAddr } });
+                                }}
+                              />
+                              Same as billing
+                            </label>
+                            <button
+                              onClick={() => setShowAddressDialog(true)}
+                              className="text-[8px] bg-gray-100 px-2 py-0.5 border rounded shadow-sm hover:bg-white text-gray-600 transition-colors uppercase"
+                            >
+                              Edit Details
+                            </button>
+                          </div>
+                        </label>
+                        <textarea
+                          className="w-full border border-gray-200 p-3 text-xs h-32 outline-none focus:ring-2 ring-blue-50/50 rounded-sm bg-[#fafbfc] italic text-gray-600"
+                          value={`${formData.ShipAddr?.Line1 || ''}${formData.ShipAddr?.Line2 ? '\n' + formData.ShipAddr.Line2 : ''}\n${formData.ShipAddr?.City || ''}${formData.ShipAddr?.City && formData.ShipAddr?.CountrySubDivisionCode ? ', ' : ''}${formData.ShipAddr?.CountrySubDivisionCode || ''} ${formData.ShipAddr?.PostalCode || ''}`.trim()}
+                          readOnly
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="bg-blue-50/30 p-4 border border-blue-100 rounded-sm">
+                        <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest mb-4">Customer Consent</p>
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-gray-400 uppercase">Consent Recording Email</label>
+                            <input
+                              className="border-b border-blue-200 bg-transparent p-1 text-xs outline-none"
+                              placeholder="Enter email to record consent"
+                              value={formData.MarketingConsentEmail || ''}
+                              onChange={e => setFormData({ ...formData, MarketingConsentEmail: e.target.value })}
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded"
+                              checked={formData.MarketingOptIn || false}
+                              onChange={e => setFormData({ ...formData, MarketingOptIn: e.target.checked })}
+                            />
+                            <span className="text-[10px] font-bold text-gray-700 group-hover:text-blue-600">Customer has opted in to receive email marketing</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -337,13 +416,44 @@ const EntityForm: React.FC<Props> = ({
                     <option>Bank Transfer</option>
                   </select>
                 </div>
+                {type === 'CUSTOMER' && (
+                  <>
+                    <div className="grid grid-cols-2 items-center gap-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Delivery Options</label>
+                      <select
+                        className="border-b-2 border-blue-100 p-1 text-xs font-bold bg-blue-50/10 outline-none"
+                        value={formData.DeliveryMethod || 'None'}
+                        onChange={e => setFormData({ ...formData, DeliveryMethod: e.target.value as any })}
+                      >
+                        <option value="None">None</option>
+                        <option value="Email">Send via Email</option>
+                        <option value="Print">Print Later</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 items-center gap-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoicing Language</label>
+                      <select
+                        className="border-b-2 border-blue-100 p-1 text-xs font-bold bg-blue-50/10 outline-none"
+                        value={formData.Language || 'English'}
+                        onChange={e => setFormData({ ...formData, Language: e.target.value })}
+                      >
+                        <option>English</option>
+                        <option>French</option>
+                        <option>Spanish</option>
+                        <option>German</option>
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
             {activeTab === 'Tax Settings' && (
               <div className="space-y-8">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor Tax ID</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    {type === 'VENDOR' ? 'Business ID No. / Social Insurance No.' : 'Tax ID'}
+                  </label>
                   <input className="border-b-2 border-gray-100 p-2 text-sm outline-none w-64 bg-[#f8fbff] font-mono" placeholder="XX-XXXXXXX" value={formData.TaxIdentifier || ''} onChange={e => setFormData({ ...formData, TaxIdentifier: e.target.value })} />
                 </div>
                 <div className="space-y-3 bg-gray-50 p-6 rounded border border-gray-200 shadow-inner">
@@ -476,10 +586,22 @@ const EntityForm: React.FC<Props> = ({
             {activeTab === 'Account Settings' && type === 'VENDOR' && (
               <div className="space-y-8">
                 <div className="border-l-4 border-blue-600 pl-4">
-                  <h4 className="text-sm font-black text-blue-900 uppercase tracking-tighter">Pre-fill Accounts</h4>
-                  <p className="text-[10px] text-gray-400 italic">Automatically assign these accounts when entering bills for this vendor.</p>
+                  <h4 className="text-sm font-black text-blue-900 uppercase tracking-tighter">Pre-fill Accounts / Billing</h4>
+                  <p className="text-[10px] text-gray-400 italic">Expense rates and default account settings.</p>
                 </div>
                 <div className="space-y-4 max-w-lg">
+                  <div className="flex items-center gap-6 mb-6">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest w-40 text-right">Billing rate (/hr)</label>
+                    <div className="flex items-center flex-1 border-b-2 border-blue-100 px-2 bg-blue-50/10">
+                      <span className="text-xs text-gray-400 mr-2">$</span>
+                      <input
+                        type="number"
+                        className="w-full text-xs p-1.5 outline-none font-bold bg-transparent"
+                        value={formData.hourlyRate || 0}
+                        onChange={e => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
                   {[1, 2, 3].map(idx => (
                     <div key={idx} className="flex items-center gap-6">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest w-40 text-right">Account {idx}</label>
@@ -527,6 +649,15 @@ const EntityForm: React.FC<Props> = ({
                     ))}
                   </select>
                   <p className="text-[9px] text-gray-400 italic">Select the default sales tax to apply to this customer.</p>
+                </div>
+                <div className="flex flex-col gap-2 pt-4 border-t border-gray-100">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sales Tax Registration</label>
+                  <input
+                    className="border-b-2 border-gray-100 p-2 text-sm outline-none w-64 bg-[#f8fbff]"
+                    placeholder="Tax Registration No."
+                    value={formData.TaxRegistrationNumber || ''}
+                    onChange={e => setFormData({ ...formData, TaxRegistrationNumber: e.target.value })}
+                  />
                 </div>
               </div>
             )}
@@ -645,6 +776,75 @@ const EntityForm: React.FC<Props> = ({
                     Add Note
                   </button>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'Attachments' && (
+              <div className="flex flex-col h-full">
+                <div className="border-l-4 border-blue-600 pl-4 mb-8">
+                  <h4 className="text-sm font-black text-blue-900 uppercase tracking-tighter">Attachments</h4>
+                  <p className="text-[10px] text-gray-400 italic">Max file size: 20 MB</p>
+                </div>
+
+                <div className="flex-1 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-12 bg-gray-50/50 group hover:border-blue-400 transition-colors">
+                  <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center text-gray-300 transform group-hover:scale-110 transition-transform mb-4">
+                    <span className="text-3xl">📎</span>
+                  </div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Drag and drop files here</p>
+                  <p className="text-[10px] text-gray-400 mb-6">or</p>
+                  <button
+                    className="px-6 py-2 bg-white border border-gray-300 text-gray-600 text-[10px] font-black uppercase tracking-widest rounded shadow-sm hover:bg-gray-50 active:translate-y-px transition-all"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.multiple = true;
+                      input.onchange = (e: any) => {
+                        const files = Array.from(e.target.files) as File[];
+                        const newAttachments = files.map(f => ({
+                          id: Math.random().toString(36).substr(2, 9),
+                          name: f.name,
+                          size: f.size,
+                          type: f.type,
+                          uploadDate: new Date().toISOString()
+                        }));
+                        setFormData({ ...formData, attachments: [...(formData.attachments || []), ...newAttachments] });
+                      };
+                      input.click();
+                    }}
+                  >
+                    Select Files
+                  </button>
+                </div>
+
+                {(formData.attachments || []).length > 0 && (
+                  <div className="mt-8 space-y-2">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Added Files ({formData.attachments?.length})</p>
+                    <div className="max-h-48 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                      {formData.attachments?.map(file => (
+                        <div key={file.id} className="flex justify-between items-center p-3 bg-white border border-gray-100 rounded group hover:border-blue-200 transition-all">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg opacity-50">📄</span>
+                            <div>
+                              <p className="text-xs font-bold text-gray-700">{file.name}</p>
+                              <p className="text-[9px] text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB • {new Date(file.uploadDate).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                attachments: formData.attachments?.filter(a => a.id !== file.id)
+                              });
+                            }}
+                            className="text-red-400 hover:text-red-600 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

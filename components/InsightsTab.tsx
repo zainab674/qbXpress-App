@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import ModifyReportDialog from './ModifyReportDialog';
 import { Transaction, Account } from '../types';
 
 interface Props {
@@ -13,16 +12,12 @@ interface Props {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 const InsightsTab: React.FC<Props> = ({ isAdmin, transactions, accounts }) => {
-  const [showModify, setShowModify] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
 
   const [visibleGraphs, setVisibleGraphs] = useState({
     profitAndLoss: true,
     incomeStatus: true,
-    expensesBreakdown: true,
-    netProfitMargin: false,
-    businessGrowth: false,
-    prevYearComparison: false
+    expensesBreakdown: true
   });
 
   // Calculate Real Profit & Loss Data for the last 6 months
@@ -103,11 +98,6 @@ const InsightsTab: React.FC<Props> = ({ isAdmin, transactions, accounts }) => {
           <p className="text-xs text-gray-500 italic uppercase font-bold tracking-tighter">Real-time Data Sync</p>
         </div>
         <div className="flex gap-2 items-center">
-          <button onClick={() => setShowModify(true)} className="bg-white border border-gray-300 px-3 py-1 text-xs font-bold rounded hover:bg-gray-100 shadow-sm">Modify Report</button>
-          <select className="border rounded px-2 py-1 text-xs bg-white font-bold shadow-sm">
-            <option>Last 6 Months</option>
-            <option>This Fiscal Year</option>
-          </select>
           <button
             onClick={() => setShowCustomize(!showCustomize)}
             className="p-1.5 hover:bg-gray-200 rounded text-gray-600 transition-colors relative"
@@ -210,8 +200,6 @@ const InsightsTab: React.FC<Props> = ({ isAdmin, transactions, accounts }) => {
           </div>
         )}
       </div>
-
-      <ModifyReportDialog isOpen={showModify} onClose={() => setShowModify(false)} availableColumns={['Date', 'Type', 'Number', 'Name', 'Memo', 'Account', 'Amount', 'Balance']} />
     </div>
   );
 };

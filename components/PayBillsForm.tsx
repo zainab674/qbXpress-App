@@ -1,17 +1,18 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, Vendor, Account } from '../types';
+import { Transaction, Vendor, Account, VendorCreditCategory } from '../types';
 
 interface Props {
   transactions: Transaction[];
   vendors: Vendor[];
   accounts: Account[];
+  vendorCreditCategories: VendorCreditCategory[];
   onSavePayment: (payments: Transaction[]) => Promise<void>;
   onClose: () => void;
   initialBillId?: string;
 }
 
-const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, onSavePayment, onClose, initialBillId }) => {
+const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendorCreditCategories, onSavePayment, onClose, initialBillId }) => {
   const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
   const [payFromAccountId, setPayFromAccountId] = useState(accounts.find(a => a.type === 'Bank')?.id || '');
   const [paymentDate, setPaymentDate] = useState(new Date().toLocaleDateString('en-US'));
@@ -112,34 +113,55 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, onSave
     <div className="bg-[#f0f0f0] h-full flex flex-col p-4 relative font-sans">
       {showCredits && (
         <div className="absolute inset-0 bg-black/40 z-[100] flex items-center justify-center p-8 backdrop-blur-sm">
-          <div className="bg-white w-[550px] rounded-sm shadow-2xl border-2 border-[#003366] flex flex-col overflow-hidden animate-in">
-            <div className="bg-[#003366] p-3 text-white font-bold text-sm flex justify-between items-center text-white">
-              <span className="uppercase tracking-widest">Apply Credits</span>
-              <button onClick={() => setShowCredits(false)} className="hover:bg-red-600 px-2 rounded-sm transition-colors font-serif text-white">X</button>
+          <div className="bg-white w-[90%] h-[90%] rounded-sm shadow-2xl border-2 border-[#003366] flex flex-col overflow-hidden animate-in">
+            <div className="bg-[#003366] p-4 text-white font-bold text-sm flex justify-between items-center text-white">
+              <span className="uppercase tracking-widest text-lg">Apply Credits</span>
+              <button onClick={() => setShowCredits(false)} className="hover:bg-red-600 px-3 py-1 rounded-sm transition-colors font-serif text-white text-xl">X</button>
             </div>
-            <div className="p-4 bg-blue-50 border-b flex justify-between text-xs font-black text-blue-900 uppercase tracking-tighter">
+            <div className="p-6 bg-blue-50 border-b flex justify-between text-base font-black text-blue-900 uppercase tracking-tighter">
               <span>Vendor: {vendors.find(v => v.id === activeVendorId)?.name}</span>
               <span>Available: ${vendorCredits.reduce((s, c) => s + c.total, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
-            <div className="p-4 flex-1 overflow-auto max-h-[350px]">
-              <table className="w-full text-[11px] text-left border-collapse">
-                <thead className="bg-[#e8e8e8] border-b-2 border-gray-300 text-[#003366]">
-                  <tr><th className="p-2 border-r">✓</th><th className="p-2 border-r">Date</th><th className="p-2 border-r">Ref Num</th><th className="p-2 text-right">Amount</th></tr>
+            <div className="p-6 flex-1 overflow-auto">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-[#e8e8e8] border-b-2 border-gray-300 text-[#003366] sticky top-0">
+                  <tr>
+                    <th className="p-4 border-r w-12 text-center">✓</th>
+                    <th className="p-4 border-r">Date</th>
+                    <th className="p-4 border-r">Ref Num</th>
+                    <th className="p-4 border-r">Category</th>
+                    <th className="p-4 text-right">Amount</th>
+                  </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y">
                   {vendorCredits.map(c => (
-                    <tr key={c.id} className={`border-b hover:bg-green-50 ${appliedCredits.includes(c.id) ? 'bg-green-50/50' : ''}`}>
-                      <td className="p-2 border-r text-center"><input type="checkbox" checked={appliedCredits.includes(c.id)} onChange={() => setAppliedCredits(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])} /></td>
-                      <td className="p-2 border-r">{c.date}</td>
-                      <td className="p-2 border-r font-mono text-gray-500">{c.refNo}</td>
-                      <td className="p-2 text-right font-black text-blue-900">${c.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <tr key={c.id} className={`hover:bg-green-50 transition-colors ${appliedCredits.includes(c.id) ? 'bg-green-50/50' : ''}`}>
+                      <td className="p-4 border-r text-center">
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 cursor-pointer"
+                          checked={appliedCredits.includes(c.id)}
+                          onChange={() => setAppliedCredits(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
+                        />
+                      </td>
+                      <td className="p-4 border-r">{c.date}</td>
+                      <td className="p-4 border-r font-mono text-gray-600 font-bold">{c.refNo}</td>
+                      <td className="p-4 border-r font-bold text-[#003366]">
+                        {(() => {
+                          const itemWithCat = c.items?.find(item => item.creditCategoryId);
+                          if (!itemWithCat || !itemWithCat.creditCategoryId) return '---';
+                          const category = (vendorCreditCategories || []).find(cat => cat.id === itemWithCat.creditCategoryId);
+                          return category ? category.name : '---';
+                        })()}
+                      </td>
+                      <td className="p-4 text-right font-black text-blue-900 text-lg">${c.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="p-4 bg-gray-100 border-t flex justify-end gap-3 shadow-inner">
-              <button onClick={() => setShowCredits(false)} className="bg-[#0077c5] text-white px-10 py-2 text-xs font-black rounded-sm shadow-md hover:brightness-110 active:translate-y-px transition-all uppercase tracking-widest">Done</button>
+            <div className="p-6 bg-gray-100 border-t flex justify-end gap-3 shadow-inner">
+              <button onClick={() => setShowCredits(false)} className="bg-[#0077c5] text-white px-12 py-3 text-sm font-black rounded-sm shadow-md hover:brightness-110 active:translate-y-px transition-all uppercase tracking-widest">Done</button>
             </div>
           </div>
         </div>

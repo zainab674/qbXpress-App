@@ -7,10 +7,11 @@ interface Props {
    items: Item[];
    onSave: (cm: Transaction) => void;
    onClose: () => void;
+   customerCreditCategories: any[];
    initialData?: Transaction;
 }
 
-const CreditMemoForm: React.FC<Props> = ({ customers, items, onSave, onClose, initialData }) => {
+const CreditMemoForm: React.FC<Props> = ({ customers, items, onSave, onClose, customerCreditCategories, initialData }) => {
    const [selectedCustomerId, setSelectedCustomerId] = useState(initialData?.entityId || '');
    const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString('en-US'));
    const [refNo, setRefNo] = useState(initialData?.refNo || 'CM-' + Math.floor(Math.random() * 9000 + 1000));
@@ -107,6 +108,7 @@ const CreditMemoForm: React.FC<Props> = ({ customers, items, onSave, onClose, in
                            <th className="px-4 py-2 border-r w-16 text-center">Qty</th>
                            <th className="px-4 py-2 border-r w-48">Item</th>
                            <th className="px-4 py-2 border-r">Description</th>
+                           <th className="px-4 py-2 border-r w-40">Category</th>
                            <th className="px-4 py-2 border-r text-right w-24">Rate</th>
                            <th className="px-4 py-2 text-right w-32">Amount</th>
                         </tr>
@@ -125,6 +127,16 @@ const CreditMemoForm: React.FC<Props> = ({ customers, items, onSave, onClose, in
                               </td>
                               <td className="p-0 border-r">
                                  <input className="w-full h-full p-2 px-4 bg-transparent outline-none italic text-gray-500" value={li.description} readOnly />
+                              </td>
+                              <td className="p-0 border-r">
+                                 <select
+                                    className="w-full h-full p-2 px-4 bg-transparent outline-none appearance-none font-bold text-blue-700"
+                                    value={li.creditCategoryId || ''}
+                                    onChange={e => setLineItems(prev => prev.map(x => x.id === li.id ? { ...x, creditCategoryId: e.target.value } : x))}
+                                 >
+                                    <option value="">--Category--</option>
+                                    {customerCreditCategories.filter(c => c.isActive).map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                 </select>
                               </td>
                               <td className="p-2 px-4 text-right border-r text-gray-500 font-mono">${li.rate.toFixed(2)}</td>
                               <td className="p-2 px-4 text-right font-black text-blue-900 font-mono">${li.amount.toFixed(2)}</td>

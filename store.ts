@@ -9,7 +9,10 @@ export const INITIAL_DATA: AppStore = {
     { id: '3', name: 'Accounts Payable', number: '20000', type: 'Accounts Payable', balance: 0, isActive: true },
     { id: '4', name: 'Retained Earnings', number: '3900', type: 'Equity', balance: 0, isActive: true },
   ],
-  items: [],
+  items: [
+    { id: 'tax-1', name: 'Out of State', type: 'Sales Tax Item', isActive: true, taxRate: 0, description: 'Sales tax for out of state customers' },
+    { id: 'tax-2', name: 'Sales Tax', type: 'Sales Tax Item', isActive: true, taxRate: 8.25, description: 'Standard sales tax' }
+  ],
   customers: [],
   vendors: [],
   employees: [],
@@ -55,5 +58,18 @@ export const INITIAL_DATA: AppStore = {
     whatDoYouSell: 'Both'
   },
   uoms: [],
-  vehicles: []
+  vehicles: [],
+  vendorCreditCategories: [
+    { id: 'cat-1', name: 'Defective Item', isActive: true },
+    { id: 'cat-2', name: 'Shortage', isActive: true },
+    { id: 'cat-3', name: 'Advertisement', isActive: true },
+    { id: 'cat-4', name: 'Wrong Item Sent', isActive: true }
+  ],
+  customerCreditCategories: [
+    { id: 'cust-cat-1', name: 'Defective Item', isActive: true },
+    { id: 'cust-cat-2', name: 'Customer Mind Change', isActive: true },
+    { id: 'cust-cat-3', name: 'Shortage', isActive: true },
+    { id: 'cust-cat-4', name: 'Overcharged', isActive: true }
+  ],
+  recurringTemplates: []
 };

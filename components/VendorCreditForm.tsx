@@ -1,16 +1,16 @@
-
 import React, { useState } from 'react';
-import { Vendor, Account, Transaction, TransactionItem, Item } from '../types';
+import { Vendor, Account, Transaction, TransactionItem, Item, VendorCreditCategory } from '../types';
 
 interface Props {
   vendors: Vendor[];
   accounts: Account[];
   items: Item[];
+  vendorCreditCategories: VendorCreditCategory[];
   onSave: (credit: Transaction) => void;
   onClose: () => void;
 }
 
-const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, onClose }) => {
+const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, vendorCreditCategories, onSave, onClose }) => {
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Expenses');
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
@@ -18,7 +18,7 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
   const [memo, setMemo] = useState('');
 
   const [expenseRows, setExpenseRows] = useState<any[]>([
-    { id: Math.random().toString(), accountId: '', amount: 0, memo: '' }
+    { id: Math.random().toString(), accountId: '', amount: 0, memo: '', creditCategoryId: '' }
   ]);
   const [itemRows, setItemRows] = useState<TransactionItem[]>([]);
 
@@ -27,7 +27,7 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
 
   const handleAddRow = () => {
     if (activeTab === 'Expenses') {
-      setExpenseRows([...expenseRows, { id: Math.random().toString(), accountId: '', amount: 0, memo: '' }]);
+      setExpenseRows([...expenseRows, { id: Math.random().toString(), accountId: '', amount: 0, memo: '', creditCategoryId: '' }]);
     } else {
       setItemRows([...itemRows, { id: Math.random().toString(), itemId: '', description: '', quantity: 1, rate: 0, amount: 0, tax: false }]);
     }
@@ -71,7 +71,8 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
           rate: r.amount,
           amount: r.amount,
           tax: false,
-          accountId: r.accountId
+          accountId: r.accountId,
+          creditCategoryId: r.creditCategoryId
         })),
         ...itemRows.filter(r => r.itemId).map(r => ({
           ...r,
@@ -131,9 +132,9 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
             <table className="w-full text-[11px] text-left border-collapse">
               <thead className="bg-[#e8e8e8] border-b-2 border-gray-400 text-[#003366] font-black uppercase">
                 {activeTab === 'Expenses' ? (
-                  <tr><th className="px-4 py-2 border-r w-64">Account</th><th className="px-4 py-2 border-r text-right w-32">Amount</th><th className="px-4 py-2">Memo</th></tr>
+                  <tr><th className="px-4 py-2 border-r w-64">Account</th><th className="px-4 py-2 border-r w-48">Category</th><th className="px-4 py-2 border-r text-right w-32">Amount</th><th className="px-4 py-2">Memo</th></tr>
                 ) : (
-                  <tr><th className="px-4 py-2 border-r w-16 text-center">Qty</th><th className="px-4 py-2 border-r w-48">Item</th><th className="px-4 py-2 border-r">Description</th><th className="px-4 py-2 border-r text-right w-24">Cost</th><th className="px-4 py-2 text-right w-32">Amount</th></tr>
+                  <tr><th className="px-4 py-2 border-r w-16 text-center">Qty</th><th className="px-4 py-2 border-r w-48">Item</th><th className="px-4 py-2 border-r w-48">Category</th><th className="px-4 py-2 border-r">Description</th><th className="px-4 py-2 border-r text-right w-24">Cost</th><th className="px-4 py-2 text-right w-32">Amount</th></tr>
                 )}
               </thead>
               <tbody>
@@ -144,6 +145,20 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
                         <select className="w-full h-full p-2 px-4 bg-transparent outline-none appearance-none font-bold" value={row.accountId} onChange={e => { const nr = [...expenseRows]; nr[idx].accountId = e.target.value; setExpenseRows(nr); }}>
                           <option value="">--Select Account--</option>
                           {accounts.filter(a => a.type === 'Expense').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-0 border-r">
+                        <select
+                          className="w-full h-full p-2 px-4 bg-transparent outline-none appearance-none font-bold"
+                          value={row.creditCategoryId || ''}
+                          onChange={e => {
+                            const nr = [...expenseRows];
+                            nr[idx] = { ...nr[idx], creditCategoryId: e.target.value };
+                            setExpenseRows(nr);
+                          }}
+                        >
+                          <option value="">--Select Category--</option>
+                          {vendorCreditCategories.filter(c => c.isActive).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                       </td>
                       <td className="p-0 border-r">
@@ -165,6 +180,20 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
                         </select>
                       </td>
                       <td className="p-0 border-r">
+                        <select
+                          className="w-full h-full p-2 px-4 bg-transparent outline-none appearance-none font-bold"
+                          value={row.creditCategoryId || ''}
+                          onChange={e => {
+                            const nr = [...itemRows];
+                            nr[idx] = { ...nr[idx], creditCategoryId: e.target.value };
+                            setItemRows(nr);
+                          }}
+                        >
+                          <option value="">--Select Category--</option>
+                          {vendorCreditCategories.filter(c => c.isActive).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-0 border-r">
                         <input className="w-full h-full p-2 px-4 bg-transparent outline-none italic text-gray-500" value={row.description} readOnly />
                       </td>
                       <td className="p-2 px-4 text-right border-r text-gray-500 font-mono">${row.rate.toFixed(2)}</td>
@@ -173,7 +202,7 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
                   ))
                 )}
                 <tr className="bg-gray-50/50">
-                  <td colSpan={5} className="p-2 px-4">
+                  <td colSpan={6} className="p-2 px-4">
                     <button onClick={handleAddRow} className="text-blue-600 font-black text-[10px] uppercase hover:underline tracking-tighter cursor-pointer underline">+ Add Line</button>
                   </td>
                 </tr>
@@ -182,7 +211,7 @@ const VendorCreditForm: React.FC<Props> = ({ vendors, accounts, items, onSave, o
                 <tr>
                   <td className="p-3 text-right font-black uppercase text-[10px] tracking-widest opacity-70">Total Credit Amount:</td>
                   <td className="p-3 text-right font-black font-mono text-xl">${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                  <td colSpan={activeTab === 'Expenses' ? 1 : 3}></td>
+                  <td colSpan={activeTab === 'Expenses' ? 1 : 4}></td>
                 </tr>
               </tfoot>
             </table>

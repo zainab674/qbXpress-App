@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const TransactionItemSchema = new mongoose.Schema({
     id: String,
+    itemId: String,
     description: String,
     quantity: Number,
     rate: Number,
@@ -13,6 +14,7 @@ const TransactionItemSchema = new mongoose.Schema({
     exchangeRate: Number,
     userId: String,
     accountId: String,
+    creditCategoryId: String,
 });
 
 const TransactionSchema = new mongoose.Schema({
@@ -37,6 +39,7 @@ const TransactionSchema = new mongoose.Schema({
     expectedDate: String,
     vendorMessage: String,
     itemReceiptId: String,
+    lotNumber: String,
     classId: String,
     salesRepId: String,
     shipVia: String,
@@ -44,6 +47,28 @@ const TransactionSchema = new mongoose.Schema({
     exchangeRate: Number,
     homeAmount: Number,
     isChangeOrder: Boolean,
+    subtotal: Number,
+    taxAmount: Number,
+    trackingNo: String,
+    shipDate: String,
+    fob: String,
+    email: String,
+    cc: String,
+    bcc: String,
+    paymentOptions: [String],
+    memoOnStatement: String,
+    attachments: [Object],
+    deposit: Number,
+    taxItemId: String,
+    terms: String,
+    BillAddr: Object,
+    ShipAddr: Object,
+    shippingDetails: {
+        shipmentCost: Number,
+        innerPackDimensions: { length: Number, width: Number, height: Number, unit: String },
+        outerBoxDimensions: { length: Number, width: Number, height: Number, unit: String },
+        masterCartonDimensions: { length: Number, width: Number, height: Number, unit: String }
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);

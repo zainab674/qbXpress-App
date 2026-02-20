@@ -22,8 +22,7 @@ import { useData } from './contexts/DataContext';
 import { useDialog } from './contexts/DialogContext';
 import HomePage from './components/HomePage';
 import * as api from './services/api';
-
-const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
+import { API_BASE_URL } from './services/api';
 
 const XIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -38,10 +37,10 @@ const App: React.FC = () => {
   const {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
-    mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
+    mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
     isLoaded, companies, activeCompanyId, switchCompany, refreshData, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
     handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings,
-    setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods
+    setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories
   } = useData();
   const { showAlert, showConfirm } = useDialog();
 
@@ -270,6 +269,8 @@ const App: React.FC = () => {
     setCompanyConfig, setTimeEntries: handleSaveTimeEntries, setMemorizedReports: handleSaveMemorizedReports, handleSaveCurrency, showAlert,
     switchCompany, companies, refreshData, setShortcuts, setShortcutGroups, existingGroups: shortcutGroups,
     handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem,
+    onUpdateVendorCreditCategories,
+    onUpdateCustomerCreditCategories,
     setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate
   };
 
@@ -277,7 +278,7 @@ const App: React.FC = () => {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, classes, salesReps, mileageEntries, currencies, exchangeRates,
     auditLogs, fixedAssets, vehicles, uoms, companyConfig, homePrefs, shipVia, customFields, customerTypes, vendorTypes,
-    uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate
+    vendorCreditCategories, customerCreditCategories, uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate
   };
 
   if (currentView === 'LANDING') return (
@@ -318,7 +319,7 @@ const App: React.FC = () => {
             setShowPrefs: () => navigateTo('PREFERENCES', 'Preferences'),
             onBackup: async () => {
               const token = localStorage.getItem('authToken');
-              const res = await fetch(`${API_BASE_URL.replace('/api', '')}/api/backup/create`, {
+              const res = await fetch(`${API_BASE_URL}/backup/create`, {
                 method: 'POST',
                 headers: { 'Authorization': token ? `Bearer ${token}` : '' }
               });

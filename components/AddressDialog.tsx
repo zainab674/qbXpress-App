@@ -41,7 +41,20 @@ const AddressDialog: React.FC<Props> = ({ isOpen, onClose, onSave, initialAddres
 
                 <div className="p-6 space-y-4">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Street Address</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic flex justify-between items-center">
+                            <span>Street Address</span>
+                            {(!address.Line3 || !address.Line4) && (
+                                <button
+                                    onClick={() => {
+                                        if (!address.Line3) setAddress({ ...address, Line3: ' ' });
+                                        else if (!address.Line4) setAddress({ ...address, Line4: ' ' });
+                                    }}
+                                    className="text-[8px] text-blue-600 hover:underline font-bold"
+                                >
+                                    + Add lines
+                                </button>
+                            )}
+                        </label>
                         <input
                             className="w-full border p-2 text-xs outline-none focus:border-blue-500 bg-gray-50"
                             placeholder="Address Line 1"
@@ -54,6 +67,22 @@ const AddressDialog: React.FC<Props> = ({ isOpen, onClose, onSave, initialAddres
                             value={address.Line2 || ''}
                             onChange={e => setAddress({ ...address, Line2: e.target.value })}
                         />
+                        {(address.Line3 !== undefined) && (
+                            <input
+                                className="w-full border p-2 text-xs outline-none focus:border-blue-500 bg-gray-50 mt-1"
+                                placeholder="Address Line 3"
+                                value={address.Line3 === ' ' ? '' : address.Line3}
+                                onChange={e => setAddress({ ...address, Line3: e.target.value })}
+                            />
+                        )}
+                        {(address.Line4 !== undefined) && (
+                            <input
+                                className="w-full border p-2 text-xs outline-none focus:border-blue-500 bg-gray-50 mt-1"
+                                placeholder="Address Line 4"
+                                value={address.Line4 === ' ' ? '' : address.Line4}
+                                onChange={e => setAddress({ ...address, Line4: e.target.value })}
+                            />
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -99,6 +128,8 @@ const AddressDialog: React.FC<Props> = ({ isOpen, onClose, onSave, initialAddres
                         <div className="text-[11px] font-mono whitespace-pre-line text-gray-600 bg-white p-2 border shadow-inner min-h-[60px]">
                             {address.Line1 || '(No Street Address)'}
                             {address.Line2 ? `\n${address.Line2}` : ''}
+                            {address.Line3 ? `\n${address.Line3}` : ''}
+                            {address.Line4 ? `\n${address.Line4}` : ''}
                             {`\n${address.City || ''}${address.City && address.CountrySubDivisionCode ? ', ' : ''}${address.CountrySubDivisionCode || ''} ${address.PostalCode || ''}`.trim() || '\n(City, State Zip)'}
                             {address.Country ? `\n${address.Country}` : ''}
                         </div>

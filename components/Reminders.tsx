@@ -11,6 +11,7 @@ interface Props {
 const Reminders: React.FC<Props> = ({ transactions, items, onOrderLowStock }) => {
   const overdueInvoices = transactions.filter(t => t.type === 'INVOICE' && t.status === 'OVERDUE');
   const openBills = transactions.filter(t => t.type === 'BILL' && t.status === 'OPEN');
+  const openSalesOrders = transactions.filter(t => t.type === 'SALES_ORDER' && (t.status === 'Open' || t.status === 'OPEN' || !t.status));
   const lowStock = items.filter(i => i.type === 'Inventory Part' && (i.onHand || 0) < (i.reorderPoint || 0));
 
   return (
@@ -40,6 +41,12 @@ const Reminders: React.FC<Props> = ({ transactions, items, onOrderLowStock }) =>
             Review and Create Purchase Orders
           </button>
         </ReminderGroup>
+        <ReminderGroup
+          title="Sales Orders to Invoice"
+          count={openSalesOrders.length}
+          amount={openSalesOrders.reduce((acc, so) => acc + so.total, 0)}
+          isExpanded={true}
+        />
         <ReminderGroup
           title="Overdue Invoices"
           count={overdueInvoices.length}

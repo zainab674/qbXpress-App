@@ -8,22 +8,31 @@ interface Props {
    onSave: (estimate: Transaction) => void;
    onClose: () => void;
    onConvertToInvoice?: (estimate: Transaction) => void;
+   initialData?: Transaction;
 }
 
-const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSave, onClose, onConvertToInvoice }) => {
-   const [selectedCustId, setSelectedCustId] = useState('');
-   const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
-   const [estimateNo, setEstimateNo] = useState((Math.floor(Math.random() * 9000) + 1000).toString());
-   const [memo, setMemo] = useState('');
-   const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>([
-      { id: Math.random().toString(), description: '', quantity: 0, rate: 0, amount: 0, tax: true }
-   ]);
+const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSave, onClose, onConvertToInvoice, initialData }) => {
+   const [selectedCustId, setSelectedCustId] = useState(initialData?.entityId || '');
+   const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString('en-US'));
+   const [estimateNo, setEstimateNo] = useState(initialData?.refNo || (Math.floor(Math.random() * 9000) + 1000).toString());
+   const [memo, setMemo] = useState(initialData?.memo || '');
+   const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
+      initialData?.items?.map(i => ({ ...i, id: i.id || crypto.randomUUID() })) ||
+      [{ id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true }]
+   );
+   const [billAddr, setBillAddr] = useState<string>(initialData?.BillAddr?.Line1 || '');
+   const [shipAddr, setShipAddr] = useState<string>(initialData?.ShipAddr?.Line1 || '');
+   const [status, setStatus] = useState<'Pending' | 'Accepted' | 'Converted' | 'Declined'>(initialData?.status as any || 'Pending');
+   const [selectedTaxItemId, setSelectedTaxItemId] = useState(initialData?.taxItemId || '');
 
    const subtotal = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
-   const total = subtotal; // Simplified
+   const taxItem = availableItems.find(i => i.id === selectedTaxItemId);
+   const taxRate = (taxItem?.taxRate || taxItem?.taxRateValue || 0) / 100;
+   const taxAmount = lineItems.filter(i => i.tax).reduce((acc, item) => acc + (item.amount || 0) * taxRate, 0);
+   const total = subtotal + taxAmount;
 
    const handleAddItem = () => {
-      setLineItems([...lineItems, { id: Math.random().toString(), description: '', quantity: 0, rate: 0, amount: 0, tax: true }]);
+      setLineItems([...lineItems, { id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true }]);
    };
 
    const updateLineItem = (id: string, updates: Partial<TransactionItem>) => {
@@ -50,13 +59,16 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
    };
 
    const getEstimateObject = (): Transaction => ({
-      id: Math.random().toString(),
+      id: initialData?.id || crypto.randomUUID(),
       type: 'ESTIMATE',
       refNo: estimateNo,
       date: date,
       entityId: selectedCustId,
+      subtotal: subtotal,
+      taxAmount: taxAmount,
+      taxItemId: selectedTaxItemId,
       total: total,
-      status: 'OPEN',
+      status: status,
       items: lineItems.filter(i => i.description || i.rate).map(i => ({
          id: i.id || Math.random().toString(),
          description: i.description || '',
@@ -64,7 +76,10 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
          rate: i.rate || 0,
          amount: i.amount || 0,
          tax: !!i.tax
-      }))
+      })),
+      memo: memo,
+      BillAddr: { Line1: billAddr },
+      ShipAddr: { Line1: shipAddr }
    });
 
    const handleRecord = () => {
@@ -76,7 +91,10 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
    const handleCreateInvoice = () => {
       if (!selectedCustId) return alert("Select a customer.");
       if (onConvertToInvoice) {
-         onConvertToInvoice(getEstimateObject());
+         const estimate = getEstimateObject();
+         estimate.status = 'Converted';
+         setStatus('Converted');
+         onConvertToInvoice(estimate);
       }
    };
 
@@ -87,10 +105,7 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                <div className="text-xl">💾</div>
                <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-blue-900">Save & Close</span>
             </button>
-            <button onClick={handleCreateInvoice} className="flex flex-col items-center group px-4 py-1 hover:bg-green-50 rounded-sm border border-transparent hover:border-green-200 transition-all border-l border-gray-200">
-               <div className="text-xl">📄</div>
-               <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-green-800">Create Invoice</span>
-            </button>
+
             <button onClick={onClose} className="flex flex-col items-center group px-4 py-1 hover:bg-red-50 rounded-sm border border-transparent hover:border-red-200 transition-all ml-auto">
                <div className="text-xl">✖</div>
                <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-red-700">Cancel</span>
@@ -109,6 +124,19 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Date</label>
                      <input className="border-b border-gray-300 p-1 text-sm w-32 text-right outline-none focus:border-blue-500" value={date} onChange={e => setDate(e.target.value)} />
                   </div>
+                  <div className="space-y-1">
+                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Status</label>
+                     <select
+                        className="border-b border-gray-300 p-1 text-sm w-32 text-right outline-none focus:border-blue-500 bg-transparent font-bold"
+                        value={status}
+                        onChange={e => setStatus(e.target.value as any)}
+                     >
+                        <option value="Pending">Pending</option>
+                        <option value="Accepted">Accepted</option>
+                        <option value="Converted">Converted</option>
+                        <option value="Declined">Declined</option>
+                     </select>
+                  </div>
                </div>
             </div>
 
@@ -118,11 +146,39 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                   <select
                      className="border-b-2 border-blue-200 bg-blue-50/20 px-3 py-2 text-sm font-bold w-full outline-none focus:border-blue-600 transition-colors"
                      value={selectedCustId}
-                     onChange={e => setSelectedCustId(e.target.value)}
+                     onChange={e => {
+                        const custId = e.target.value;
+                        setSelectedCustId(custId);
+                        const customer = customers.find(c => c.id === custId);
+                        if (customer) {
+                           const addr = customer.address || '';
+                           setBillAddr(addr);
+                           setShipAddr(addr);
+                        }
+                     }}
                   >
                      <option value="">&lt;Select Customer:Job&gt;</option>
                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-20 mt-6">
+               <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block italic">Bill To</label>
+                  <textarea
+                     className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-24 resize-none focus:ring-1 ring-blue-500 italic"
+                     value={billAddr}
+                     onChange={e => setBillAddr(e.target.value)}
+                  />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block italic">Ship To</label>
+                  <textarea
+                     className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-24 resize-none focus:ring-1 ring-blue-500 italic"
+                     value={shipAddr}
+                     onChange={e => setShipAddr(e.target.value)}
+                  />
                </div>
             </div>
 

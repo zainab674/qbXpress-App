@@ -55,7 +55,9 @@ const BillDisplay: React.FC<BillDisplayProps> = ({ bill, vendor, accounts, class
                                 {vendor?.name || 'Unknown Vendor'}
                             </h2>
                             <div className="text-sm text-slate-500 leading-relaxed font-medium">
-                                {vendor?.address ? (
+                                {bill.BillAddr?.Line1 ? (
+                                    bill.BillAddr.Line1.split('\n').map((line, i) => <p key={i}>{line}</p>)
+                                ) : vendor?.address ? (
                                     vendor.address.split('\n').map((line, i) => <p key={i}>{line}</p>)
                                 ) : (
                                     <p>No address on file</p>
@@ -66,7 +68,7 @@ const BillDisplay: React.FC<BillDisplayProps> = ({ bill, vendor, accounts, class
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-12 bg-slate-50 border-y-2 border-slate-200 py-8 px-10 mb-12">
+                    <div className="grid grid-cols-4 gap-8 bg-slate-50 border-y-2 border-slate-200 py-8 px-10 mb-12">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{isReceipt ? 'Receipt Date' : 'Bill Date'}</p>
                             <p className="text-lg font-black text-slate-900 italic">{bill.date}</p>
@@ -76,6 +78,10 @@ const BillDisplay: React.FC<BillDisplayProps> = ({ bill, vendor, accounts, class
                             <p className={`text-lg font-black italic ${bill.status === 'PAID' ? 'text-green-600' : 'text-red-600'}`}>
                                 {bill.dueDate || 'N/A'}
                             </p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Terms</p>
+                            <p className="text-lg font-black text-slate-900 italic">{bill.terms || 'N/A'}</p>
                         </div>
                         <div className="text-right">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Reference No.</p>
@@ -137,28 +143,70 @@ const BillDisplay: React.FC<BillDisplayProps> = ({ bill, vendor, accounts, class
                     </div>
 
                     <div className="mt-auto border-t-8 border-slate-900 pt-12">
-                        <div className="flex justify-between items-center bg-slate-100 p-8 rounded shadow-inner relative overflow-hidden">
-                            {bill.status === 'PAID' && (
-                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-25deg] border-8 border-green-600/20 text-green-600/20 text-8xl font-black px-12 py-4 pointer-events-none uppercase">
-                                    PAID
+                        <div className="bg-slate-50 p-8 rounded border border-slate-200 shadow-sm mb-12">
+                            <div className="flex justify-between items-center mb-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bill Total</p>
                                 </div>
-                            )}
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Total {isReceipt ? 'Receipt' : 'Bill'} Amount</p>
-                                <p className="text-sm font-bold text-slate-500 italic">{isReceipt ? 'Pending Bill Creation' : 'Paid via Accounts Payable'}</p>
+                                <div className="text-right">
+                                    <span className="text-xl font-bold text-slate-600">
+                                        ${totalAmount}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="text-right">
-                                <span className="text-6xl font-black italic text-slate-900 tracking-tighter">
-                                    ${totalAmount}
-                                </span>
+                            <div className="flex justify-between items-center bg-slate-100 -mx-8 p-8 rounded-b relative overflow-hidden">
+                                {bill.status === 'PAID' && (
+                                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-25deg] border-8 border-green-600/20 text-green-600/20 text-8xl font-black px-12 py-4 pointer-events-none uppercase">
+                                        PAID
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Total {isReceipt ? 'Receipt' : 'Bill'} Amount</p>
+                                    <p className="text-sm font-bold text-slate-500 italic">{isReceipt ? 'Pending Bill Creation' : 'Paid via Accounts Payable'}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-6xl font-black italic text-slate-900 tracking-tighter">
+                                        ${totalAmount}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center p-8 -mx-8 bg-slate-200/50">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Balance Due</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-2xl font-black text-blue-900 font-mono">
+                                        ${((vendor?.balance || 0) + bill.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        {bill.memo && (
-                            <div className="mt-8 border-l-4 border-slate-200 pl-6">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Remarks</p>
-                                <p className="text-sm text-slate-600 font-medium italic leading-relaxed">{bill.memo}</p>
+
+                        <div className="grid grid-cols-2 gap-12">
+                            <div>
+                                {bill.memo && (
+                                    <div className="mb-6">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Remarks</p>
+                                        <p className="text-sm text-slate-600 font-medium italic leading-relaxed">{bill.memo}</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
+                            <div>
+                                {bill.attachments && bill.attachments.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Attachments</p>
+                                        <div className="flex flex-col gap-2">
+                                            {bill.attachments.map((a, i) => (
+                                                <div key={i} className="text-xs text-blue-600 font-bold flex items-center gap-2">
+                                                    <span>📎</span>
+                                                    <span>{a.name}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -91,6 +91,9 @@ export type ViewState =
   | 'VEHICLE_LIST'
   | 'ENTITY_FORM'
   | 'ITEM_FORM'
+  | 'SALES_ORDER'
+  | 'SALES_ORDER_DISPLAY'
+  | 'SALES_ORDER_CENTER'
   | 'PREFERENCES'
   | 'REORDER_ITEMS'
   | 'PRINTER_SETUP'
@@ -111,7 +114,9 @@ export type ViewState =
   | 'BILL_PAYMENT'
   | 'PAYMENT_DISPLAY'
   | 'CHECK'
-  | 'CALENDAR';
+  | 'CALENDAR'
+  | 'VENDOR_CREDIT_CATEGORY_LIST'
+  | 'ESTIMATE_DISPLAY';
 
 export interface BankTransaction {
   id: string;
@@ -146,6 +151,8 @@ export interface Address {
   Id?: string;
   Line1?: string;
   Line2?: string;
+  Line3?: string;
+  Line4?: string;
   City?: string;
   CountrySubDivisionCode?: string;
   PostalCode?: string;
@@ -158,6 +165,8 @@ export interface PhoneInfo {
 
 export interface EmailInfo {
   Address?: string;
+  Cc?: string;
+  Bcc?: string;
 }
 
 export interface WebInfo {
@@ -353,6 +362,7 @@ export interface Item {
   onHand?: number;
   reorderPoint?: number;
   taxCode?: 'Tax' | 'Non';
+  asOfDate?: string;
   // Added optional fields for custom fields and inventory management
   customFieldValues?: Record<string, any>;
   parentId?: string;
@@ -366,6 +376,18 @@ export interface Item {
   taxRateValue?: number; // For Sales Tax Items
   preferredVendorId?: string; // For Inventory
   vendorId?: string;           // For Sales Tax Items
+  sku?: string;
+  category?: string;
+  imageUrl?: string;
+  isSalesItem?: boolean;
+  isPurchaseItem?: boolean;
+  weight?: number;
+  dimensions?: {
+    length: number;
+    width: number;
+    height: number;
+    unit: string;
+  };
   // Assemblies
   assemblyItems?: { itemId: string, quantity: number }[];
   buildPoint?: number;
@@ -401,6 +423,18 @@ export interface QBClass {
   parentId?: string;
 }
 
+export interface VendorCreditCategory {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface CustomerCreditCategory {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 export interface SalesRep {
   id: string;
   initials: string;
@@ -408,14 +442,23 @@ export interface SalesRep {
   isActive: boolean;
 }
 
-export interface Customer {
+export interface Attachment {
   id: string;
   name: string;
+  size: number;
+  type: string;
+  uploadDate: string;
+  url?: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string; // Used as display name if DisplayName is missing
   companyName: string;
-  email: string;
-  phone: string;
+  email: string; // Keeping for compatibility
+  phone: string; // Keeping for compatibility
   balance: number;
-  address: string;
+  address: string; // Keeping for compatibility
   isActive: boolean;
   currencyId?: string; // Multi-currency
   jobs: Job[];
@@ -424,6 +467,43 @@ export interface Customer {
   customFieldValues?: Record<string, any>;
   customerType?: string;
   taxItemId?: string; // Sales Tax Item
+
+  // Detailed fields matching QB 2016 / QBO
+  Title?: string;
+  GivenName?: string;
+  MiddleName?: string;
+  FamilyName?: string;
+  Suffix?: string;
+  DisplayName?: string;
+
+  PrimaryPhone?: PhoneInfo;
+  AlternatePhone?: PhoneInfo;
+  Mobile?: PhoneInfo;
+  Fax?: PhoneInfo;
+  OtherPhone?: PhoneInfo;
+
+  PrimaryEmailAddr?: EmailInfo;
+  WebAddr?: WebInfo;
+
+  BillAddr?: Address;
+  ShipAddr?: Address;
+
+  parentId?: string;
+
+  TermsRef?: Reference;
+  PreferredPaymentMethodRef?: Reference;
+  DeliveryMethod?: 'Print' | 'Email' | 'None';
+  Language?: string;
+
+  TaxRegistrationNumber?: string;
+
+  OpenBalance?: number;
+  OpenBalanceDate?: string;
+
+  MarketingOptIn?: boolean;
+  MarketingConsentEmail?: string;
+
+  attachments?: Attachment[];
 }
 
 export interface Vendor {
@@ -454,6 +534,7 @@ export interface Vendor {
   AlternatePhone?: PhoneInfo;
   Mobile?: PhoneInfo;
   Fax?: PhoneInfo;
+  OtherPhone?: PhoneInfo;
 
   PrimaryEmailAddr?: EmailInfo;
   WebAddr?: WebInfo;
@@ -491,6 +572,7 @@ export interface Vendor {
   preFillAccounts?: string[];
   customFieldValues?: Record<string, any>;
   notes: Note[];
+  attachments?: Attachment[];
 }
 
 export interface Employee {
@@ -604,11 +686,13 @@ export interface TransactionItem {
   classId?: string;     // Class Tracking
   exchangeRate?: number; // Multi-currency
   accountId?: string;    // Expense Account
+  creditCategoryId?: string; // Vendor Credit Category
+  lotNumber?: string;    // Lot Number Tracking
 }
 
 export interface Transaction {
   id: string;
-  type: 'INVOICE' | 'ESTIMATE' | 'BILL' | 'CHECK' | 'DEPOSIT' | 'PURCHASE_ORDER' | 'SALES_RECEIPT' | 'CREDIT_MEMO' | 'PAYMENT' | 'VENDOR_CREDIT' | 'BILL_PAYMENT' | 'RECEIVE_ITEM' | 'INVENTORY_ADJ' | 'ASSEMBLY_BUILD' | 'TRANSFER' | 'CC_CHARGE' | 'PAYCHECK' | 'TAX_PAYMENT' | 'TAX_ADJUSTMENT' | 'JOURNAL_ENTRY';
+  type: 'INVOICE' | 'ESTIMATE' | 'SALES_ORDER' | 'BILL' | 'CHECK' | 'DEPOSIT' | 'PURCHASE_ORDER' | 'SALES_RECEIPT' | 'CREDIT_MEMO' | 'PAYMENT' | 'VENDOR_CREDIT' | 'BILL_PAYMENT' | 'RECEIVE_ITEM' | 'INVENTORY_ADJ' | 'ASSEMBLY_BUILD' | 'TRANSFER' | 'CC_CHARGE' | 'PAYCHECK' | 'TAX_PAYMENT' | 'TAX_ADJUSTMENT' | 'JOURNAL_ENTRY';
   refNo: string;
   date: string;
   dueDate?: string;
@@ -616,7 +700,7 @@ export interface Transaction {
   entityId: string;
   items: TransactionItem[];
   total: number;
-  status: 'OPEN' | 'PAID' | 'CLEARED' | 'OVERDUE' | 'UNBILLED' | 'RECEIVED' | 'CLOSED';
+  status: 'OPEN' | 'PAID' | 'CLEARED' | 'OVERDUE' | 'UNBILLED' | 'RECEIVED' | 'CLOSED' | 'Pending' | 'Accepted' | 'Converted' | 'Declined';
   bankAccountId?: string;
   depositToId?: string;
   transferFromId?: string;
@@ -635,9 +719,28 @@ export interface Transaction {
   shipDate?: string;    // Shipping Date
   fob?: string;         // FOB
   memo?: string;
+  lotNumber?: string;   // Lot Number Tracking
   exchangeRate?: number; // Multi-currency
   homeAmount?: number;
   isChangeOrder?: boolean;
+  subtotal?: number;
+  taxAmount?: number;
+  taxItemId?: string;
+  email?: string;
+  cc?: string;
+  bcc?: string;
+  paymentOptions?: string[];
+  memoOnStatement?: string;
+  attachments?: Attachment[];
+  deposit?: number;
+  BillAddr?: Address;
+  ShipAddr?: Address;
+  shippingDetails?: {
+    shipmentCost?: number;
+    innerPackDimensions?: { length: number; width: number; height: number; unit: string };
+    outerBoxDimensions?: { length: number; width: number; height: number; unit: string };
+    masterCartonDimensions?: { length: number; width: number; height: number; unit: string };
+  };
 }
 
 export interface Term {
@@ -648,6 +751,25 @@ export interface Term {
   // Added optional discount fields
   stdDiscountDays?: number;
   discountPercentage?: number;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  templateName: string;
+  type: 'Scheduled' | 'Reminder' | 'Unscheduled';
+  entityId: string;
+  createDaysInAdvance: number;
+  autoSendEmail: boolean;
+  includeUnbilledCharges: boolean;
+  markAsPrintLater: boolean;
+  interval: 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
+  every: number;
+  repeatsOn?: number | string;
+  startDate: string;
+  endType: 'Never' | 'After' | 'OnDate';
+  endAfterOccurrences?: number;
+  endDate?: string;
+  transactionData: Partial<Transaction>;
 }
 
 export interface Vehicle {
@@ -695,6 +817,9 @@ export interface AppStore {
   auditLogs: AuditLogEntry[];
   fixedAssets: FixedAsset[];
   vehicles: Vehicle[];
+  vendorCreditCategories: VendorCreditCategory[];
+  customerCreditCategories: CustomerCreditCategory[];
+  recurringTemplates: RecurringTemplate[];
 }
 
 export interface FixedAsset {

@@ -185,7 +185,6 @@ const ReportView: React.FC<Props> = ({ type, transactions, accounts, customers, 
       {/* Report Toolbar */}
       <div className="bg-white border-b border-gray-300 p-1 flex gap-1 items-center shadow-sm overflow-x-auto min-h-[40px]">
         <button onClick={() => setShowCustomize(true)} className="px-3 py-1 bg-gray-100 border border-gray-400 text-[11px] font-bold hover:bg-white rounded shadow-sm">Customize Report</button>
-        <button className="px-3 py-1 bg-gray-100 border border-gray-400 text-[11px] font-bold hover:bg-white rounded shadow-sm">Comment on Report</button>
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
         <button onClick={handleMemorize} className="px-3 py-1 bg-gray-100 border border-gray-400 text-[11px] font-bold hover:bg-white rounded shadow-sm">Memorize</button>
         <button onClick={handlePrint} className="px-3 py-1 bg-gray-100 border border-gray-400 text-[11px] font-bold hover:bg-white rounded shadow-sm">{isPrinting ? '⏳ Printing...' : 'Print'}</button>
@@ -193,7 +192,6 @@ const ReportView: React.FC<Props> = ({ type, transactions, accounts, customers, 
         <button onClick={handleExcelExport} className="px-3 py-1 bg-green-50 border border-green-400 text-[11px] font-bold text-green-800 hover:bg-white rounded shadow-sm flex items-center gap-1">
           {isExporting ? '⏳ Exporting...' : 'Excel ▼'}
         </button>
-        <button className="px-3 py-1 bg-gray-100 border border-gray-400 text-[11px] font-bold hover:bg-white rounded shadow-sm">Hide Header</button>
         <button onClick={() => window.location.reload()} className="px-3 py-1 bg-blue-600 text-white border border-blue-700 text-[11px] font-bold hover:brightness-110 rounded shadow-sm">Refresh</button>
       </div>
 

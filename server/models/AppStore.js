@@ -127,6 +127,8 @@ const TransactionSchema = new mongoose.Schema({
     paymentMethod: String,
     appliedCreditIds: Array,
     purchaseOrderId: String,
+    BillAddr: Object,
+    ShipAddr: Object,
 });
 
 const AppStoreSchema = new mongoose.Schema({
@@ -155,6 +157,7 @@ const AppStoreSchema = new mongoose.Schema({
     shipVia: Array,
     shortcuts: Array,
     shortcutGroups: Array,
+    recurringTemplates: Array,
 }, { timestamps: true, strict: false });
 
 module.exports = mongoose.model('AppStore', AppStoreSchema);

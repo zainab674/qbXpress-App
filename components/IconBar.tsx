@@ -16,6 +16,8 @@ const IconBar: React.FC<Props> = ({ onAction, onLogOut, onShortcuts }) => {
         { label: 'Invoices', type: 'INVOICE_CENTER' as ViewState, icon: '📄', color: 'bg-blue-700' },
         { label: 'Bills', type: 'BILL_CENTER' as ViewState, icon: '💸', color: 'bg-green-700' },
         { label: 'POs', type: 'PURCHASE_ORDER_CENTER' as ViewState, icon: '📦', color: 'bg-orange-600' },
+        { label: 'SOs', type: 'SALES_ORDER_CENTER' as ViewState, icon: '📋', color: 'bg-indigo-600' },
+        { label: 'Inventory', type: 'INVENTORY_CENTER' as ViewState, icon: '📦', color: 'bg-orange-600' },
         { label: 'Checks', type: 'BANKING' as ViewState, icon: '🏦', color: 'bg-blue-800' },
         { label: 'Reports', type: 'REPORTS_CENTER' as ViewState, icon: '📊', color: 'bg-gray-600' },
         { label: 'Calendar', type: 'CALENDAR' as ViewState, icon: '📅', color: 'bg-red-600' },
