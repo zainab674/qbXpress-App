@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Transaction, Vendor, Item, Budget, MemorizedReport } from '../types';
+import { Transaction, Vendor, Item, Budget, MemorizedReport, UIPreferences } from '../types';
+import { useData } from '../contexts/DataContext';
 import ReportTypeSelector from './ReportTypeSelector';
 import {
    Search,
@@ -32,6 +33,7 @@ interface Props {
 }
 
 const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets, memorized, onMemorize, onOpenReport, onDeleteReport }) => {
+   const { uiPrefs, setUiPrefs } = useData();
    const [activeTab, setActiveTab] = useState<'STANDARD' | 'CUSTOM' | 'MANAGEMENT' | 'FINANCIAL'>('STANDARD');
    const [expandedSections, setExpandedSections] = useState<string[]>(['Who owes you', 'Inventory', 'Business overview', 'Favourites']);
    const [searchTerm, setSearchTerm] = useState('');
@@ -43,45 +45,61 @@ const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets,
       );
    };
 
+   const toggleFavorite = (e: React.MouseEvent, reportId: string) => {
+      e.stopPropagation();
+      setUiPrefs(prev => {
+         const favorites = prev.favoriteReports || [];
+         const newFavorites = favorites.includes(reportId)
+            ? favorites.filter(id => id !== reportId)
+            : [...favorites, reportId];
+         return { ...prev, favoriteReports: newFavorites };
+      });
+   };
+
+   const allStandardReports = [
+      { id: 'PROFIT_AND_LOSS', title: 'Profit & Loss Standard', category: 'Business overview' },
+      { id: 'BALANCE_SHEET', title: 'Balance Sheet Standard', category: 'Business overview' },
+      { id: 'CASH_FLOW', title: 'Statement of Cash Flows', category: 'Business overview' },
+      { id: 'AGING', title: 'Accounts receivable ageing summary', category: 'Who owes you' },
+      { id: 'INVOICES_RECEIVED', title: 'Invoices and Received Payments', category: 'Who owes you' },
+      { id: 'AGING_DETAIL', title: 'Accounts receivable ageing detail', category: 'Who owes you' },
+      { id: 'OPEN_INVOICES', title: 'Open Invoices', category: 'Who owes you' },
+      { id: 'COLLECTIONS', title: 'Collections Report', category: 'Who owes you' },
+      { id: 'STATEMENT_LIST', title: 'Statement List', category: 'Who owes you' },
+      { id: 'CUSTOMER_BALANCE', title: 'Customer Balance Summary', category: 'Who owes you' },
+      { id: 'TERMS_LIST_REPORT', title: 'Terms List', category: 'Who owes you' },
+      { id: 'CUSTOMER_BALANCE_DETAIL', title: 'Customer Balance Detail', category: 'Who owes you' },
+      { id: 'UNBILLED_CHARGES', title: 'Unbilled charges', category: 'Who owes you' },
+      { id: 'INVOICE_LIST', title: 'Invoice List', category: 'Who owes you' },
+      { id: 'UNBILLED_TIME', title: 'Unbilled time', category: 'Who owes you' },
+      { id: 'INV_VAL_DETAIL', title: 'Inventory Valuation Detail', category: 'Inventory' },
+      { id: 'OPEN_PO_LIST', title: 'Open Purchase Order List', category: 'Inventory' },
+      { id: 'INV_VAL', title: 'Inventory Valuation Summary', category: 'Inventory' },
+      { id: 'STOCK_TAKE', title: 'Stock Take Worksheet', category: 'Inventory' },
+      { id: 'OPEN_PO_DETAIL', title: 'Open Purchase Order Detail', category: 'Inventory' },
+   ];
+
+   const favoriteIds = uiPrefs.favoriteReports || [];
+
    const reportCategories = [
       {
          name: 'Favourites',
-         reports: []
+         reports: [
+            ...allStandardReports.filter(r => favoriteIds.includes(r.id)),
+            ...memorized.filter(r => favoriteIds.includes(r.id)).map(r => ({ id: r.id, title: r.name, isCustom: true }))
+         ]
       },
       {
          name: 'Business overview',
-         reports: [
-            { id: 'PROFIT_AND_LOSS', title: 'Profit & Loss Standard' },
-            { id: 'BALANCE_SHEET', title: 'Balance Sheet Standard' },
-            { id: 'CASH_FLOW', title: 'Statement of Cash Flows' },
-         ]
+         reports: allStandardReports.filter(r => r.category === 'Business overview')
       },
       {
          name: 'Who owes you',
-         reports: [
-            { id: 'AGING', title: 'Accounts receivable ageing summary', favorite: true },
-            { id: 'INVOICES_RECEIVED', title: 'Invoices and Received Payments' },
-            { id: 'AGING_DETAIL', title: 'Accounts receivable ageing detail' },
-            { id: 'OPEN_INVOICES', title: 'Open Invoices' },
-            { id: 'COLLECTIONS', title: 'Collections Report' },
-            { id: 'STATEMENT_LIST', title: 'Statement List' },
-            { id: 'CUSTOMER_BALANCE', title: 'Customer Balance Summary' },
-            { id: 'TERMS_LIST_REPORT', title: 'Terms List' },
-            { id: 'CUSTOMER_BALANCE_DETAIL', title: 'Customer Balance Detail' },
-            { id: 'UNBILLED_CHARGES', title: 'Unbilled charges' },
-            { id: 'INVOICE_LIST', title: 'Invoice List' },
-            { id: 'UNBILLED_TIME', title: 'Unbilled time' },
-         ]
+         reports: allStandardReports.filter(r => r.category === 'Who owes you')
       },
       {
          name: 'Inventory',
-         reports: [
-            { id: 'INV_VAL_DETAIL', title: 'Inventory Valuation Detail' },
-            { id: 'OPEN_PO_LIST', title: 'Open Purchase Order List' },
-            { id: 'INV_VAL', title: 'Inventory Valuation Summary' },
-            { id: 'STOCK_TAKE', title: 'Stock Take Worksheet' },
-            { id: 'OPEN_PO_DETAIL', title: 'Open Purchase Order Detail' },
-         ]
+         reports: allStandardReports.filter(r => r.category === 'Inventory')
       }
    ];
 
@@ -92,19 +110,27 @@ const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets,
       { id: 'FINANCIAL', label: 'Financial planning', icon: <TrendingUp size={18} />, subItems: ['Cash flow overview', 'Cash flow planner', 'Budgets'] },
    ];
 
-   const renderReportItem = (report: any) => (
-      <div
-         key={report.id}
-         className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer group"
-         onClick={() => onOpenReport(report.id, report.title)}
-      >
-         <span className="text-sm text-gray-700 font-medium group-hover:text-blue-600 transition-colors">{report.title}</span>
-         <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Star size={16} className={report.favorite ? "fill-green-500 text-green-500" : "text-gray-400 hover:text-green-500"} />
-            <MoreVertical size={16} className="text-gray-400 hover:text-gray-600" />
+   const renderReportItem = (report: any) => {
+      const isFavorite = favoriteIds.includes(report.id);
+      return (
+         <div
+            key={report.id}
+            className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer group"
+            onClick={() => onOpenReport(report.id, report.title)}
+         >
+            <span className="text-sm text-gray-700 font-medium group-hover:text-blue-600 transition-colors">{report.title}</span>
+            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+               <button onClick={(e) => toggleFavorite(e, report.id)}>
+                  <Star
+                     size={16}
+                     className={isFavorite ? "fill-green-500 text-green-500" : "text-gray-400 hover:text-green-500"}
+                  />
+               </button>
+               <MoreVertical size={16} className="text-gray-400 hover:text-gray-600" />
+            </div>
          </div>
-      </div>
-   );
+      );
+   };
 
    return (
       <div className="flex h-full bg-[#f4f5f8] font-sans">
@@ -215,6 +241,7 @@ const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets,
                            <table className="w-full text-sm text-left">
                               <thead className="bg-gray-50 border-y border-gray-200">
                                  <tr>
+                                    <th className="px-4 py-3 w-10"></th>
                                     <th className="px-4 py-3 font-bold text-gray-600">Report Name</th>
                                     <th className="px-4 py-3 font-bold text-gray-600">Base Type</th>
                                     <th className="px-4 py-3 font-bold text-gray-600">Date Created</th>
@@ -222,50 +249,61 @@ const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets,
                                  </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100">
-                                 {memorized.map(r => (
-                                    <tr
-                                       key={r.id}
-                                       className="hover:bg-blue-50 cursor-pointer group transition-colors"
-                                       onClick={() => {
-                                          const isBuilderReport = ['INVOICE', 'BILLS', 'SALES', 'EXPENSES', 'JOURNAL', 'BANKING', 'TRANSACTIONS'].includes(r.baseType);
-                                          if (isBuilderReport) {
-                                             onOpenReport('REPORT_BUILDER', r.name, {
-                                                reportType: r.baseType,
-                                                ...r.params
-                                             });
-                                          } else {
-                                             const typeMap: Record<string, string> = {
-                                                'PL': 'PROFIT_AND_LOSS',
-                                                'BS': 'BALANCE_SHEET',
-                                                'GL': 'GENERAL_LEDGER'
-                                             };
-                                             onOpenReport(typeMap[r.baseType] || r.baseType, r.name, r.params);
-                                          }
-                                       }}
-                                    >
-                                       <td className="px-4 py-3 font-semibold text-blue-700">{r.name}</td>
-                                       <td className="px-4 py-3 text-gray-600">{r.baseType}</td>
-                                       <td className="px-4 py-3 text-gray-500">{r.dateCreated}</td>
-                                       <td className="px-4 py-3 text-right">
-                                          <div className="flex justify-end gap-2">
-                                             <button className="p-1 hover:bg-gray-200 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <MoreVertical size={16} className="text-gray-400" />
+                                 {memorized.map(r => {
+                                    const isFavorite = favoriteIds.includes(r.id);
+                                    return (
+                                       <tr
+                                          key={r.id}
+                                          className="hover:bg-blue-50 cursor-pointer group transition-colors"
+                                          onClick={() => {
+                                             const isBuilderReport = ['INVOICE', 'BILLS', 'SALES', 'EXPENSES', 'JOURNAL', 'BANKING', 'TRANSACTIONS'].includes(r.baseType);
+                                             if (isBuilderReport) {
+                                                onOpenReport('REPORT_BUILDER', r.name, {
+                                                   reportType: r.baseType,
+                                                   ...r.params
+                                                });
+                                             } else {
+                                                const typeMap: Record<string, string> = {
+                                                   'PL': 'PROFIT_AND_LOSS',
+                                                   'BS': 'BALANCE_SHEET',
+                                                   'GL': 'GENERAL_LEDGER'
+                                                };
+                                                onOpenReport(typeMap[r.baseType] || r.baseType, r.name, r.params);
+                                             }
+                                          }}
+                                       >
+                                          <td className="px-4 py-3">
+                                             <button onClick={(e) => toggleFavorite(e, r.id)}>
+                                                <Star
+                                                   size={16}
+                                                   className={isFavorite ? "fill-green-500 text-green-500" : "text-gray-400 hover:text-green-500"}
+                                                />
                                              </button>
-                                             <button
-                                                className="p-1 hover:bg-red-100 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"
-                                                onClick={(e) => {
-                                                   e.stopPropagation();
-                                                   if (confirm('Are you sure you want to delete this report?')) {
-                                                      onDeleteReport(r.id);
-                                                   }
-                                                }}
-                                             >
-                                                <Trash2 size={16} />
-                                             </button>
-                                          </div>
-                                       </td>
-                                    </tr>
-                                 ))}
+                                          </td>
+                                          <td className="px-4 py-3 font-semibold text-blue-700">{r.name}</td>
+                                          <td className="px-4 py-3 text-gray-600">{r.baseType}</td>
+                                          <td className="px-4 py-3 text-gray-500">{r.dateCreated}</td>
+                                          <td className="px-4 py-3 text-right">
+                                             <div className="flex justify-end gap-2">
+                                                <button className="p-1 hover:bg-gray-200 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                                   <MoreVertical size={16} className="text-gray-400" />
+                                                </button>
+                                                <button
+                                                   className="p-1 hover:bg-red-100 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"
+                                                   onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      if (confirm('Are you sure you want to delete this report?')) {
+                                                         onDeleteReport(r.id);
+                                                      }
+                                                   }}
+                                                >
+                                                   <Trash2 size={16} />
+                                                </button>
+                                             </div>
+                                          </td>
+                                       </tr>
+                                    );
+                                 })}
                               </tbody>
                            </table>
                         </div>

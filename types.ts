@@ -312,6 +312,7 @@ export interface UIPreferences {
   showIconBar: boolean;
   showOpenWindowList: boolean;
   openWindowListPosition: 'TOP' | 'SIDEBAR';
+  favoriteReports: string[];
 }
 
 export interface FormLayoutField {

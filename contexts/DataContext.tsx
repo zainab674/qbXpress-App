@@ -145,7 +145,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>(INITIAL_DATA.recurringTemplates || []);
 
     const [companyConfig, setCompanyConfig] = useState<CompanyConfig>(INITIAL_DATA.companyConfig as any);
-    const [uiPrefs, setUiPrefs] = useState<UIPreferences>({ showIconBar: true, showOpenWindowList: true, openWindowListPosition: 'SIDEBAR' });
+    const [uiPrefs, setUiPrefs] = useState<UIPreferences>({ showIconBar: true, showOpenWindowList: true, openWindowListPosition: 'SIDEBAR', favoriteReports: [] });
     const [homePrefs, setHomePrefs] = useState<HomePagePreferences>({
         showOverallHealth: true,
         showCashIn: true,
