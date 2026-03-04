@@ -423,7 +423,7 @@ const App: React.FC = () => {
                             </button>
                           </div>
                         </div>
-                        <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto bg-white">
                           <WindowRenderer
                             win={win}
                             data={windowData}

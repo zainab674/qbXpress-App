@@ -246,6 +246,26 @@ export const importTransactions = async (file: File) => {
     }
     return res.json();
 };
+
+export const importItems = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/items/import`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Import failed');
+    }
+    return res.json();
+};
 export const saveTimeEntry = (entry: any) => post('time-entries', entry);
 export const saveMileageEntry = (entry: any) => post('mileage-entries', entry);
 export const savePriceLevel = (level: any) => post('price-levels', level);

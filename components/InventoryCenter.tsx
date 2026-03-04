@@ -24,7 +24,7 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
     onOpenReceive,
     onOpenWindow
 }) => {
-    const [activeTab, setActiveTab] = useState<'Products' | 'Adjustments'>('Products');
+    const [activeTab, setActiveTab] = useState<'Products' | 'Services' | 'Adjustments'>('Products');
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedLots, setExpandedLots] = useState<Record<string, any[]>>({});
     const [loadingLots, setLoadingLots] = useState<Record<string, boolean>>({});
@@ -50,10 +50,20 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
         }
     };
 
-    // Filter only inventory items
-    const inventoryItems = useMemo(() =>
+    // Filter items by type
+    const physicalItems = useMemo(() =>
         items.filter(i => i.type === 'Inventory Part' || i.type === 'Inventory Assembly'),
         [items]);
+
+    const serviceItems = useMemo(() =>
+        items.filter(i => i.type === 'Service' || i.type === 'Non-inventory Part'),
+        [items]);
+
+    const currentTabItems = useMemo(() => {
+        if (activeTab === 'Products') return physicalItems;
+        if (activeTab === 'Services') return serviceItems;
+        return [];
+    }, [activeTab, physicalItems, serviceItems]);
 
     // Calculate quantities from transactions
     const itemQuantities = useMemo(() => {
@@ -82,19 +92,19 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
     }, [transactions]);
 
     const filteredItems = useMemo(() => {
-        return inventoryItems.filter(item =>
+        return currentTabItems.filter(item =>
             item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
             (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
         );
-    }, [inventoryItems, searchTerm]);
+    }, [currentTabItems, searchTerm]);
 
     const lowStockCount = useMemo(() => {
-        return inventoryItems.filter(i => (i.onHand || 0) <= (i.reorderPoint || 0)).length;
-    }, [inventoryItems]);
+        return physicalItems.filter(i => (i.onHand || 0) <= (i.reorderPoint || 0)).length;
+    }, [physicalItems]);
 
     return (
-        <div className="flex flex-col h-full bg-white font-sans text-gray-700">
+        <div className="flex flex-col bg-white font-sans text-gray-700 min-h-full">
             {/* Header */}
             <header className="p-4 border-b border-gray-200 flex justify-between items-start">
                 <div className="flex flex-col gap-4">
@@ -107,6 +117,12 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
                             onClick={() => setActiveTab('Products')}
                         >
                             Products
+                        </button>
+                        <button
+                            className={`px-6 py-1.5 text-sm font-bold transition-colors ${activeTab === 'Services' ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                            onClick={() => setActiveTab('Services')}
+                        >
+                            Services
                         </button>
                         <button
                             className={`px-6 py-1.5 text-sm font-bold transition-colors ${activeTab === 'Adjustments' ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
@@ -188,56 +204,56 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-auto border-t border-gray-200">
+            <div className="border-t border-gray-200">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-[#f8f9fa] border-b border-gray-200 sticky top-0 z-10">
-                        <tr className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                            <th className="px-4 py-4 w-10">
-                                <input type="checkbox" className="rounded border-gray-300" />
+                        <tr className="text-xs font-bold text-gray-500 uppercase tracking-widest bg-white">
+                            <th className="px-6 py-5 w-10">
+                                <input type="checkbox" className="rounded border-gray-300 w-4 h-4" />
                             </th>
-                            <th className="px-4 py-4 w-16"></th>
-                            <th className="px-4 py-4 min-w-[150px]">
+                            <th className="px-6 py-5 w-20"></th>
+                            <th className="px-6 py-5 min-w-[200px]">
                                 <div className="flex items-center gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     NAME <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 min-w-[200px]">SALES DESCRIPTION</th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 min-w-[250px]">SALES DESCRIPTION</th>
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     QTY ON HAND <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     QTY ON PO <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     QTY ON SO <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     AVAIL QTY <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     REORDER POINT <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     PRICE <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-right">
+                            <th className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-1 cursor-pointer hover:text-gray-800 transition-colors">
                                     COST <span>↕</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-4 text-center">ACTION</th>
+                            <th className="px-6 py-5 text-center">ACTION</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -249,43 +265,43 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
 
                             return (
                                 <React.Fragment key={item.id}>
-                                    <tr className={`hover:bg-gray-50 transition-colors group ${expandedLots[item.id] ? 'bg-blue-50/30' : ''}`}>
-                                        <td className="px-4 py-4">
-                                            <input type="checkbox" className="rounded border-gray-300" />
+                                    <tr className={`hover:bg-blue-50/20 transition-all group ${expandedLots[item.id] ? 'bg-blue-50/40' : ''}`}>
+                                        <td className="px-6 py-6">
+                                            <input type="checkbox" className="rounded border-gray-300 w-4 h-4" />
                                         </td>
-                                        <td className="px-4 py-4">
-                                            <div className="w-10 h-10 border border-gray-200 rounded flex items-center justify-center bg-gray-50">
+                                        <td className="px-6 py-6">
+                                            <div className="w-14 h-14 border border-gray-200 rounded-lg flex items-center justify-center bg-white shadow-sm overflow-hidden group-hover:scale-105 transition-transform">
                                                 {item.imageUrl ? (
                                                     <img src={item.imageUrl} alt="" className="w-full h-full object-contain" />
                                                 ) : (
-                                                    <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-8 h-8 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-4">
+                                        <td className="px-6 py-6">
                                             <div className="flex flex-col">
                                                 <button
                                                     onClick={() => onOpenForm(item)}
-                                                    className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline text-left"
+                                                    className="text-base font-bold text-blue-600 hover:text-blue-800 hover:underline text-left tracking-tight"
                                                 >
                                                     {item.name}
                                                 </button>
                                                 <button
                                                     onClick={() => toggleLots(item.id)}
-                                                    className="text-[10px] font-black text-gray-400 hover:text-blue-600 uppercase tracking-tighter mt-1 flex items-center gap-1"
+                                                    className="text-[11px] font-black text-gray-400 hover:text-blue-600 uppercase tracking-widest mt-1.5 flex items-center gap-1"
                                                 >
                                                     {loadingLots[item.id] ? 'Loading...' : (expandedLots[item.id] ? 'Hide Lots ▲' : 'Show Lots ▼')}
                                                 </button>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-4 text-xs text-gray-500">
+                                        <td className="px-6 py-6 text-sm text-gray-500 leading-relaxed">
                                             {item.description}
                                         </td>
-                                        <td className="px-4 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className={`text-sm font-bold ${isLow ? 'text-orange-600' : 'text-gray-800'}`}>
+                                        <td className="px-6 py-6 text-right">
+                                            <div className="flex items-center justify-end gap-3">
+                                                <span className={`text-base font-bold ${isLow ? 'text-orange-600' : 'text-gray-800'}`}>
                                                     {item.onHand || 0}
                                                 </span>
                                                 {isLow && (
@@ -294,7 +310,7 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
                                                             e.stopPropagation();
                                                             onOpenWindow('PURCHASE_ORDER', 'Purchase Order', { initialData: { itemId: item.id } });
                                                         }}
-                                                        className="bg-orange-500 text-white text-[8px] font-black px-1 py-0.5 rounded tracking-tighter uppercase leading-none cursor-pointer hover:bg-orange-600 transition-colors shadow-sm active:scale-95"
+                                                        className="bg-orange-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase leading-none cursor-pointer hover:bg-orange-700 transition-colors shadow-sm active:scale-95"
                                                         title="Click to create Purchase Order"
                                                     >
                                                         LOW
@@ -302,22 +318,22 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{poQty}</td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{soQty}</td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-800 font-bold">{availQty}</td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-500 font-medium italic">{item.reorderPoint || 0}</td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{item.salesPrice || 0}</td>
-                                        <td className="px-4 py-4 text-right text-sm text-gray-800">{item.cost || 0}</td>
-                                        <td className="px-4 py-4 text-center">
-                                            <div className="flex items-center justify-center gap-1">
+                                        <td className="px-6 py-6 text-right text-base text-gray-800">{poQty}</td>
+                                        <td className="px-6 py-6 text-right text-base text-gray-800">{soQty}</td>
+                                        <td className="px-6 py-6 text-right text-base text-gray-900 font-black">{availQty}</td>
+                                        <td className="px-6 py-6 text-right text-base text-gray-500 font-medium italic">{item.reorderPoint || 0}</td>
+                                        <td className="px-6 py-6 text-right text-base text-gray-900 font-bold">${(item.salesPrice || 0).toLocaleString()}</td>
+                                        <td className="px-6 py-6 text-right text-base text-gray-900 font-bold">${(item.cost || 0).toLocaleString()}</td>
+                                        <td className="px-6 py-6 text-center">
+                                            <div className="flex items-center justify-center gap-2">
                                                 <button
                                                     onClick={() => onOpenForm(item)}
-                                                    className="text-xs font-bold text-green-700 hover:text-green-800"
+                                                    className="text-sm font-bold text-green-700 hover:text-green-800 px-3 py-1 hover:bg-green-50 rounded transition-colors"
                                                 >
                                                     Edit
                                                 </button>
-                                                <div className="w-[1px] h-3 bg-gray-300 mx-1"></div>
-                                                <button className="text-gray-400 hover:text-gray-600">
+                                                <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
+                                                <button className="text-gray-400 hover:text-gray-900 transition-colors p-1">
                                                     ▼
                                                 </button>
                                             </div>

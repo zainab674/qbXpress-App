@@ -90,7 +90,76 @@ async function parseFile(req) {
     return data;
 }
 
+const ItemService = require('../services/ItemService');
+
 const importController = {
+    importItems: async (req, res, next) => {
+        try {
+            const data = await parseFile(req);
+            const itemsToSave = data.map(row => {
+                let rawType = (row.type || row.Type || '').trim();
+                let type = 'Service'; // Default
+
+                if (rawType.toLowerCase().includes('inventory') && !rawType.toLowerCase().includes('non')) {
+                    type = 'Inventory Part';
+                } else if (rawType.toLowerCase().includes('non-inventory') || rawType.toLowerCase().includes('non inventory')) {
+                    type = 'Non-inventory Part';
+                } else if (rawType.toLowerCase().includes('service')) {
+                    type = 'Service';
+                } else if (rawType.toLowerCase().includes('assembly')) {
+                    type = 'Inventory Assembly';
+                } else if (rawType.toLowerCase().includes('discount')) {
+                    type = 'Discount';
+                }
+
+                const item = {
+                    id: crypto.randomUUID(),
+                    userId: req.user.id,
+                    companyId: req.companyId,
+                    name: row.name || row.Name || row['Product/Service Name'] || row['Product/Service'] || row['Item Name'] || '',
+                    sku: row.sku || row.SKU || '',
+                    type: type,
+                    description: row.description || row.Description || row['Sales Description'] || row['Sales Descr'] || '',
+                    purchaseDescription: row.purchaseDescription || row['Purchase Description'] || row['Purchase Descr'] || '',
+                    salesPrice: parseFloat(row.salesPrice || row.SalesPrice || row['Sales Price'] || row['Sales Price / Rate'] || row.Price || 0) || 0,
+                    cost: parseFloat(row.cost || row.Cost || row.purchaseCost || row.PurchaseCost || row['Purchase Cost'] || 0) || 0,
+                    taxable: (() => {
+                        const val = row.taxable || row.Taxable || row['Taxable?'] || '';
+                        if (typeof val === 'string') {
+                            const s = val.toLowerCase().trim();
+                            return s === 'yes' || s === 'true' || s === 'y' || s === '1';
+                        }
+                        return !!val;
+                    })(),
+                    incomeAccountId: row.incomeAccount || row['Income Account'] || row['Income account'] || '',
+                    cogsAccountId: row.expenseAccount || row['Expense Account'] || row['Expense account'] || '',
+                    onHand: parseFloat(row.quantity || row.Quantity || row['Quantity On Hand'] || row['Qty'] || 0) || 0,
+                    reorderPoint: parseFloat(row.reorderPoint || row.ReorderPoint || row['Reorder Point'] || 0) || 0,
+                    assetAccountId: row.inventoryAssetAccount || row['Inventory Asset Account'] || row['Inventory Asset'] || '',
+                    isActive: true,
+                    isSalesItem: true,
+                    isPurchaseItem: type.includes('Inventory') || type.includes('Part') || type.includes('Service')
+                };
+                return item;
+            }).filter(i => i.name);
+
+            if (itemsToSave.length === 0) {
+                return res.status(400).json({ message: 'No valid item records found in the file. Ensure you have a "Product/Service" or "Name" column.' });
+            }
+
+            await ItemService.bulkUpdate(itemsToSave, req.user.id, req.companyId, req.user.role);
+
+            res.json({
+                message: `Successfully imported ${itemsToSave.length} items.`,
+                count: itemsToSave.length
+            });
+
+        } catch (err) {
+            console.error('Item Import error:', err);
+            res.status(400).json({ message: err.message });
+        }
+    },
+
     importCustomers: async (req, res, next) => {
         try {
             const data = await parseFile(req);
@@ -302,7 +371,9 @@ const importController = {
     importTransactions: async (req, res, next) => {
         try {
             const data = await parseFile(req);
-            const { userId, companyId, userRole } = req;
+            const userId = req.user.id;
+            const companyId = req.companyId;
+            const userRole = req.user?.role || 'Admin';
 
             const [customers, vendors, employees] = await Promise.all([
                 CustomerService.getAll(userId, companyId),
@@ -315,21 +386,36 @@ const importController = {
 
             for (let i = 0; i < data.length; i++) {
                 const row = data[i];
-                let type = (row.type || row.Type || row['Transaction Type'] || '').toUpperCase().replace(' ', '_');
+                let rawType = (row.type || row.Type || row['Transaction type'] || row['Transaction Type'] || '').trim();
+                let type = rawType.toUpperCase().replace(/\s+/g, '_');
 
-                // Mapping common aliases
-                if (type === 'PAYMENT') type = 'PAYMENT';
-                if (type === 'RECEIPT') type = 'SALES_RECEIPT';
-                if (type === 'PO') type = 'PURCHASE_ORDER';
-                if (type === 'SO') type = 'SALES_ORDER';
+                // Mapping common aliases and handling complex names
+                if (type.includes('BILL_PAYMENT')) type = 'BILL_PAYMENT';
+                else if (type.includes('PAYMENT') && !type.includes('TAX')) type = 'PAYMENT';
+                else if (type.includes('RECEIPT')) type = 'SALES_RECEIPT';
+                else if (type.includes('PURCHASE_ORDER') || type === 'PO') type = 'PURCHASE_ORDER';
+                else if (type.includes('SALES_ORDER') || type === 'SO') type = 'SALES_ORDER';
+                else if (type.includes('INVOICE')) type = 'INVOICE';
+                else if (type.includes('BILL')) type = 'BILL';
+                else if (type.includes('CHECK') || type === 'CHARGE' || type === 'REFUND') type = 'CHECK';
+                else if (type.includes('EXPENSE')) type = 'CHECK';
+                else if (type.includes('DEPOSIT')) type = 'DEPOSIT';
+                else if (type.includes('CREDIT_MEMO')) type = 'CREDIT_MEMO';
+                else if (type.includes('VENDOR_CREDIT') || type === 'CREDIT_CARD_CREDIT') type = 'VENDOR_CREDIT';
+                else if (type.includes('PAYCHECK')) type = 'PAYCHECK';
+                else if (type.includes('ESTIMATE')) type = 'ESTIMATE';
+                else if (type.includes('TAX_PAYMENT')) type = 'TAX_PAYMENT';
+                else if (type.includes('JOURNAL_ENTRY')) type = 'JOURNAL_ENTRY';
+                else if (type.includes('INVENTORY_QTY_ADJUST')) type = 'INVENTORY_ADJ';
+                else if (type.includes('TIME_CHARGE')) type = 'TIME_CHARGE';
 
-                const validTypes = ['INVOICE', 'BILL', 'PURCHASE_ORDER', 'SALES_ORDER', 'SALES_RECEIPT', 'CHECK', 'DEPOSIT', 'CREDIT_MEMO', 'VENDOR_CREDIT', 'PAYCHECK', 'PAYMENT', 'ESTIMATE'];
+                const validTypes = ['INVOICE', 'BILL', 'PURCHASE_ORDER', 'SALES_ORDER', 'SALES_RECEIPT', 'CHECK', 'DEPOSIT', 'CREDIT_MEMO', 'VENDOR_CREDIT', 'PAYCHECK', 'PAYMENT', 'ESTIMATE', 'BILL_PAYMENT', 'TAX_PAYMENT', 'JOURNAL_ENTRY', 'INVENTORY_ADJ', 'TIME_CHARGE'];
                 if (!validTypes.includes(type)) {
-                    errors.push(`Row ${i + 2}: Invalid or missing transaction type: "${type}"`);
+                    errors.push(`Row ${i + 2}: Invalid or missing transaction type: "${rawType}"`);
                     continue;
                 }
 
-                const entityName = row.entity || row.Entity || row['Customer/Vendor'] || row['Customer'] || row['Vendor'] || row['Employee'] || row['Name'];
+                let entityName = row.name || row.Name || row.entity || row.Entity || row['Customer/Vendor'] || row['Customer'] || row['Vendor'] || row['Employee'];
                 const entityEmail = row.email || row.Email;
                 const entityUid = row.id || row.ID || row['Entity ID'];
                 const accountNo = row.accountNo || row['Account #'] || row['Vendor Account #'];
@@ -340,33 +426,71 @@ const importController = {
                 let vendorId = null;
                 let employeeId = null;
 
-                if (['INVOICE', 'SALES_ORDER', 'SALES_RECEIPT', 'CREDIT_MEMO', 'ESTIMATE', 'PAYMENT'].includes(type)) {
+                const normalize = (s) => String(s || '').toLowerCase().trim();
+
+                // If entityName contains a colon, we try to match the base part too
+                let baseEntityName = entityName;
+                if (typeof entityName === 'string' && entityName.includes(':')) {
+                    baseEntityName = entityName.split(':')[0].trim();
+                }
+
+                if (i < 5) {
+                    console.log(`[Import Debug] Row ${i + 2}: Type=${type}, EntityName="${entityName}", Base="${baseEntityName}"`);
+                    if (['INVOICE', 'SALES_ORDER', 'SALES_RECEIPT', 'CREDIT_MEMO', 'ESTIMATE', 'PAYMENT', 'TIME_CHARGE'].includes(type)) {
+                        console.log(`[Import Debug] Checking Customers (${customers.length} total). First 3:`, customers.slice(0, 3).map(c => c.name));
+                    } else if (['BILL', 'PURCHASE_ORDER', 'VENDOR_CREDIT', 'CHECK', 'BILL_PAYMENT', 'TAX_PAYMENT'].includes(type)) {
+                        console.log(`[Import Debug] Checking Vendors (${vendors.length} total). First 3:`, vendors.slice(0, 3).map(v => v.name));
+                    }
+                }
+
+                if (['INVOICE', 'SALES_ORDER', 'SALES_RECEIPT', 'CREDIT_MEMO', 'ESTIMATE', 'PAYMENT', 'TIME_CHARGE'].includes(type) && !entityId) {
                     const match = customers.find(c =>
                         (entityUid && c.id === entityUid) ||
-                        (entityName && (c.name?.toLowerCase() === entityName.toLowerCase() || (c.companyName && c.companyName.toLowerCase() === entityName.toLowerCase()))) ||
-                        (entityEmail && c.email?.toLowerCase() === entityEmail.toLowerCase())
+                        (entityName && (
+                            normalize(c.name) === normalize(entityName) ||
+                            normalize(c.name) === normalize(baseEntityName) ||
+                            (c.companyName && normalize(c.companyName) === normalize(entityName)) ||
+                            (c.companyName && normalize(c.companyName) === normalize(baseEntityName))
+                        )) ||
+                        (entityEmail && normalize(c.email) === normalize(entityEmail))
                     );
                     if (match) {
                         entityId = match.id;
                         customerId = match.id;
+                        if (i < 5) console.log(`[Import Debug] Matched Customer: ${match.name}`);
                     }
-                } else if (['BILL', 'PURCHASE_ORDER', 'VENDOR_CREDIT', 'CHECK'].includes(type)) {
+                }
+
+                if (['BILL', 'PURCHASE_ORDER', 'VENDOR_CREDIT', 'CHECK', 'BILL_PAYMENT', 'TAX_PAYMENT'].includes(type) && !entityId) {
                     const match = vendors.find(v =>
                         (entityUid && v.id === entityUid) ||
                         (accountNo && v.vendorAccountNo === accountNo) ||
-                        (entityName && (v.name?.toLowerCase() === entityName.toLowerCase() || (v.companyName && v.companyName.toLowerCase() === entityName.toLowerCase()))) ||
-                        (entityEmail && v.email?.toLowerCase() === entityEmail.toLowerCase())
+                        (entityName && (
+                            normalize(v.name) === normalize(entityName) ||
+                            normalize(v.name) === normalize(baseEntityName) ||
+                            (v.companyName && normalize(v.companyName) === normalize(entityName)) ||
+                            (v.companyName && normalize(v.companyName) === normalize(baseEntityName))
+                        )) ||
+                        (entityEmail && normalize(v.email) === normalize(entityEmail))
                     );
                     if (match) {
                         entityId = match.id;
                         vendorId = match.id;
+                        if (i < 5) console.log(`[Import Debug] Matched Vendor: ${match.name}`);
                     }
-                } else if (['PAYCHECK'].includes(type)) {
+                }
+
+                if (['PAYCHECK', 'TIME_CHARGE'].includes(type) && !entityId) {
                     const match = employees.find(e =>
                         (entityUid && e.id === entityUid) ||
                         (ssn && e.ssn === ssn) ||
-                        (entityName && (e.name?.toLowerCase() === entityName.toLowerCase() || e.firstName?.toLowerCase() === entityName.toLowerCase() || e.lastName?.toLowerCase() === entityName.toLowerCase())) ||
-                        (entityEmail && e.email?.toLowerCase() === entityEmail.toLowerCase())
+                        (entityName && (
+                            normalize(e.name) === normalize(entityName) ||
+                            normalize(e.name) === normalize(baseEntityName) ||
+                            normalize(e.firstName) === normalize(entityName) ||
+                            normalize(e.lastName) === normalize(entityName)
+                        )) ||
+                        (entityEmail && normalize(e.email) === normalize(entityEmail))
                     );
                     if (match) {
                         entityId = match.id;
@@ -374,31 +498,42 @@ const importController = {
                     }
                 }
 
-                if (!entityId && entityName) {
+                if (!entityId && entityName && type !== 'JOURNAL_ENTRY' && type !== 'INVENTORY_ADJ' && type !== 'DEPOSIT') {
                     errors.push(`Row ${i + 2}: Entity "${entityName}" not found. skipping.`);
                     continue;
                 }
 
                 const tx = {
                     id: crypto.randomUUID(),
+                    userId,
+                    companyId,
                     type,
-                    refNo: row.refNo || row.RefNo || row['Ref #'] || row['Number'] || '',
+                    refNo: String(row.num || row.Num || row.refNo || row.RefNo || row['Ref #'] || row['Number'] || '').trim(),
                     date: row.date || row.Date || new Date().toISOString().split('T')[0],
-                    dueDate: row.dueDate || row.DueDate || row['Due Date'],
+                    dueDate: row.dueDate || row.DueDate || row['Due date'] || row['Due Date'],
                     entityId,
                     customerId,
                     vendorId,
                     employeeId,
-                    total: parseFloat(row.total || row.Total || row.Amount || 0) || 0,
+                    total: (() => {
+                        const val = row.amount || row.Amount || row.total || row.Total || 0;
+                        if (typeof val === 'number') return val;
+                        // Handle cases like (100.00) for negative numbers
+                        let cleaned = String(val).replace(/[$,]/g, '').trim();
+                        if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+                            cleaned = '-' + cleaned.slice(1, -1);
+                        }
+                        return parseFloat(cleaned) || 0;
+                    })(),
                     status: (row.status || row.Status || 'OPEN').toUpperCase(),
-                    memo: row.memo || row.Memo || '',
+                    memo: row.memo || row.Memo || row['Memo/Description'] || '',
                     items: []
                 };
 
                 if (tx.total !== 0) {
                     tx.items.push({
                         id: crypto.randomUUID(),
-                        description: row.description || row.Description || 'Imported Transaction',
+                        description: row.description || row.Description || row['Memo/Description'] || 'Imported Transaction',
                         quantity: 1,
                         rate: Math.abs(tx.total),
                         amount: tx.total
@@ -415,11 +550,26 @@ const importController = {
                 });
             }
 
-            await transactionService.saveTransaction(transactionsToSave, userRole, userId, companyId);
+            console.log(`[Import] Processing ${transactionsToSave.length} transactions in batches...`);
+            // Process in smaller batches to avoid MongoDB transaction timeouts/size limits
+            const BATCH_SIZE = 20;
+            let successCount = 0;
+            for (let i = 0; i < transactionsToSave.length; i += BATCH_SIZE) {
+                const batch = transactionsToSave.slice(i, i + BATCH_SIZE);
+                try {
+                    await transactionService.saveTransaction(batch, userRole, userId, companyId);
+                    successCount += batch.length;
+                    console.log(`[Import] Batch ${Math.floor(i / BATCH_SIZE) + 1} successful (${successCount}/${transactionsToSave.length})`);
+                } catch (batchErr) {
+                    console.error(`[Import] Batch ${Math.floor(i / BATCH_SIZE) + 1} failed:`, batchErr.message);
+                    errors.push(`Batch starting Row ${i + 2} failed: ${batchErr.message}`);
+                    // If one batch fails, we could continue or stop. Choosing to continue for now.
+                }
+            }
 
             res.json({
-                message: `Successfully imported ${transactionsToSave.length} transactions.`,
-                count: transactionsToSave.length,
+                message: `Successfully imported ${successCount} transactions.`,
+                count: successCount,
                 errors: errors.length > 0 ? errors : undefined
             });
 

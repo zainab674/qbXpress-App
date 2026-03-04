@@ -1,5 +1,5 @@
 import React from 'react';
-import { importCustomers, importVendors, importEmployees, importTransactions } from '../services/api';
+import { importCustomers, importVendors, importEmployees, importTransactions, importItems } from '../services/api';
 
 interface ImportCardProps {
     title: string;
@@ -79,6 +79,13 @@ const ImportCenter: React.FC<Props> = ({ refreshData }) => {
             icon: '💰',
             color: 'bg-indigo-600',
             onImport: importTransactions
+        },
+        {
+            title: 'Import Inventory',
+            description: 'Bring your products and services list into qbXpress.',
+            icon: '📦',
+            color: 'bg-amber-600',
+            onImport: importItems
         }
     ];
 
