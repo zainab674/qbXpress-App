@@ -1,7 +1,7 @@
 import { AppStore } from '../types';
 
 /** Single source of truth: from env VITE_API_URL so frontend and server connect in deployed env */
-export const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5001/api';
 
 const getHeaders = () => {
     const token = localStorage.getItem('authToken');
