@@ -14,11 +14,12 @@ interface VendorCenterProps {
   onOpenPay: () => void;
   onOpenPO: () => void;
   onOpenReceive: () => void;
+  refreshData?: () => Promise<void>;
 }
 
 const VendorCenter: React.FC<VendorCenterProps> = ({
   vendors, transactions, onUpdateVendors, onOpenForm, onOpenWindow,
-  onOpenBill, onOpenPay, onOpenPO, onOpenReceive
+  onOpenBill, onOpenPay, onOpenPO, onOpenReceive, refreshData
 }) => {
   const [selectedVendorId, setSelectedVendorId] = useState<string>(vendors[0]?.id);
   const [activeCategory, setActiveCategory] = useState('High Spend Vendors');
@@ -101,6 +102,22 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
     { id: 'review', title: 'Needs Review', value: `${metrics.needsReviewCount} transactions`, subtitle: 'need review', color: '#ef4444', chart: getTrendData(t => t.status === 'OPEN'), icon: '⚠️' }
   ];
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const { importVendors } = await import('../services/api');
+      await importVendors(file);
+      alert('Vendors imported successfully!');
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to import vendors');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="flex h-full bg-[#f8fafc] overflow-hidden select-none font-sans">
       {/* Sidebar Area - Summary Cards */}
@@ -181,6 +198,12 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
             <button onClick={() => onOpenWindow('PURCHASE_ORDER_CENTER', 'PO Center')} className="flex-1 max-w-[150px] bg-white border-2 border-gray-200 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
               PO Center
             </button>
+            <div className="flex-1 max-w-[150px]">
+              <label className="flex items-center justify-center w-full h-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm text-sm cursor-pointer">
+                Import
+                <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImport} />
+              </label>
+            </div>
           </div>
         </div>
 

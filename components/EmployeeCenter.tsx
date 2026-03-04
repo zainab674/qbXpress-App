@@ -10,6 +10,7 @@ interface Props {
    onUpdateEmployees: (employees: Employee[]) => void;
    onOpenForm: (employee?: Employee) => void;
    onOpenWindow: (type: any, title: string, params?: any) => void;
+   refreshData?: () => Promise<void>;
 }
 
 const EmployeeCenter: React.FC<Props> = ({
@@ -17,7 +18,8 @@ const EmployeeCenter: React.FC<Props> = ({
    transactions,
    onUpdateEmployees,
    onOpenForm,
-   onOpenWindow
+   onOpenWindow,
+   refreshData
 }) => {
    const [selectedId, setSelectedId] = useState(employees[0]?.id || '');
    const [activeCategory, setActiveCategory] = useState('Active Employees');
@@ -57,6 +59,22 @@ const EmployeeCenter: React.FC<Props> = ({
       { id: 'new', title: 'New Hires', value: metrics.newHires, subtitle: 'last 30 days', color: '#10b981', chart: getTrendData('hires'), icon: '🆕' },
       { id: 'ytd', title: 'YTD Paid', value: `$${metrics.ytdTotal.toLocaleString()}`, subtitle: 'total compensation', color: '#6366f1', chart: [150, 180, 210, 240, 270, 300, 330, 360], icon: '📈' }
    ];
+
+   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+         const { importEmployees } = await import('../services/api');
+         await importEmployees(file);
+         alert('Employees imported successfully!');
+         if (refreshData) await refreshData();
+      } catch (err: any) {
+         alert(err.message || 'Failed to import employees');
+      } finally {
+         e.target.value = '';
+      }
+   };
 
    return (
       <div className="flex h-full bg-[#f8fafc] overflow-hidden select-none font-sans">
@@ -125,6 +143,12 @@ const EmployeeCenter: React.FC<Props> = ({
                   <button className="flex-1 max-w-[150px] bg-white border-2 border-gray-200 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
                      Employee List
                   </button>
+                  <div className="flex-1 max-w-[150px]">
+                     <label className="flex items-center justify-center w-full h-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm text-sm cursor-pointer">
+                        Import
+                        <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImport} />
+                     </label>
+                  </div>
                </div>
             </div>
 

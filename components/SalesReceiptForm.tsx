@@ -17,7 +17,7 @@ interface Props {
 const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, paymentMethods, onSave, onDelete, onClose, initialData }) => {
   const [activeTab, setActiveTab] = useState('Main');
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialData?.entityId || '');
-  const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString());
+  const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
   const [receiptNo, setReceiptNo] = useState(initialData?.refNo || '1001');
   const [pmtMethod, setPmtMethod] = useState(initialData?.paymentMethod || paymentMethods[0] || '');
   const [checkNo, setCheckNo] = useState(initialData?.checkNo || '');

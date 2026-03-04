@@ -83,6 +83,7 @@ import ReceivePaymentForm from './ReceivePaymentForm';
 import HomePage from './HomePage';
 import Reminders from './Reminders';
 import ClassList from './ClassList';
+import ReportBuilder from './ReportBuilder';
 import SalesRepList from './SalesRepList';
 import ShipViaList from './ShipViaList';
 import InventoryCenter from './InventoryCenter';
@@ -90,6 +91,7 @@ import UOMList from './UOMList';
 import VehicleList from './VehicleList';
 import VendorCreditCategoryList from './VendorCreditCategoryList';
 import CustomerCreditCategoryList from './CustomerCreditCategoryList';
+import ImportCenter from './ImportCenter';
 
 interface WindowRendererProps {
     win: AppWindow;
@@ -160,6 +162,7 @@ interface WindowRendererProps {
         onUpdateVehicle: (v: Vehicle) => void;
         onDeleteVehicle: (id: string) => void;
         onUpdateMileage: (e: any) => void;
+        onDeleteReport: (id: string) => Promise<void>;
         onUpdateVendorCreditCategories: (c: VendorCreditCategory[]) => void;
         onUpdateCustomerCreditCategories: (c: CustomerCreditCategory[]) => void;
         onUpdateRates: (r: ExchangeRate[]) => void;
@@ -198,9 +201,19 @@ interface WindowRendererProps {
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handlers }) => {
     const { type, id: winId, params } = win;
-    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert } = handlers;
+    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onDeleteReport, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert } = handlers;
 
     const businessName = data.companyConfig?.businessName || 'My Company';
+
+    const handleReportMemorized = (r: any, baseType: string) => {
+        handlers.setMemorizedReports([...data.memorizedReports, {
+            id: crypto.randomUUID(),
+            name: r.title || r.name,
+            baseType: baseType,
+            dateCreated: new Date().toLocaleDateString(),
+            params: r
+        }]);
+    };
 
     switch (type) {
         case 'HOME': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} />;
@@ -212,18 +225,18 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'INVENTORY_ADJUSTMENT': return <InventoryAdjustmentForm items={data.items} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'BUILD_ASSEMBLY': return <BuildAssemblyForm items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'JOB_PROFITABILITY': return <JobProfitabilityReport transactions={data.transactions} customers={data.customers} companyName={businessName} selectedJobId={params?.jobId} />;
-        case 'PROFIT_AND_LOSS': return <ReportView type="P&L" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'PL', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'GENERAL_LEDGER': return <ReportView type="GL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} params={params} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'GL', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'AGING': return <ReportView type="AGING" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'AGING', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'AP_AGING': return <ReportView type="AP_AGING" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'AP_AGING', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'SALES_ITEM': return <ReportView type="SALES_ITEM" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'SALES_BY_ITEM', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'INV_VAL': return <ReportView type="INV_VAL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'INV_VAL', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'TRIAL_BALANCE': return <ReportView type="TRIAL_BALANCE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'TRIAL_BALANCE', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'CASH_FLOW': return <ReportView type="CASH_FLOW" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'CASH_FLOW', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'TAX_LIABILITY': return <ReportView type="TAX_LIABILITY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'TAX_LIABILITY', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'PHYSICAL_INVENTORY': return <ReportView type="PHYSICAL_INVENTORY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} />;
-        case 'BALANCE_SHEET': return <ReportView type="BS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'BS', dateCreated: new Date().toLocaleDateString() }])} />;
-        case 'CUSTOMER_CENTER': return <CustomerCenter customers={data.customers} transactions={data.transactions} onUpdateCustomers={onUpdateCustomers} onOpenWindow={onOpenWindow} onOpenForm={(type, entity) => onOpenForm('CUSTOMER', entity)} onOpenInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenPayment={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payment')} onOpenReceipt={() => onOpenWindow('SALES_RECEIPT', 'Sales Receipt')} onOpenEstimate={() => onOpenWindow('ESTIMATE', 'Estimate')} onOpenSalesOrder={() => onOpenWindow('SALES_ORDER', 'Sales Order')} onOpenCredit={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} />;
+        case 'PROFIT_AND_LOSS': return <ReportView type="P&L" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL')} params={params} />;
+        case 'GENERAL_LEDGER': return <ReportView type="GL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} params={params} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'GL')} />;
+        case 'AGING': return <ReportView type="AGING" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'AGING')} params={params} />;
+        case 'AP_AGING': return <ReportView type="AP_AGING" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'AP_AGING')} params={params} />;
+        case 'SALES_ITEM': return <ReportView type="SALES_ITEM" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'SALES_BY_ITEM')} params={params} />;
+        case 'INV_VAL': return <ReportView type="INV_VAL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'INV_VAL')} params={params} />;
+        case 'TRIAL_BALANCE': return <ReportView type="TRIAL_BALANCE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'TRIAL_BALANCE')} params={params} />;
+        case 'CASH_FLOW': return <ReportView type="CASH_FLOW" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'CASH_FLOW')} params={params} />;
+        case 'TAX_LIABILITY': return <ReportView type="TAX_LIABILITY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'TAX_LIABILITY')} params={params} />;
+        case 'PHYSICAL_INVENTORY': return <ReportView type="PHYSICAL_INVENTORY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PHYSICAL_INVENTORY')} params={params} />;
+        case 'BALANCE_SHEET': return <ReportView type="BS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS')} params={params} />;
+        case 'CUSTOMER_CENTER': return <CustomerCenter customers={data.customers} transactions={data.transactions} onUpdateCustomers={onUpdateCustomers} onOpenWindow={onOpenWindow} onOpenForm={(type, entity) => onOpenForm('CUSTOMER', entity)} onOpenInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenPayment={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payment')} onOpenReceipt={() => onOpenWindow('SALES_RECEIPT', 'Sales Receipt')} onOpenEstimate={() => onOpenWindow('ESTIMATE', 'Estimate')} onOpenSalesOrder={() => onOpenWindow('SALES_ORDER', 'Sales Order')} onOpenCredit={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} refreshData={handlers.refreshData} />;
         case 'INVOICE_CENTER': return <InvoiceCenter transactions={data.transactions} customers={data.customers} terms={data.terms} onOpenInvoice={(inv) => onOpenWindow('INVOICE_DISPLAY', `Invoice #${inv.refNo}`, { transactionId: inv.id })} onOpenNewInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenWindow={onOpenWindow} />;
         case 'INVOICE_DISPLAY': {
             const invoice = data.transactions.find(t => t.id === params?.transactionId);
@@ -318,12 +331,12 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
             return <PODisplay po={po} vendor={vendor} items={data.items} accounts={data.accounts} classes={data.classes} onClose={() => onCloseWindow(winId)} onConvertToBill={(p) => onOpenWindow('BILL', 'Enter Bills', { initialData: p })} />;
         }
         case 'LEAD_CENTER': return <LeadCenter leads={data.leads} onUpdateLeads={onUpdateLeads} onConvertToCustomer={onConvertToCustomer} />;
-        case 'REPORTS_CENTER': return <ReportsCenter transactions={data.transactions} vendors={data.vendors} items={data.items} budgets={data.budgets} memorized={data.memorizedReports} onMemorize={(r) => setMemorizedReports([...data.memorizedReports, r])} onOpenReport={(t, title) => onOpenWindow(t as any, title)} />;
+        case 'REPORTS_CENTER': return <ReportsCenter transactions={data.transactions} vendors={data.vendors} items={data.items} budgets={data.budgets} memorized={data.memorizedReports} onMemorize={(r) => setMemorizedReports([...data.memorizedReports, r])} onOpenReport={(t, title, params) => onOpenWindow(t as any, title, params)} onDeleteReport={onDeleteReport} />;
         case 'ITEM_LIST': return <ItemList items={data.items} accounts={data.accounts} onUpdateItems={onUpdateItems} onOpenForm={(item) => onOpenItemForm(item)} onOpenReport={onOpenWindow} onOrderLowStock={onShowReorderDialog} showAlert={showAlert} />;
         case 'CHART_OF_ACCOUNTS': return <ChartOfAccounts accounts={data.accounts} prefs={data.accPrefs} onUpdateAccounts={onUpdateAccounts} onOpenRegister={(id) => onOpenWindow('ACCOUNT_REGISTER', 'Register', { accountId: id })} isSingleUser={true} />;
-        case 'VENDOR_CENTER': return <VendorCenter vendors={data.vendors} transactions={data.transactions} onUpdateVendors={onUpdateVendors} onOpenForm={(v) => onOpenForm('VENDOR', v)} onOpenWindow={onOpenWindow} onOpenBill={() => onOpenWindow('BILL', 'Enter Bills')} onOpenPay={() => onOpenWindow('PAY_BILLS', 'Pay Bills')} onOpenPO={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} onOpenReceive={() => onOpenWindow('RECEIVE_INVENTORY', 'Receive Items')} />;
+        case 'VENDOR_CENTER': return <VendorCenter vendors={data.vendors} transactions={data.transactions} onUpdateVendors={onUpdateVendors} onOpenForm={(v) => onOpenForm('VENDOR', v)} onOpenWindow={onOpenWindow} onOpenBill={() => onOpenWindow('BILL', 'Enter Bills')} onOpenPay={() => onOpenWindow('PAY_BILLS', 'Pay Bills')} onOpenPO={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} onOpenReceive={() => onOpenWindow('RECEIVE_INVENTORY', 'Receive Items')} refreshData={handlers.refreshData} />;
         case 'PAY_BILLS': return <PayBillsForm transactions={data.transactions} vendors={data.vendors} accounts={data.accounts} vendorCreditCategories={data.vendorCreditCategories} onSavePayment={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialBillId={params?.billId} />;
-        case 'EMPLOYEE_CENTER': return <EmployeeCenter employees={data.employees} transactions={data.transactions} onUpdateEmployees={onUpdateEmployees} onOpenWindow={onOpenWindow} onOpenForm={(e) => onOpenForm('EMPLOYEE', e)} />;
+        case 'EMPLOYEE_CENTER': return <EmployeeCenter employees={data.employees} transactions={data.transactions} onUpdateEmployees={onUpdateEmployees} onOpenWindow={onOpenWindow} onOpenForm={(e) => onOpenForm('EMPLOYEE', e)} refreshData={handlers.refreshData} />;
         case 'PAYROLL_CENTER': return <PayrollCenter employees={data.employees} liabilities={data.liabilities} onOpenPayEmployees={() => onOpenWindow('PAY_EMPLOYEES', 'Pay Employees')} onOpenPayLiabilities={() => onOpenWindow('PAY_LIABILITIES', 'Pay Liabilities')} onOpenReport={onOpenWindow} />;
         case 'PAY_EMPLOYEES': return <PayEmployeesForm employees={data.employees} timeEntries={data.timeEntries} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'PAY_LIABILITIES': return <PayLiabilitiesForm liabilities={data.liabilities} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
@@ -340,6 +353,22 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'CUSTOMER_BALANCE': return <ReportView type="CUSTOMER_BALANCE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} />;
         case 'VENDOR_BALANCE': return <ReportView type="VENDOR_BALANCE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} />;
         case 'PAYROLL_LIABILITY': return <ReportView type="PAYROLL_LIABILITY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} />;
+        case 'INVOICES_RECEIVED': return <ReportView type="INVOICES_RECEIVED" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'AGING_DETAIL': return <ReportView type="AGING_DETAIL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'OPEN_INVOICES': return <ReportView type="OPEN_INVOICES" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'COLLECTIONS': return <ReportView type="COLLECTIONS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'STATEMENT_LIST': return <ReportView type="STATEMENT_LIST" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'CUSTOMER_BALANCE_DETAIL': return <ReportView type="CUSTOMER_BALANCE_DETAIL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'INVOICE_LIST': return <ReportView type="INVOICE_LIST" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'UNBILLED_CHARGES': return <ReportView type="UNBILLED_CHARGES" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'UNBILLED_TIME': return <ReportView type="UNBILLED_TIME" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'INV_VAL_DETAIL': return <ReportView type="INV_VAL_DETAIL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'ADJUSTED_TRIAL_BALANCE': return <ReportView type="ADJUSTED_TRIAL_BALANCE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'DETAILED_TIME': return <ReportView type="DETAILED_TIME" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'STOCK_TAKE': return <ReportView type="STOCK_TAKE" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'OPEN_PO_LIST': return <ReportView type="OPEN_PO_LIST" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'OPEN_PO_DETAIL': return <ReportView type="OPEN_PO_DETAIL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
+        case 'TERMS_LIST_REPORT': return <ReportView type="TERMS_LIST_REPORT" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} params={params} />;
         case 'CURRENCY_LIST': return <CurrencyList currencies={data.currencies} exchangeRates={data.exchangeRates} onUpdateRates={onUpdateRates} onUpdateCurrencies={handlers.handleSaveCurrency} onClose={() => onCloseWindow(winId)} />;
         case 'FIXED_ASSET_MANAGER': return <FixedAssetManager fixedAssets={data.fixedAssets} accounts={data.accounts} vendors={data.vendors} onSave={onUpdateFixedAssets} onClose={() => onCloseWindow(winId)} />;
         case 'COLLECTION_LETTERS': return <CollectionLetterGenerator customers={data.customers} transactions={data.transactions} onClose={() => onCloseWindow(winId)} />;
@@ -394,6 +423,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
             return <AccountRegister account={acc} transactions={data.transactions} accounts={data.accounts} vendors={data.vendors} customers={data.customers} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         }
         case 'INSIGHTS': return <InsightsTab isAdmin={true} transactions={data.transactions} accounts={data.accounts} />;
+        case 'IMPORT_CENTER': return <ImportCenter refreshData={handlers.refreshData} />;
         case 'MODERN_DASHBOARD': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} />;
         case 'CALENDAR': return <FinancialCalendar transactions={data.transactions} companyName={businessName} />;
         case 'STATEMENTS': return <StatementForm customers={data.customers} transactions={data.transactions} onClose={() => onCloseWindow(winId)} />;
@@ -441,6 +471,25 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
                                 (type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any)))));
             onOpenWindow(viewType, `${(type === 'BILL_PAYMENT' ? 'Check' : type.replace('_', ' '))} #${id}`, { transactionId: id });
         }} />;
+        case 'REPORT_BUILDER': return (
+            <ReportBuilder
+                reportType={params?.reportType || 'Blank'}
+                customTitle={params?.title}
+                customCompanyName={params?.customCompanyName}
+                transactions={data.transactions}
+                accounts={data.accounts}
+                customers={data.customers}
+                vendors={data.vendors}
+                items={data.items}
+                companyName={businessName}
+                onClose={() => onCloseWindow(winId)}
+                initialSettings={params}
+                onSave={(r) => {
+                    handleReportMemorized(r, r.type || params?.reportType || 'Blank');
+                    onCloseWindow(winId);
+                }}
+            />
+        );
         default: return <div className="flex items-center justify-center h-full text-gray-500 font-bold italic uppercase tracking-widest">View Pending Implementation</div>;
     }
 };

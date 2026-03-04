@@ -37,7 +37,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const [selectedClassId, setSelectedClassId] = useState(initialData?.classId || '');
   const [selectedSalesRepId, setSelectedSalesRepId] = useState(initialData?.salesRepId || '');
   const [selectedShipVia, setSelectedShipVia] = useState(initialData?.shipVia || '');
-  const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }));
+  const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
 
   const lastInvoice = transactions.filter(t => t.type === 'INVOICE').reduce((max, t) => Math.max(max, parseInt(t.refNo) || 0), 1000);
   const [invoiceNo, setInvoiceNo] = useState(initialData?.refNo || (lastInvoice + 1).toString());
@@ -94,7 +94,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
     const d = new Date(date);
     if (!isNaN(d.getTime()) && term) {
       d.setDate(d.getDate() + (term.stdDueDays || 0));
-      return d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      return d.toISOString().split('T')[0];
     }
     return date;
   };

@@ -28,5 +28,24 @@ router.get('/sales-by-customer', reportController.getSalesByCustomerSummary);
 router.get('/customer-balance', reportController.getCustomerBalanceSummary);
 router.get('/vendor-balance', reportController.getVendorBalanceSummary);
 router.get('/payroll-liability', reportController.getPayrollLiabilityBalances);
+router.get('/equity-statement', reportController.getStatementOfChangesInEquity);
+router.get('/unbilled-charges', reportController.getUnbilledCharges);
+router.get('/unbilled-time', reportController.getUnbilledTime);
+router.get('/collections', reportController.getCollectionsReport);
+router.get('/inventory-valuation-detail', reportController.getInventoryValuationDetail);
+router.get('/adjusted-trial-balance', reportController.getAdjustedTrialBalance);
+router.get('/statement-list', reportController.getStatementList);
+router.get('/detailed-time', reportController.getDetailedTimeActivities);
+router.get('/ar-aging-detail', reportController.getARAgingDetail);
+router.get('/customer-balance-detail', reportController.getCustomerBalanceDetail);
+router.get('/invoice-list', reportController.getInvoiceList);
+router.get('/open-invoices', reportController.getOpenInvoices);
+router.get('/invoices-and-payments', reportController.getInvoicesAndReceivedPayments);
+router.get('/terms-list', reportController.getTermsList);
+
+router.post('/custom-columns', reportController.addCustomColumn);
+router.put('/custom-columns', reportController.updateCustomColumn);
+router.get('/custom-columns', reportController.getCustomColumns);
+router.delete('/custom-columns/:id', reportController.deleteCustomColumn);
 
 module.exports = router;

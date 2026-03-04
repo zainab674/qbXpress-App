@@ -12,8 +12,8 @@ interface Props {
 
 const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose, initialData }) => {
   const [vendorId, setVendorId] = useState('');
-  const [poDate, setPoDate] = useState(new Date().toLocaleDateString('en-US'));
-  const [expectedDate, setExpectedDate] = useState(new Date().toLocaleDateString('en-US'));
+  const [poDate, setPoDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expectedDate, setExpectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [refNo, setRefNo] = useState('PO-' + Math.floor(Math.random() * 9000 + 1000));
   const [memo, setMemo] = useState('');
   const [vendorMessage, setVendorMessage] = useState('');

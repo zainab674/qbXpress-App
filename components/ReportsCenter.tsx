@@ -1,6 +1,24 @@
-
 import React, { useState } from 'react';
 import { Transaction, Vendor, Item, Budget, MemorizedReport } from '../types';
+import ReportTypeSelector from './ReportTypeSelector';
+import {
+   Search,
+   Star,
+   MoreVertical,
+   ChevronDown,
+   ChevronRight,
+   Layout,
+   FileText,
+   Settings,
+   LineChart,
+   TrendingUp,
+   Users,
+   Package,
+   PieChart,
+   Clock,
+   Plus,
+   Trash2
+} from 'lucide-react';
 
 interface Props {
    transactions: Transaction[];
@@ -9,152 +27,287 @@ interface Props {
    budgets: Budget[];
    memorized: MemorizedReport[];
    onMemorize: (report: MemorizedReport) => void;
-   onOpenReport: (type: string, title: string) => void;
+   onOpenReport: (type: any, title: string, params?: any) => void;
+   onDeleteReport: (id: string) => void;
 }
 
-const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets, memorized, onMemorize, onOpenReport }) => {
-   const [activeTab, setActiveTab] = useState<'STANDARD' | 'MEMORIZED' | 'BUDGET'>('STANDARD');
-   const [selectedCategory, setSelectedCategory] = useState('Company & Financial');
+const ReportsCenter: React.FC<Props> = ({ transactions, vendors, items, budgets, memorized, onMemorize, onOpenReport, onDeleteReport }) => {
+   const [activeTab, setActiveTab] = useState<'STANDARD' | 'CUSTOM' | 'MANAGEMENT' | 'FINANCIAL'>('STANDARD');
+   const [expandedSections, setExpandedSections] = useState<string[]>(['Who owes you', 'Inventory', 'Business overview', 'Favourites']);
+   const [searchTerm, setSearchTerm] = useState('');
+   const [showTypeSelector, setShowTypeSelector] = useState(false);
 
-   const handleMemorizeCurrent = () => {
-      const name = prompt("Enter a name for this memorized report:");
-      if (name) {
-         onMemorize({
-            id: Math.random().toString(),
-            name,
-            baseType: 'PL',
-            dateCreated: new Date().toLocaleDateString()
-         });
-      }
+   const toggleSection = (section: string) => {
+      setExpandedSections(prev =>
+         prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
+      );
    };
 
-   const categories = [
+   const reportCategories = [
       {
-         name: 'Company & Financial', reports: [
+         name: 'Favourites',
+         reports: []
+      },
+      {
+         name: 'Business overview',
+         reports: [
             { id: 'PROFIT_AND_LOSS', title: 'Profit & Loss Standard' },
             { id: 'BALANCE_SHEET', title: 'Balance Sheet Standard' },
-            { id: 'GENERAL_LEDGER', title: 'General Ledger' },
-            { id: 'TRIAL_BALANCE', title: 'Trial Balance' },
-            { id: 'CASH_FLOW', title: 'Statement of Cash Flows' }
+            { id: 'CASH_FLOW', title: 'Statement of Cash Flows' },
          ]
       },
-      { name: 'Customers & Receivables', reports: [{ id: 'AGING', title: 'A/R Aging Summary' }, { id: 'CUSTOMER_BALANCE', title: 'Customer Balance Summary' }, { id: 'SALES_CUSTOMER', title: 'Sales by Customer Summary (Ch 24)' }] },
-      { name: 'Sales', reports: [{ id: 'SALES_ITEM', title: 'Sales by Item Summary' }, { id: 'SALES_GRAPH', title: 'Sales Graph (Visual)' }] },
-      { name: 'Jobs, Time & Mileage', reports: [{ id: 'JOB_PROFITABILITY', title: 'Job Profitability Summary' }, { id: 'JOB_ESTIMATES_VS_ACTUALS', title: 'Job Estimates vs. Actuals' }, { id: 'CHANGE_ORDER_LOG', title: 'Change Order History (Ch 23)' }, { id: 'MILEAGE_DETAIL', title: 'Mileage Detail Report (Ch 25)' }] },
-      { name: 'Vendors & Payables', reports: [{ id: 'AP_AGING', title: 'A/P Aging Summary' }, { id: 'VENDOR_BALANCE', title: 'Vendor Balance Summary' }] },
-      { name: 'Inventory', reports: [{ id: 'INV_VAL', title: 'Inventory Valuation Summary' }, { id: 'PHYSICAL_INVENTORY', title: 'Physical Inventory Worksheet' }] },
-      { name: 'Employees & Payroll', reports: [{ id: 'PAYROLL_SUMMARY', title: 'Payroll Summary' }] },
-      { name: 'Payroll', reports: [{ id: 'PAYROLL_LIABILITY', title: 'Payroll Liability Balances' }] },
-      { name: 'Accountant & Taxes', reports: [{ id: 'AUDIT_TRAIL', title: 'Audit Trail' }, { id: 'AUDIT_TRAIL_DETAIL', title: 'Audit Trail Detail (Ch 27)' }, { id: 'PL_BY_CLASS', title: 'Profit & Loss by Class (Ch 26)' }, { id: 'FORECAST', title: 'Sales Forecast (Ch 23)' }] }
+      {
+         name: 'Who owes you',
+         reports: [
+            { id: 'AGING', title: 'Accounts receivable ageing summary', favorite: true },
+            { id: 'INVOICES_RECEIVED', title: 'Invoices and Received Payments' },
+            { id: 'AGING_DETAIL', title: 'Accounts receivable ageing detail' },
+            { id: 'OPEN_INVOICES', title: 'Open Invoices' },
+            { id: 'COLLECTIONS', title: 'Collections Report' },
+            { id: 'STATEMENT_LIST', title: 'Statement List' },
+            { id: 'CUSTOMER_BALANCE', title: 'Customer Balance Summary' },
+            { id: 'TERMS_LIST_REPORT', title: 'Terms List' },
+            { id: 'CUSTOMER_BALANCE_DETAIL', title: 'Customer Balance Detail' },
+            { id: 'UNBILLED_CHARGES', title: 'Unbilled charges' },
+            { id: 'INVOICE_LIST', title: 'Invoice List' },
+            { id: 'UNBILLED_TIME', title: 'Unbilled time' },
+         ]
+      },
+      {
+         name: 'Inventory',
+         reports: [
+            { id: 'INV_VAL_DETAIL', title: 'Inventory Valuation Detail' },
+            { id: 'OPEN_PO_LIST', title: 'Open Purchase Order List' },
+            { id: 'INV_VAL', title: 'Inventory Valuation Summary' },
+            { id: 'STOCK_TAKE', title: 'Stock Take Worksheet' },
+            { id: 'OPEN_PO_DETAIL', title: 'Open Purchase Order Detail' },
+         ]
+      }
    ];
 
-   const handleBatchProcess = () => {
-      alert("Batch Processing: Preparing [Profit & Loss, Balance Sheet, A/R Aging] for printing... ");
-   };
+   const sidebarItems = [
+      { id: 'STANDARD', label: 'Standard reports', icon: <FileText size={18} /> },
+      { id: 'CUSTOM', label: 'Custom reports', icon: <Layout size={18} /> },
+      { id: 'MANAGEMENT', label: 'Management reports', icon: <PieChart size={18} /> },
+      { id: 'FINANCIAL', label: 'Financial planning', icon: <TrendingUp size={18} />, subItems: ['Cash flow overview', 'Cash flow planner', 'Budgets'] },
+   ];
+
+   const renderReportItem = (report: any) => (
+      <div
+         key={report.id}
+         className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer group"
+         onClick={() => onOpenReport(report.id, report.title)}
+      >
+         <span className="text-sm text-gray-700 font-medium group-hover:text-blue-600 transition-colors">{report.title}</span>
+         <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Star size={16} className={report.favorite ? "fill-green-500 text-green-500" : "text-gray-400 hover:text-green-500"} />
+            <MoreVertical size={16} className="text-gray-400 hover:text-gray-600" />
+         </div>
+      </div>
+   );
 
    return (
-      <div className="flex flex-col h-full bg-white overflow-hidden text-gray-900">
-         <div className="bg-gray-100 border-b p-2 flex justify-between items-center">
-            <div className="flex gap-2">
-               <button onClick={() => setActiveTab('STANDARD')} className={`px-4 py-1 text-xs font-bold rounded border ${activeTab === 'STANDARD' ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-700 border-gray-300'}`}>Standard</button>
-               <button onClick={() => setActiveTab('MEMORIZED')} className={`px-4 py-1 text-xs font-bold rounded border ${activeTab === 'MEMORIZED' ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-700 border-gray-300'}`}>Memorized</button>
-               <button onClick={() => setActiveTab('BUDGET')} className={`px-4 py-1 text-xs font-bold rounded border ${activeTab === 'BUDGET' ? 'bg-[#003366] text-white border-[#003366]' : 'bg-white text-gray-700 border-gray-300'}`}>Budgets</button>
+      <div className="flex h-full bg-[#f4f5f8] font-sans">
+         {/* Sidebar */}
+         <div className="w-64 bg-white border-r border-gray-200 flex flex-col pt-4">
+            <div className="px-6 mb-6">
+               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center justify-between">
+                  Reports & Analytics
+                  <button className="text-gray-400 hover:text-gray-600">
+                     <Settings size={14} />
+                  </button>
+               </h2>
             </div>
-            {activeTab === 'STANDARD' && (
-               <div className="flex gap-2">
-                  <button onClick={handleBatchProcess} className="bg-white border border-gray-400 px-3 py-1 text-[10px] font-bold uppercase rounded hover:bg-gray-50 shadow-sm text-gray-700">Process Multiple Reports</button>
-                  <button onClick={handleMemorizeCurrent} className="bg-white border border-gray-400 px-3 py-1 text-[10px] font-bold uppercase rounded hover:bg-gray-50 shadow-sm text-gray-700">Memorize...</button>
-               </div>
-            )}
+            <nav className="flex-1">
+               {sidebarItems.map(item => (
+                  <div key={item.id}>
+                     <button
+                        onClick={() => setActiveTab(item.id as any)}
+                        className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${activeTab === item.id
+                           ? 'bg-gray-100 text-black border-l-4 border-black'
+                           : 'text-gray-600 hover:bg-gray-50'
+                           }`}
+                     >
+                        <span className="mr-3">{item.label}</span>
+                     </button>
+                     {item.subItems && (
+                        <div className="mt-1 mb-2">
+                           {item.subItems.map(subItem => (
+                              <button
+                                 key={subItem}
+                                 className="w-full flex items-center px-10 py-2 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+                              >
+                                 {subItem}
+                              </button>
+                           ))}
+                        </div>
+                     )}
+                  </div>
+               ))}
+            </nav>
          </div>
 
-         <div className="flex-1 flex overflow-hidden">
-            {activeTab === 'STANDARD' && (
-               <div className="w-64 border-r bg-gray-50 overflow-y-auto">
-                  {categories.map(cat => (
-                     <div
-                        key={cat.name}
-                        onClick={() => setSelectedCategory(cat.name)}
-                        className={`p-3 border-b cursor-pointer text-[11px] font-bold uppercase tracking-tight transition-colors ${selectedCategory === cat.name ? 'bg-blue-600 text-white shadow-inner' : 'hover:bg-white text-gray-800'}`}
-                     >
-                        {cat.name}
-                     </div>
-                  ))}
+         {/* Main Content */}
+         <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Top Bar with Search */}
+            <div className="bg-white p-4 border-b border-gray-200 flex items-center gap-4">
+               <div className="relative flex-1 max-w-md">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                     <Search size={16} className="text-gray-400" />
+                  </div>
+                  <input
+                     type="text"
+                     placeholder="Type report name here"
+                     className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                     value={searchTerm}
+                     onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                     <ChevronDown size={14} className="text-gray-400" />
+                  </div>
                </div>
-            )}
+               <button
+                  onClick={() => setShowTypeSelector(true)}
+                  className="bg-[#2ca01c] text-white px-4 py-2 text-sm font-semibold rounded hover:bg-[#218315] transition-all flex items-center gap-2"
+               >
+                  <Plus size={18} />
+                  Create new report
+               </button>
+            </div>
 
-            <div className="flex-1 overflow-auto bg-white">
-               {activeTab === 'STANDARD' && (
-                  <div className="p-8 space-y-4">
-                     <h3 className="text-sm font-bold text-slate-500 uppercase border-b pb-2 tracking-widest">{selectedCategory} Reports</h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {/* Corrected: use selectedCategory state variable instead of its setter function in comparison */}
-                        {categories.find(c => c.name === selectedCategory)?.reports.map(r => (
-                           <div key={r.id} className="border rounded p-4 shadow-sm hover:border-blue-400 transition-colors group">
-                              <div className="font-bold text-blue-900 group-hover:text-blue-600">{r.title}</div>
-                              <p className="text-[10px] text-gray-400 mt-1 italic">Summary of financial data...</p>
-                              <div className="mt-4 flex gap-2">
-                                 <button
-                                    onClick={() => {
-                                       if (r.id === 'SALES_GRAPH') onOpenReport('COMPANY_SNAPSHOT' as any, 'Sales Graph');
-                                       else onOpenReport(r.id, r.title);
-                                    }}
-                                    className="bg-blue-600 text-white px-4 py-1 text-[10px] font-bold rounded shadow-sm"
-                                 >
-                                    Run
-                                 </button>
-                                 <button className="bg-white border border-gray-300 px-4 py-1 text-[10px] font-bold rounded">Customize</button>
+            {/* Reports List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+               {activeTab === 'STANDARD' && reportCategories.map(category => (
+                  <div key={category.name} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                     <button
+                        onClick={() => toggleSection(category.name)}
+                        className="w-full flex items-center px-4 py-3 bg-white hover:bg-gray-50 border-b border-gray-200 transition-colors"
+                     >
+                        {expandedSections.includes(category.name) ? <ChevronDown size={18} className="mr-2 text-gray-500" /> : <ChevronRight size={18} className="mr-2 text-gray-500" />}
+                        <span className="text-base font-bold text-gray-800">{category.name}</span>
+                     </button>
+
+                     {expandedSections.includes(category.name) && (
+                        <div className="p-2">
+                           {category.reports.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                                 {category.reports.map(report => renderReportItem(report))}
                               </div>
-                           </div>
-                        )) || (
-                              <div className="col-span-3 text-center py-20 text-gray-300 font-bold italic uppercase tracking-tighter">
-                                 Select a category on the left to see available reports.
+                           ) : (
+                              <div className="py-8 text-center text-gray-400 italic text-sm">
+                                 No reports in this category yet.
                               </div>
                            )}
+                        </div>
+                     )}
+                  </div>
+               ))}
+
+               {activeTab === 'CUSTOM' && (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-gray-800">Custom Reports</h3>
+                        <div className="text-sm text-gray-500">{memorized.length} reports</div>
                      </div>
+
+                     {memorized.length > 0 ? (
+                        <div className="overflow-x-auto">
+                           <table className="w-full text-sm text-left">
+                              <thead className="bg-gray-50 border-y border-gray-200">
+                                 <tr>
+                                    <th className="px-4 py-3 font-bold text-gray-600">Report Name</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600">Base Type</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600">Date Created</th>
+                                    <th className="px-4 py-3"></th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                 {memorized.map(r => (
+                                    <tr
+                                       key={r.id}
+                                       className="hover:bg-blue-50 cursor-pointer group transition-colors"
+                                       onClick={() => {
+                                          const isBuilderReport = ['INVOICE', 'BILLS', 'SALES', 'EXPENSES', 'JOURNAL', 'BANKING', 'TRANSACTIONS'].includes(r.baseType);
+                                          if (isBuilderReport) {
+                                             onOpenReport('REPORT_BUILDER', r.name, {
+                                                reportType: r.baseType,
+                                                ...r.params
+                                             });
+                                          } else {
+                                             const typeMap: Record<string, string> = {
+                                                'PL': 'PROFIT_AND_LOSS',
+                                                'BS': 'BALANCE_SHEET',
+                                                'GL': 'GENERAL_LEDGER'
+                                             };
+                                             onOpenReport(typeMap[r.baseType] || r.baseType, r.name, r.params);
+                                          }
+                                       }}
+                                    >
+                                       <td className="px-4 py-3 font-semibold text-blue-700">{r.name}</td>
+                                       <td className="px-4 py-3 text-gray-600">{r.baseType}</td>
+                                       <td className="px-4 py-3 text-gray-500">{r.dateCreated}</td>
+                                       <td className="px-4 py-3 text-right">
+                                          <div className="flex justify-end gap-2">
+                                             <button className="p-1 hover:bg-gray-200 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <MoreVertical size={16} className="text-gray-400" />
+                                             </button>
+                                             <button
+                                                className="p-1 hover:bg-red-100 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"
+                                                onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   if (confirm('Are you sure you want to delete this report?')) {
+                                                      onDeleteReport(r.id);
+                                                   }
+                                                }}
+                                             >
+                                                <Trash2 size={16} />
+                                             </button>
+                                          </div>
+                                       </td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
+                     ) : (
+                        <div className="py-12 text-center">
+                           <FileText size={48} className="mx-auto text-gray-200 mb-4" />
+                           <p className="text-gray-500">Your memorized and customized reports will appear here.</p>
+                        </div>
+                     )}
                   </div>
                )}
 
-               {activeTab === 'MEMORIZED' && (
-                  <div className="p-8 max-w-4xl mx-auto">
-                     <h2 className="text-xl font-bold mb-4 text-gray-800 border-b-2 pb-2 uppercase tracking-tight">Memorized Reports</h2>
-                     <table className="w-full text-sm text-left border border-gray-200">
-                        <thead className="bg-gray-100 border-b">
-                           <tr className="text-gray-700 font-bold uppercase text-[10px]">
-                              <th className="p-3 border-r">Report Name</th>
-                              <th className="p-3">Date Created</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {memorized.map(r => (
-                              <tr key={r.id} className="border-b hover:bg-blue-50 cursor-pointer text-gray-800" onClick={() => onOpenReport('PROFIT_AND_LOSS', r.name)}>
-                                 <td className="p-3 font-bold text-blue-900 border-r">{r.name}</td>
-                                 <td className="p-3 text-gray-600 italic">{r.dateCreated}</td>
-                              </tr>
-                           ))}
-                        </tbody>
-                     </table>
+               {activeTab === 'MANAGEMENT' && (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                     <PieChart size={48} className="mx-auto text-gray-300 mb-4" />
+                     <h3 className="text-lg font-bold text-gray-800 mb-2">Management Reports</h3>
+                     <p className="text-gray-500 max-w-md mx-auto">
+                        Professional report packages for sharing with shareholders and management.
+                     </p>
                   </div>
                )}
-               {activeTab === 'BUDGET' && (
-                  <div className="p-8 max-w-4xl mx-auto">
-                     <h2 className="text-xl font-bold mb-4 text-gray-800 border-b-2 pb-2 uppercase tracking-tight">Budgets and Forecasting</h2>
-                     <div className="grid grid-cols-2 gap-6">
-                        <div className="border rounded p-6 shadow-sm hover:border-blue-400 group">
-                           <div className="font-bold text-blue-900 text-lg">Budget vs. Actual</div>
-                           <p className="text-xs text-gray-500 mt-2">Compare your actual income and expenses to your budgeted amounts.</p>
-                           <button onClick={() => onOpenReport('BUDGET_VS_ACTUAL', 'Budget vs. Actual')} className="mt-4 bg-blue-600 text-white px-6 py-2 text-xs font-bold rounded shadow-md group-hover:brightness-110">Run Report</button>
-                        </div>
-                        <div className="border rounded p-6 shadow-sm hover:border-blue-400 group">
-                           <div className="font-bold text-blue-900 text-lg">Planning & Budgeting</div>
-                           <p className="text-xs text-gray-500 mt-2">Create a new budget or edit an existing one for the fiscal year.</p>
-                           <button onClick={() => onOpenReport('SET_UP_BUDGET' as any, 'Set Up Budgets')} className="mt-4 bg-[#003366] text-white px-6 py-2 text-xs font-bold rounded shadow-md group-hover:brightness-110">Set Up Budget</button>
-                        </div>
-                     </div>
+
+               {activeTab === 'FINANCIAL' && (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                     <TrendingUp size={48} className="mx-auto text-gray-300 mb-4" />
+                     <h3 className="text-lg font-bold text-gray-800 mb-2">Financial Planning</h3>
+                     <p className="text-gray-500 max-w-md mx-auto">
+                        Tools to help you plan your business finances and track performance against budgets.
+                     </p>
                   </div>
                )}
             </div>
          </div>
+
+         <ReportTypeSelector
+            isOpen={showTypeSelector}
+            onClose={() => setShowTypeSelector(false)}
+            onCreate={(reportType) => {
+               setShowTypeSelector(false);
+               onOpenReport('REPORT_BUILDER', `New ${reportType} Report`, { reportType });
+            }}
+         />
       </div>
    );
 };

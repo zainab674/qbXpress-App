@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import * as api from '../services/api';
-import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory } from '../types';
+import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory, RecurringTemplate } from '../types';
 import { INITIAL_DATA } from '../store';
 
 interface DataContextType {
@@ -79,6 +79,7 @@ interface DataContextType {
     handleSaveFixedAsset: (a: FixedAsset) => Promise<void>;
     handleSaveTimeEntries: (e: TimeEntry[]) => Promise<void>;
     handleSaveMemorizedReports: (r: MemorizedReport[]) => Promise<void>;
+    handleDeleteMemorizedReport: (id: string) => Promise<void>;
     handleSaveExchangeRates: (r: ExchangeRate[]) => Promise<void>;
     handleSaveCurrency: (c: Currency) => Promise<void>;
     handleSaveSettings: (settings: any) => Promise<void>;
@@ -449,6 +450,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (changed) await api.saveMemorizedReport(changed);
         await refreshData();
     };
+    const handleDeleteMemorizedReport = async (id: string) => {
+        // Optimistic update
+        const originalReports = [...memorizedReports];
+        setMemorizedReports(prev => prev.filter(r => r.id !== id));
+
+        try {
+            await api.deleteMemorizedReport(id);
+            // Optionally refresh to ensure full sync, but state is already updated
+            // await refreshData(); 
+        } catch (error: any) {
+            console.error("Error deleting memorized report:", error);
+            // Revert on failure
+            setMemorizedReports(originalReports);
+            alert(`Failed to delete report: ${error.message}`);
+        }
+    };
     const handleSaveExchangeRates = async (r: ExchangeRate[]) => {
         setExchangeRates(r);
         await api.saveSettings({ exchangeRates: r });
@@ -512,7 +529,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
         mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, recurringTemplates,
         isLoaded, activeCompanyId, companies, bankFeeds, switchCompany, refreshData, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
-        handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveRecurringTemplate, handleDeleteRecurringTemplate, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings, handleSaveBankFeed,
+        handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveRecurringTemplate, handleDeleteRecurringTemplate, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings, handleSaveBankFeed,
         setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setFormLayouts, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods,
         onUpdateVendorCreditCategories: handleUpdateVendorCreditCategories,
         onUpdateCustomerCreditCategories: handleUpdateCustomerCreditCategories

@@ -13,7 +13,7 @@ interface Props {
 
 const CreditMemoForm: React.FC<Props> = ({ customers, items, onSave, onClose, customerCreditCategories, initialData }) => {
    const [selectedCustomerId, setSelectedCustomerId] = useState(initialData?.entityId || '');
-   const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString('en-US'));
+   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
    const [refNo, setRefNo] = useState(initialData?.refNo || 'CM-' + Math.floor(Math.random() * 9000 + 1000));
    const [memo, setMemo] = useState(initialData?.memo || '');
    const [lineItems, setLineItems] = useState<TransactionItem[]>(

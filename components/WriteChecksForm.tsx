@@ -42,7 +42,7 @@ const WriteChecksForm: React.FC<Props> = ({ accounts, vendors, onSave, onClose }
    const [bankAccountId, setBankAccountId] = useState(accounts.find(a => a.type === 'Bank')?.id || '');
    const [vendorId, setVendorId] = useState('');
    const [totalAmount, setTotalAmount] = useState(0);
-   const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
+   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
    const [checkNo, setCheckNo] = useState('1005');
    const [mainMemo, setMainMemo] = useState('');
    const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([

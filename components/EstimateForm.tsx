@@ -13,7 +13,7 @@ interface Props {
 
 const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSave, onClose, onConvertToInvoice, initialData }) => {
    const [selectedCustId, setSelectedCustId] = useState(initialData?.entityId || '');
-   const [date, setDate] = useState(initialData?.date || new Date().toLocaleDateString('en-US'));
+   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
    const [estimateNo, setEstimateNo] = useState(initialData?.refNo || (Math.floor(Math.random() * 9000) + 1000).toString());
    const [memo, setMemo] = useState(initialData?.memo || '');
    const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(

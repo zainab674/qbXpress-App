@@ -21,8 +21,8 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
   const { handleSaveRecurringTemplate } = useData();
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Expenses');
   const [selectedVendorId, setSelectedVendorId] = useState('');
-  const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
-  const [dueDate, setDueDate] = useState(new Date().toLocaleDateString('en-US'));
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [refNo, setRefNo] = useState('');
   const [selectedTermId, setSelectedTermId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -69,7 +69,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
       const billDate = new Date(date);
       if (!isNaN(billDate.getTime())) {
         billDate.setDate(billDate.getDate() + term.stdDueDays);
-        setDueDate(billDate.toLocaleDateString('en-US'));
+        setDueDate(billDate.toISOString().split('T')[0]);
       }
     }
   }, [date, selectedTermId, terms]);

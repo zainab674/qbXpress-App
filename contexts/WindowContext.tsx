@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ViewState, AppWindow } from '../types';
 
 interface WindowContextType {
@@ -10,13 +10,28 @@ interface WindowContextType {
     closeWindow: (id: string) => void;
     focusWindow: (id: string) => void;
     setCurrentView: (view: ViewState) => void;
+    setOpenWindows: React.Dispatch<React.SetStateAction<AppWindow[]>>;
 }
 
 const WindowContext = createContext<WindowContextType | undefined>(undefined);
 
 export const WindowProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [openWindows, setOpenWindows] = useState<AppWindow[]>([]);
-    const [currentView, setCurrentView] = useState<ViewState>('LANDING');
+    const [openWindows, setOpenWindows] = useState<AppWindow[]>(() => {
+        const saved = localStorage.getItem('openWindows');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [currentView, setCurrentView] = useState<ViewState>(() => {
+        const saved = localStorage.getItem('currentView');
+        return (saved as ViewState) || 'LANDING';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('openWindows', JSON.stringify(openWindows));
+    }, [openWindows]);
+
+    useEffect(() => {
+        localStorage.setItem('currentView', currentView);
+    }, [currentView]);
 
     const focusWindow = (id: string) => {
         setOpenWindows(prev => {
@@ -62,7 +77,7 @@ export const WindowProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const activeWindowId = openWindows.length > 0 ? [...openWindows].sort((a, b) => b.zIndex - a.zIndex)[0].id : null;
 
     return (
-        <WindowContext.Provider value={{ openWindows, activeWindowId, currentView, openNewWindow, closeWindow, focusWindow, setCurrentView }}>
+        <WindowContext.Provider value={{ openWindows, activeWindowId, currentView, openNewWindow, closeWindow, focusWindow, setCurrentView, setOpenWindows }}>
             {children}
         </WindowContext.Provider>
     );

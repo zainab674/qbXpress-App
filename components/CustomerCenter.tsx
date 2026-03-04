@@ -16,6 +16,7 @@ interface Props {
   onOpenEstimate?: () => void;
   onOpenSalesOrder?: () => void;
   onOpenCredit?: () => void;
+  refreshData?: () => Promise<void>;
 }
 
 const CustomerCenter: React.FC<Props> = ({
@@ -29,10 +30,12 @@ const CustomerCenter: React.FC<Props> = ({
   onOpenReceipt,
   onOpenEstimate,
   onOpenSalesOrder,
-  onOpenCredit
+  onOpenCredit,
+  refreshData
 }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id);
   const [activeCategory, setActiveCategory] = useState('Top Customers');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Helper to filter transactions by date range
   const getTransactionsInRange = (days: number) => {
@@ -103,6 +106,62 @@ const CustomerCenter: React.FC<Props> = ({
     { id: 'new', title: 'New Customers', value: `${metrics.newCount} added`, subtitle: 'last 30 days', color: '#10b981', chart: [5, 8, 4, 10, 12, 15, 18, 20], icon: '👤' },
     { id: 'inactive', title: 'Inactive Customers', value: `${metrics.inactiveCount} customers`, subtitle: 'no sales in 90 days', color: '#6b7280', chart: [20, 18, 15, 12, 10, 8, 6, 5], icon: '💤' }
   ];
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const { importCustomers } = await import('../services/api');
+      await importCustomers(file);
+      alert('Customers imported successfully!');
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to import customers');
+    } finally {
+      e.target.value = ''; // Reset input
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    const customer = customers.find(c => c.id === id);
+    if (!customer) return;
+
+    const confirmed = window.confirm(
+      `WARNING: Deleting the customer "${customer.name}" will permanently remove all associated transactions (invoices, payments, etc.) and cannot be undone.\n\nAre you sure you want to proceed?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { deleteCustomer } = await import('../services/api');
+      await deleteCustomer(id);
+      alert('Customer and all related transactions deleted successfully.');
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete customer');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `WARNING: Deleting ${selectedIds.length} customers will permanently remove all associated transactions (invoices, payments, etc.) and cannot be undone.\n\nAre you sure you want to proceed?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { bulkDeleteCustomers } = await import('../services/api');
+      await bulkDeleteCustomers(selectedIds);
+      alert('Selected customers and all related transactions deleted successfully.');
+      setSelectedIds([]);
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete customers');
+    }
+  };
 
   return (
     <div className="flex h-full bg-[#f8fafc] overflow-hidden select-none font-sans">
@@ -181,6 +240,20 @@ const CustomerCenter: React.FC<Props> = ({
             <button onClick={onOpenSalesOrder} className="flex-1 max-w-[150px] bg-white border-2 border-slate-900 text-slate-900 font-bold py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-sm">
               Create Sales Order
             </button>
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex-1 max-w-[150px] bg-red-50 border-2 border-red-200 text-red-600 font-bold py-2.5 rounded-xl hover:bg-red-100 transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                🗑️ Delete ({selectedIds.length})
+              </button>
+            )}
+            <div className="flex-1 max-w-[150px]">
+              <label className="flex items-center justify-center w-full h-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm text-sm cursor-pointer">
+                Import
+                <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImport} />
+              </label>
+            </div>
           </div>
         </div>
 
@@ -199,6 +272,9 @@ const CustomerCenter: React.FC<Props> = ({
                     (type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any)));
               onOpenWindow(viewType, `${type.replace('_', ' ')} #${id}`, { transactionId: id });
             }}
+            onDeleteCustomer={handleDeleteCustomer}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
           />
         </div>
       </div>

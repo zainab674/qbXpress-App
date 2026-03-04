@@ -53,6 +53,18 @@ const IconBar: React.FC<Props> = ({ onAction, onLogOut, onShortcuts }) => {
                 </span>
             </button>
 
+            <button
+                onClick={() => onAction('IMPORT_CENTER', 'Import Data')}
+                className="flex flex-col items-center justify-center min-w-[64px] h-[58px] hover:bg-white hover:shadow-md rounded transition-all active:scale-95 group border border-transparent hover:border-gray-300"
+            >
+                <div className="bg-blue-600 w-8 h-8 rounded flex items-center justify-center text-white text-lg shadow-sm group-hover:brightness-110 mb-0.5">
+                    📥
+                </div>
+                <span className="text-[10px] font-bold text-gray-700 leading-tight">
+                    Import
+                </span>
+            </button>
+
             <div className="flex-1"></div>
 
             <div className="flex items-center gap-1 px-2">

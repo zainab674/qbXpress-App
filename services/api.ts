@@ -165,12 +165,94 @@ export const saveClass = (cls: any) => post('classes', cls);
 export const saveSalesRep = (rep: any) => post('sales-reps', rep);
 export const saveTerm = (term: any) => post('terms', term);
 export const deleteTerm = (id: string) => remove(`terms/${id}`);
+export const deleteCustomer = (id: string) => remove(`customers/${id}`);
+export const bulkDeleteCustomers = (ids: string[]) => post('customers/bulk-delete', { ids });
+export const importCustomers = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/customers/import`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Import failed');
+    }
+    return res.json();
+};
+
+export const importVendors = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/vendors/import`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Import failed');
+    }
+    return res.json();
+};
+
+export const importEmployees = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/employees/import`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Import failed');
+    }
+    return res.json();
+};
+
+export const importTransactions = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/transactions/import`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Import failed');
+    }
+    return res.json();
+};
 export const saveTimeEntry = (entry: any) => post('time-entries', entry);
 export const saveMileageEntry = (entry: any) => post('mileage-entries', entry);
 export const savePriceLevel = (level: any) => post('price-levels', level);
 export const saveSalesTaxCode = (code: any) => post('sales-tax-codes', code);
 export const saveBudget = (budget: any) => post('budgets', budget);
 export const saveMemorizedReport = (report: any) => post('memorized-reports', report);
+export const deleteMemorizedReport = (id: string) => remove(`memorized-reports/${id}`);
 export const saveLiability = (liability: any) => post('liabilities', liability);
 export const saveCurrency = (currency: any) => post('currencies', currency);
 export const saveFixedAsset = (asset: any) => post('fixed-assets', asset);
@@ -187,6 +269,11 @@ export const fetchReport = async (type: string, params: any = {}) => {
     const path = `reports/${type}${query ? '?' + query : ''}`;
     return get(path);
 };
+
+export const addCustomColumn = (data: { reportType: string; columnName: string; formula: string }) => post('reports/custom-columns', data);
+export const updateCustomColumn = (data: { reportType: string; columnName: string; formula: string }) => put('reports/custom-columns', data);
+export const fetchCustomColumns = (reportType: string) => get(`reports/custom-columns?reportType=${reportType}`);
+export const deleteCustomColumn = (id: string) => remove(`reports/custom-columns/${id}`);
 
 // Legacy support
 export const fetchStore = fetchFullStore;

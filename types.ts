@@ -13,6 +13,7 @@ export type ViewState =
   | 'FIXED_ASSET_MANAGER'
   | 'COLLECTION_LETTERS'
   | 'BANK_FEED_MATCHING'
+  | 'REPORT_BUILDER'
   | 'LAYOUT_DESIGNER'
   | 'HOME'
   | 'INSIGHTS'
@@ -116,7 +117,27 @@ export type ViewState =
   | 'CHECK'
   | 'CALENDAR'
   | 'VENDOR_CREDIT_CATEGORY_LIST'
-  | 'ESTIMATE_DISPLAY';
+  | 'ESTIMATE_DISPLAY'
+  | 'INVOICES_RECEIVED'
+  | 'AGING_DETAIL'
+  | 'OPEN_INVOICES'
+  | 'COLLECTIONS'
+  | 'STATEMENT_LIST'
+  | 'CUSTOMER_BALANCE'
+  | 'CUSTOMER_BALANCE_DETAIL'
+  | 'INVOICE_LIST'
+  | 'UNBILLED_CHARGES'
+  | 'UNBILLED_TIME'
+  | 'INV_VAL_DETAIL'
+  | 'ADJUSTED_TRIAL_BALANCE'
+  | 'DETAILED_TIME'
+  | 'VENDOR_BALANCE'
+  | 'EQUITY_STATEMENT'
+  | 'STOCK_TAKE'
+  | 'OPEN_PO_LIST'
+  | 'OPEN_PO_DETAIL'
+  | 'IMPORT_CENTER'
+  | 'TERMS_LIST_REPORT';
 
 export interface BankTransaction {
   id: string;
@@ -221,6 +242,7 @@ export interface MemorizedReport {
   name: string;
   baseType: string;
   dateCreated: string;
+  params?: any;
 }
 
 export interface CompanyConfig {

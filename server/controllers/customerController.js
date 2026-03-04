@@ -41,6 +41,14 @@ const customerController = {
         } catch (err) {
             next(err);
         }
+    },
+    bulkDelete: async (req, res, next) => {
+        try {
+            await CustomerService.bulkDelete(req.body.ids, req.user.id, req.companyId, req.user.role);
+            res.json({ message: 'Bulk deletion successful' });
+        } catch (err) {
+            next(err);
+        }
     }
 };
 

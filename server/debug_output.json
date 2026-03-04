@@ -1,0 +1,62 @@
+{
+  "transactionItems": [
+    {
+      "id": "0.7081878415287985",
+      "description": "hh",
+      "quantity": 1,
+      "rate": 1000,
+      "amount": 1000,
+      "tax": false,
+      "customerId": "",
+      "isBillable": true,
+      "classId": "df1b0a09-ed99-43d7-b679-c858d20ddd40",
+      "_id": "697fd19c4cc9caa883b2dcce"
+    }
+  ],
+  "transactionRoot": {
+    "_id": "697fd19c4cc9caa883b2dccd",
+    "id": "0.8245813956078865",
+    "type": "BILL",
+    "userId": "697e3630eae3b19109235c99",
+    "companyId": "697e3667eae3b19109235c9c",
+    "refNo": "hhhhhhhhhhhhhh",
+    "date": "2/2/2026",
+    "dueDate": "3/4/2026",
+    "entityId": "3cbf7cbe-fa84-4c9b-9584-b67089d3708d",
+    "items": "[Array]",
+    "total": 1000,
+    "status": "OPEN",
+    "appliedCreditIds": [],
+    "classId": "df1b0a09-ed99-43d7-b679-c858d20ddd40",
+    "createdAt": "2026-02-01T22:20:12.401Z",
+    "updatedAt": "2026-02-01T22:20:12.401Z",
+    "__v": 0
+  },
+  "accounts": [
+    {
+      "name": "zzzzz",
+      "id": "0.4507680890528517",
+      "type": "Cost of Goods Sold"
+    },
+    {
+      "name": "zzzzz",
+      "id": "0.9552190883000895",
+      "type": "Cost of Goods Sold"
+    },
+    {
+      "name": "ggggggggggggggg",
+      "id": "0.1441441838645785",
+      "type": "Accounts Payable"
+    },
+    {
+      "name": "jjjjjjjjjjjjjj",
+      "id": "0.562365974818726",
+      "type": "Income"
+    },
+    {
+      "name": "cccccccccccccccc",
+      "id": "0.735100974209434",
+      "type": "Bank"
+    }
+  ]
+}

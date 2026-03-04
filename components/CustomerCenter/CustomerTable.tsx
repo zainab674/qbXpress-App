@@ -8,10 +8,39 @@ interface CustomerTableProps {
     selectedCustomerId: string;
     onOpenDetail: (customer: Customer) => void;
     onOpenTransaction?: (id: string, type: string) => void;
+    onDeleteCustomer: (id: string) => void;
+    selectedIds: string[];
+    onSelectionChange: (ids: string[]) => void;
 }
 
-const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, onSelectCustomer, selectedCustomerId, onOpenDetail, onOpenTransaction }) => {
+const CustomerTable: React.FC<CustomerTableProps> = ({
+    customers,
+    transactions,
+    onSelectCustomer,
+    selectedCustomerId,
+    onOpenDetail,
+    onOpenTransaction,
+    onDeleteCustomer,
+    selectedIds,
+    onSelectionChange
+}) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === customers.length) {
+            onSelectionChange([]);
+        } else {
+            onSelectionChange(customers.map(c => c.id));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        if (selectedIds.includes(id)) {
+            onSelectionChange(selectedIds.filter(sid => sid !== id));
+        } else {
+            onSelectionChange([...selectedIds, id]);
+        }
+    };
 
     const getCustomerTransactions = (customerId: string) => {
         return transactions.filter(t => t.entityId === customerId);
@@ -22,6 +51,14 @@ const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, 
             <table className="w-full text-left">
                 <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
+                        <th className="px-6 py-4 w-12">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                checked={customers.length > 0 && selectedIds.length === customers.length}
+                                onChange={toggleSelectAll}
+                            />
+                        </th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Balance</th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Transactions</th>
@@ -32,6 +69,7 @@ const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, 
                 <tbody className="divide-y divide-gray-50">
                     {customers.map(customer => {
                         const isExpanded = expandedId === customer.id;
+                        const isSelected = selectedIds.includes(customer.id);
                         const customerTransactions = getCustomerTransactions(customer.id);
                         const lastTransaction = customerTransactions[customerTransactions.length - 1];
 
@@ -39,8 +77,16 @@ const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, 
                             <React.Fragment key={customer.id}>
                                 <tr
                                     onClick={() => onSelectCustomer(customer.id)}
-                                    className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedCustomerId === customer.id ? 'bg-blue-50/30' : ''}`}
+                                    className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedCustomerId === customer.id ? 'bg-blue-50/30' : ''} ${isSelected ? 'bg-blue-50/60' : ''}`}
                                 >
+                                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            checked={isSelected}
+                                            onChange={() => toggleSelect(customer.id)}
+                                        />
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
@@ -67,22 +113,34 @@ const CustomerTable: React.FC<CustomerTableProps> = ({ customers, transactions, 
                                         {lastTransaction?.date || 'N/A'}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setExpandedId(isExpanded ? null : customer.id);
-                                            }}
-                                            className="text-gray-400 hover:text-gray-600 p-1"
-                                        >
-                                            <span className={`transform transition-transform inline-block ${isExpanded ? 'rotate-180' : ''}`}>
-                                                ▼
-                                            </span>
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteCustomer(customer.id);
+                                                }}
+                                                className="text-gray-400 hover:text-red-600 p-1 transition-colors"
+                                                title="Delete Customer"
+                                            >
+                                                🗑️
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedId(isExpanded ? null : customer.id);
+                                                }}
+                                                className="text-gray-400 hover:text-gray-600 p-1"
+                                            >
+                                                <span className={`transform transition-transform inline-block ${isExpanded ? 'rotate-180' : ''}`}>
+                                                    ▼
+                                                </span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 {isExpanded && (
                                     <tr className="bg-gray-50/50">
-                                        <td colSpan={5} className="px-6 py-4">
+                                        <td colSpan={6} className="px-6 py-4">
                                             <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
                                                 <table className="w-full text-sm">
                                                     <thead className="bg-gray-50 border-b border-gray-200">

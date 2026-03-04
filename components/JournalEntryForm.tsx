@@ -24,7 +24,7 @@ interface JournalLine {
 
 const JournalEntryForm: React.FC<Props> = ({ accounts, classes, customers, vendors, employees, onSave, onClose }) => {
     const [refNo, setRefNo] = useState('JE-' + Math.floor(Math.random() * 10000));
-    const [date, setDate] = useState(new Date().toLocaleDateString());
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [lines, setLines] = useState<JournalLine[]>([
         { id: '1', accountId: '', debit: 0, credit: 0, memo: '', entityId: '', classId: '' },
         { id: '2', accountId: '', debit: 0, credit: 0, memo: '', entityId: '', classId: '' },

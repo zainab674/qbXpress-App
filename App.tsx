@@ -39,7 +39,7 @@ const App: React.FC = () => {
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
     mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
     isLoaded, companies, activeCompanyId, switchCompany, refreshData, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
-    handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings,
+    handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings,
     setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories
   } = useData();
   const { showAlert, showConfirm } = useDialog();
@@ -59,6 +59,8 @@ const App: React.FC = () => {
   const handleLogOut = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('activeCompanyId');
+    localStorage.removeItem('openWindows');
+    localStorage.removeItem('currentView');
     setCurrentView('LANDING');
     setOpenWindows([]);
   };
@@ -266,7 +268,7 @@ const App: React.FC = () => {
         });
       });
     },
-    setCompanyConfig, setTimeEntries: handleSaveTimeEntries, setMemorizedReports: handleSaveMemorizedReports, handleSaveCurrency, showAlert,
+    setCompanyConfig, setTimeEntries: handleSaveTimeEntries, setMemorizedReports: handleSaveMemorizedReports, onDeleteReport: handleDeleteMemorizedReport, handleSaveCurrency, showAlert,
     switchCompany, companies, refreshData, setShortcuts, setShortcutGroups, existingGroups: shortcutGroups,
     handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem,
     onUpdateVendorCreditCategories,

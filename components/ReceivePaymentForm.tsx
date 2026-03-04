@@ -15,7 +15,7 @@ interface Props {
 const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentMethods, customerCreditCategories, initialData, onSave, onClose }) => {
   const [selectedCustId, setSelectedCustId] = useState(initialData?.customerId || '');
   const [amount, setAmount] = useState(0);
-  const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [pmtMethod, setPmtMethod] = useState(paymentMethods[0] || 'Check');
   const [refNo, setRefNo] = useState('');
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>(initialData?.invoiceId ? [initialData.invoiceId] : []);
