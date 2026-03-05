@@ -10,6 +10,7 @@ router.get('/', vendorController.getAll);
 router.post('/', vendorController.save);
 router.delete('/:id', vendorController.delete);
 router.post('/bulk', vendorController.bulkUpdate);
+router.post('/bulk-delete', vendorController.bulkDelete);
 router.post('/import', upload.single('file'), importController.importVendors);
 
 module.exports = router;

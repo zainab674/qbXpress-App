@@ -354,6 +354,15 @@ const reportController = {
             res.status(500).json({ error: err.message });
         }
     },
+    getOpenPurchaseOrders: async (req, res) => {
+        try {
+            const { fromDate, toDate, isDetail } = req.query;
+            const data = await reportService.getOpenPurchaseOrders(fromDate, toDate, req.user.id, req.companyId, isDetail === 'true');
+            res.json(data);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    },
     addCustomColumn: async (req, res) => {
         try {
             const { reportType, columnName, formula } = req.body;

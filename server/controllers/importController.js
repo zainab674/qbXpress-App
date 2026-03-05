@@ -3,6 +3,8 @@ const XLSX = require('xlsx');
 const CustomerService = require('../services/CustomerService');
 const VendorService = require('../services/VendorService');
 const EmployeeService = require('../services/EmployeeService');
+const ItemService = require('../services/ItemService');
+const AccountService = require('../services/AccountService');
 const transactionService = require('../services/transactionService');
 const crypto = require('crypto');
 
@@ -89,8 +91,6 @@ async function parseFile(req) {
 
     return data;
 }
-
-const ItemService = require('../services/ItemService');
 
 const importController = {
     importItems: async (req, res, next) => {
@@ -375,10 +375,12 @@ const importController = {
             const companyId = req.companyId;
             const userRole = req.user?.role || 'Admin';
 
-            const [customers, vendors, employees] = await Promise.all([
+            const [customers, vendors, employees, items, accounts] = await Promise.all([
                 CustomerService.getAll(userId, companyId),
                 VendorService.getAll(userId, companyId),
-                EmployeeService.getAll(userId, companyId)
+                EmployeeService.getAll(userId, companyId),
+                ItemService.getAll(userId, companyId),
+                AccountService.getAll(userId, companyId)
             ]);
 
             const transactionsToSave = [];
@@ -427,6 +429,13 @@ const importController = {
                 let employeeId = null;
 
                 const normalize = (s) => String(s || '').toLowerCase().trim();
+
+                const normalizeDate = (d) => {
+                    if (!d) return new Date().toISOString().split('T')[0];
+                    const date = new Date(d);
+                    if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+                    return date.toISOString().split('T')[0];
+                };
 
                 // If entityName contains a colon, we try to match the base part too
                 let baseEntityName = entityName;
@@ -509,8 +518,8 @@ const importController = {
                     companyId,
                     type,
                     refNo: String(row.num || row.Num || row.refNo || row.RefNo || row['Ref #'] || row['Number'] || '').trim(),
-                    date: row.date || row.Date || new Date().toISOString().split('T')[0],
-                    dueDate: row.dueDate || row.DueDate || row['Due date'] || row['Due Date'],
+                    date: normalizeDate(row.date || row.Date),
+                    dueDate: normalizeDate(row.dueDate || row.DueDate || row['Due date'] || row['Due Date']),
                     entityId,
                     customerId,
                     vendorId,
@@ -531,12 +540,41 @@ const importController = {
                 };
 
                 if (tx.total !== 0) {
+                    const description = row.description || row.Description || row['Memo/Description'] || row['Product/Service'] || 'Imported Transaction';
+
+                    // Try to find a matching account or item
+                    let itemAccountId = null;
+                    const rowAccountName = row.account || row.Account || row.category || row.Category || row['Income Account'];
+
+                    if (rowAccountName) {
+                        const accMatch = accounts.find(a => normalize(a.name) === normalize(rowAccountName));
+                        if (accMatch) itemAccountId = accMatch.id;
+                    }
+
+                    if (!itemAccountId) {
+                        // Try matching by description/product service against Items
+                        const itemMatch = items.find(itm => normalize(itm.name) === normalize(description));
+                        if (itemMatch) {
+                            itemAccountId = ['INVOICE', 'SALES_RECEIPT'].includes(type) ? itemMatch.incomeAccountId : itemMatch.cogsAccountId;
+                        }
+                    }
+
+                    if (!itemAccountId) {
+                        // Fallback: use default accounts based on type
+                        if (['INVOICE', 'SALES_RECEIPT'].includes(type)) {
+                            itemAccountId = accounts.find(a => a.type === 'Income')?.id;
+                        } else if (['BILL', 'CHECK'].includes(type)) {
+                            itemAccountId = accounts.find(a => a.type === 'Expense')?.id;
+                        }
+                    }
+
                     tx.items.push({
                         id: crypto.randomUUID(),
-                        description: row.description || row.Description || row['Memo/Description'] || 'Imported Transaction',
+                        description,
                         quantity: 1,
                         rate: Math.abs(tx.total),
-                        amount: tx.total
+                        amount: tx.total,
+                        accountId: itemAccountId
                     });
                 }
 

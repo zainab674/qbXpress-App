@@ -42,6 +42,8 @@ router.get('/invoice-list', reportController.getInvoiceList);
 router.get('/open-invoices', reportController.getOpenInvoices);
 router.get('/invoices-and-payments', reportController.getInvoicesAndReceivedPayments);
 router.get('/terms-list', reportController.getTermsList);
+router.get('/open-purchase-order-list', reportController.getOpenPurchaseOrders);
+router.get('/open-purchase-order-detail', reportController.getOpenPurchaseOrders);
 
 router.post('/custom-columns', reportController.addCustomColumn);
 router.put('/custom-columns', reportController.updateCustomColumn);

@@ -1,5 +1,6 @@
 
 const Vendor = require('../models/Vendor');
+const Transaction = require('../models/Transaction');
 const AuditLogEntry = require('../models/AuditLogEntry');
 const crypto = require('crypto');
 
@@ -37,6 +38,13 @@ const VendorService = {
     delete: async (id, userId, companyId, userRole) => {
         const vendor = await Vendor.findOneAndDelete({ id, userId, companyId });
         if (vendor) {
+            // Cascade delete transactions
+            await Transaction.deleteMany({
+                $or: [{ vendorId: id }, { entityId: id }],
+                userId,
+                companyId
+            });
+
             const auditLog = new AuditLogEntry({
                 id: crypto.randomUUID(),
                 timestamp: new Date().toISOString(),
@@ -80,6 +88,35 @@ const VendorService = {
             await auditLog.save();
         }
         return await Vendor.bulkWrite(operations);
+    },
+    bulkDelete: async (ids, userId, companyId, userRole) => {
+        const results = [];
+        for (const id of ids) {
+            const vendor = await Vendor.findOneAndDelete({ id, userId, companyId });
+            if (vendor) {
+                // Cascade delete transactions
+                await Transaction.deleteMany({
+                    $or: [{ vendorId: id }, { entityId: id }],
+                    userId,
+                    companyId
+                });
+
+                const auditLog = new AuditLogEntry({
+                    id: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                    userId: userRole || 'Admin',
+                    actualUserId: userId, companyId: companyId,
+                    action: 'DELETE',
+                    transactionType: 'VENDOR',
+                    transactionId: id,
+                    refNo: vendor.name,
+                    priorContent: JSON.stringify(vendor)
+                });
+                await auditLog.save();
+                results.push(vendor);
+            }
+        }
+        return results;
     }
 };
 

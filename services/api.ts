@@ -167,6 +167,8 @@ export const saveTerm = (term: any) => post('terms', term);
 export const deleteTerm = (id: string) => remove(`terms/${id}`);
 export const deleteCustomer = (id: string) => remove(`customers/${id}`);
 export const bulkDeleteCustomers = (ids: string[]) => post('customers/bulk-delete', { ids });
+export const deleteVendor = (id: string) => remove(`vendors/${id}`);
+export const bulkDeleteVendors = (ids: string[]) => post('vendors/bulk-delete', { ids });
 export const importCustomers = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);

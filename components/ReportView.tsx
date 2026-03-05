@@ -153,8 +153,8 @@ const ReportView: React.FC<Props> = ({ type, transactions, accounts, customers, 
           case 'VENDOR_BALANCE': endpoint = 'vendor-balance'; break;
           case 'PAYROLL_LIABILITY': endpoint = 'payroll-liability'; break;
           case 'STOCK_TAKE': endpoint = 'physical-inventory'; break;
-          case 'OPEN_PO_LIST': endpoint = 'general-ledger?transactionType=PURCHASE_ORDER'; break;
-          case 'OPEN_PO_DETAIL': endpoint = 'general-ledger?transactionType=PURCHASE_ORDER'; break;
+          case 'OPEN_PO_LIST': endpoint = 'open-purchase-order-list'; break;
+          case 'OPEN_PO_DETAIL': endpoint = 'open-purchase-order-detail?isDetail=true'; break;
           default:
             setReportData({ sections: [] });
             setLoading(false);
@@ -452,9 +452,11 @@ const ReportView: React.FC<Props> = ({ type, transactions, accounts, customers, 
         <button onClick={handleExcelExport} className="px-3 py-1 bg-green-50 border border-green-400 text-[11px] font-bold text-green-800 hover:bg-white rounded shadow-sm flex items-center gap-1">
           {isExporting ? '⏳ Exporting...' : 'Excel ▼'}
         </button>
-        <button onClick={() => setShowAddCustom(true)} className="px-3 py-1 bg-purple-600 text-white border border-purple-700 text-[11px] font-bold hover:brightness-110 rounded shadow-sm flex items-center gap-1">
-          <span className="text-sm font-bold">+</span> Custom Column
-        </button>
+        {(params || type === 'GENERAL_LEDGER') && !['TERMS_LIST', 'PHYSICAL_INV'].includes(type) && (
+          <button onClick={() => setShowAddCustom(true)} className="px-3 py-1 bg-purple-600 text-white border border-purple-700 text-[11px] font-bold hover:brightness-110 rounded shadow-sm flex items-center gap-1">
+            <span className="text-sm font-bold">+</span> Custom Column
+          </button>
+        )}
         <button onClick={() => window.location.reload()} className="px-3 py-1 bg-blue-600 text-white border border-blue-700 text-[11px] font-bold hover:brightness-110 rounded shadow-sm">Refresh</button>
       </div>
 

@@ -42,6 +42,14 @@ const vendorController = {
         } catch (err) {
             next(err);
         }
+    },
+    bulkDelete: async (req, res, next) => {
+        try {
+            await VendorService.bulkDelete(req.body.ids, req.user.id, req.companyId, req.user.role);
+            res.json({ message: 'Bulk deletion successful' });
+        } catch (err) {
+            next(err);
+        }
     }
 };
 

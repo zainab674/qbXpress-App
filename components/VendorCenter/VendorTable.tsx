@@ -7,10 +7,38 @@ interface VendorTableProps {
     onSelectVendor: (id: string) => void;
     selectedVendorId: string;
     onOpenDetail: (vendor: Vendor) => void;
+    onDeleteVendor: (id: string) => void;
+    selectedIds: string[];
+    onSelectionChange: (ids: string[]) => void;
 }
 
-const VendorTable: React.FC<VendorTableProps> = ({ vendors, transactions, onSelectVendor, selectedVendorId, onOpenDetail }) => {
+const VendorTable: React.FC<VendorTableProps> = ({
+    vendors,
+    transactions,
+    onSelectVendor,
+    selectedVendorId,
+    onOpenDetail,
+    onDeleteVendor,
+    selectedIds,
+    onSelectionChange
+}) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === vendors.length) {
+            onSelectionChange([]);
+        } else {
+            onSelectionChange(vendors.map(v => v.id));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        if (selectedIds.includes(id)) {
+            onSelectionChange(selectedIds.filter(sid => sid !== id));
+        } else {
+            onSelectionChange([...selectedIds, id]);
+        }
+    };
 
     const getVendorTransactions = (vendorId: string) => {
         return transactions.filter(t => t.entityId === vendorId);
@@ -21,6 +49,14 @@ const VendorTable: React.FC<VendorTableProps> = ({ vendors, transactions, onSele
             <table className="w-full text-left">
                 <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
+                        <th className="px-6 py-4 w-12">
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                checked={vendors.length > 0 && selectedIds.length === vendors.length}
+                                onChange={toggleSelectAll}
+                            />
+                        </th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Vendor</th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total Spend</th>
                         <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Transactions</th>
@@ -31,6 +67,7 @@ const VendorTable: React.FC<VendorTableProps> = ({ vendors, transactions, onSele
                 <tbody className="divide-y divide-gray-50">
                     {vendors.map(vendor => {
                         const isExpanded = expandedId === vendor.id;
+                        const isSelected = selectedIds.includes(vendor.id);
                         const vendorTransactions = getVendorTransactions(vendor.id);
                         const lastTransaction = vendorTransactions[vendorTransactions.length - 1];
 
@@ -38,8 +75,16 @@ const VendorTable: React.FC<VendorTableProps> = ({ vendors, transactions, onSele
                             <React.Fragment key={vendor.id}>
                                 <tr
                                     onClick={() => onSelectVendor(vendor.id)}
-                                    className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedVendorId === vendor.id ? 'bg-blue-50/30' : ''}`}
+                                    className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedVendorId === vendor.id ? 'bg-blue-50/30' : ''} ${isSelected ? 'bg-blue-50/60' : ''}`}
                                 >
+                                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            checked={isSelected}
+                                            onChange={() => toggleSelect(vendor.id)}
+                                        />
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
@@ -66,22 +111,34 @@ const VendorTable: React.FC<VendorTableProps> = ({ vendors, transactions, onSele
                                         {lastTransaction?.date || 'N/A'}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setExpandedId(isExpanded ? null : vendor.id);
-                                            }}
-                                            className="text-gray-400 hover:text-gray-600 p-1"
-                                        >
-                                            <span className={`transform transition-transform inline-block ${isExpanded ? 'rotate-180' : ''}`}>
-                                                ▼
-                                            </span>
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteVendor(vendor.id);
+                                                }}
+                                                className="text-gray-400 hover:text-red-600 p-1 transition-colors"
+                                                title="Delete Vendor"
+                                            >
+                                                🗑️
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedId(isExpanded ? null : vendor.id);
+                                                }}
+                                                className="text-gray-400 hover:text-gray-600 p-1"
+                                            >
+                                                <span className={`transform transition-transform inline-block ${isExpanded ? 'rotate-180' : ''}`}>
+                                                    ▼
+                                                </span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 {isExpanded && (
                                     <tr className="bg-gray-50/50">
-                                        <td colSpan={5} className="px-6 py-4">
+                                        <td colSpan={6} className="px-6 py-4">
                                             <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
                                                 <table className="w-full text-sm">
                                                     <thead className="bg-gray-50 border-b border-gray-200">

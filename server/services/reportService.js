@@ -949,26 +949,177 @@ const reportService = {
     getInventoryValuationDetail: async (fromDate, toDate, userId, companyId) => {
         const start = fromDate || '1970-01-01';
         const end = toDate || '2100-01-01';
+
+        // 1. Get all inventory items
+        const items = await Item.find({
+            userId,
+            companyId,
+            type: { $in: ['Inventory Part', 'Inventory Assembly'] }
+        }).lean();
+
+        // 2. Get all transactions involving these items
         const transactions = await Transaction.find({
             userId,
             companyId,
             date: { $gte: start, $lte: end },
-            $or: [{ type: 'BILL' }, { type: 'INVOICE' }, { type: 'SALES_RECEIPT' }, { type: 'CREDIT_MEMO' }, { type: 'VENDOR_CREDIT' }],
-            'items.type': { $in: ['Inventory Part', 'Inventory Assembly'] }
-        }).lean();
+            $or: [
+                { type: 'BILL' },
+                { type: 'INVOICE' },
+                { type: 'SALES_RECEIPT' },
+                { type: 'CREDIT_MEMO' },
+                { type: 'VENDOR_CREDIT' },
+                { type: 'RECEIVE_ITEM' },
+                { type: 'INVENTORY_ADJUSTMENT' }
+            ],
+            'items.itemId': { $in: items.map(i => i.id) }
+        }).sort({ date: 1, createdAt: 1 }).lean();
 
-        return {
-            sections: [
-                { title: `Inventory Valuation Detail (${start} - ${end})`, isHeading: true },
-                ...transactions.map(tx => ({
-                    title: `${tx.date} - ${tx.type} #${tx.refNo || tx.id}`,
+        const sections = [{ title: `Inventory Valuation Detail (${start} - ${end})`, isHeading: true }];
+
+        items.forEach(item => {
+            const itemTxs = transactions.filter(tx =>
+                tx.items.some(line => line.itemId === item.id)
+            );
+
+            if (itemTxs.length === 0) return;
+
+            sections.push({
+                title: item.name,
+                isHeading: true,
+                indent: 1,
+                spacing: true
+            });
+
+            let runningQty = 0; // Ideally we'd calculate start balance, but for now we follow the "interval" logic
+
+            itemTxs.forEach(tx => {
+                const line = tx.items.find(l => l.itemId === item.id);
+                if (!line) return;
+
+                // Determine quantity change
+                // Increases: BILL, RECEIVE_ITEM, CREDIT_MEMO (return), VENDOR_CREDIT (negative amount/qty usually)
+                // Decreases: INVOICE, SALES_RECEIPT, VENDOR_CREDIT
+                let qtyChange = line.quantity || 0;
+
+                // Adjustment logic based on transaction type
+                if (['INVOICE', 'SALES_RECEIPT', 'VENDOR_CREDIT'].includes(tx.type)) {
+                    qtyChange = -Math.abs(qtyChange);
+                } else {
+                    qtyChange = Math.abs(qtyChange);
+                }
+
+                // INVENTORY_ADJUSTMENT would use the difference, but let's assume quantity field is the delta
+                if (tx.type === 'INVENTORY_ADJUSTMENT') {
+                    qtyChange = line.quantity;
+                }
+
+                runningQty += qtyChange;
+                const cost = line.rate || item.cost || 0;
+                const valueChange = qtyChange * cost;
+
+                sections.push({
+                    title: `${tx.date} - ${tx.type} #${tx.refNo || tx.id.substring(0, 8)}`,
+                    value: valueChange,
+                    extraValue: qtyChange, // Quantity this tx
+                    extraValue2: runningQty, // Running QTY
+                    id: tx.id,
+                    indent: 2
+                });
+            });
+
+            sections.push({
+                title: `Total for ${item.name}`,
+                value: itemTxs.reduce((sum, tx) => {
+                    const line = tx.items.find(l => l.itemId === item.id);
+                    const qty = ['INVOICE', 'SALES_RECEIPT', 'VENDOR_CREDIT'].includes(tx.type) ? -Math.abs(line?.quantity || 0) : Math.abs(line?.quantity || 0);
+                    return sum + (qty * (line?.rate || item.cost || 0));
+                }, 0),
+                isTotal: true,
+                indent: 1
+            });
+        });
+
+        const result = { sections };
+        return applyCustomColumns(result, 'INV_VAL_DETAIL', userId, companyId);
+    },
+
+    getOpenPurchaseOrders: async (fromDate, toDate, userId, companyId, isDetail = false) => {
+        const start = fromDate || '1970-01-01';
+        const end = toDate || '2100-01-01';
+
+        const query = {
+            userId,
+            companyId,
+            type: 'PURCHASE_ORDER',
+            status: 'OPEN',
+            date: { $gte: start, $lte: end }
+        };
+
+        const transactions = await Transaction.find(query).sort({ date: 1 }).lean();
+        const vendors = await Vendor.find({ userId, companyId }).lean();
+        const items = await Item.find({ userId, companyId }).lean();
+
+        if (!isDetail) {
+            // Summary List
+            const rows = transactions.map(tx => {
+                const vendor = vendors.find(v => v.id === tx.entityId);
+                return {
+                    title: `${tx.date} - ${vendor?.name || 'Unknown'} - PO #${tx.refNo || tx.id.substring(0, 8)}`,
                     value: tx.total,
                     id: tx.id,
-                    indent: 2,
+                    indent: 2
+                };
+            });
+
+            return {
+                sections: [
+                    { title: `Open Purchase Order List (${start} - ${end})`, isHeading: true },
+                    ...rows,
+                    { title: 'TOTAL OPEN PO VALUE', value: rows.reduce((s, r) => s + r.value, 0), isGrandTotal: true, spacing: true }
+                ]
+            };
+        } else {
+            // Detail List
+            const sections = [{ title: `Open Purchase Order Detail (${start} - ${end})`, isHeading: true }];
+
+            transactions.forEach(tx => {
+                const vendor = vendors.find(v => v.id === tx.entityId);
+                sections.push({
+                    title: `PO #${tx.refNo || tx.id.substring(0, 8)} - ${vendor?.name || 'Unknown'} (${tx.date})`,
+                    isHeading: true,
+                    indent: 1,
                     spacing: true
-                }))
-            ]
-        };
+                });
+
+                tx.items.forEach(line => {
+                    const item = items.find(i => i.id === line.itemId);
+                    sections.push({
+                        title: item?.name || line.description || 'Unknown Item',
+                        value: line.amount,
+                        extraValue: line.quantity,
+                        extraValue2: line.rate,
+                        id: tx.id,
+                        indent: 4
+                    });
+                });
+
+                sections.push({
+                    title: `PO Total`,
+                    value: tx.total,
+                    isTotal: true,
+                    indent: 2
+                });
+            });
+
+            sections.push({
+                title: 'TOTAL OPEN PO VALUE',
+                value: transactions.reduce((s, t) => s + t.total, 0),
+                isGrandTotal: true,
+                spacing: true
+            });
+
+            return { sections };
+        }
     },
 
     getAdjustedTrialBalance: async (fromDate, toDate, userId, companyId) => {

@@ -23,6 +23,7 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
 }) => {
   const [selectedVendorId, setSelectedVendorId] = useState<string>(vendors[0]?.id);
   const [activeCategory, setActiveCategory] = useState('High Spend Vendors');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const selectedVendor = vendors.find(v => v.id === selectedVendorId);
 
@@ -118,6 +119,46 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
     }
   };
 
+  const handleDeleteVendor = async (id: string) => {
+    const vendor = vendors.find(v => v.id === id);
+    if (!vendor) return;
+
+    const confirmed = window.confirm(
+      `WARNING: Deleting the vendor "${vendor.name}" will permanently remove all associated transactions (bills, payments, etc.) and cannot be undone.\n\nAre you sure you want to proceed?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { deleteVendor } = await import('../services/api');
+      await deleteVendor(id);
+      alert('Vendor and all related transactions deleted successfully.');
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete vendor');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `WARNING: Deleting ${selectedIds.length} vendors will permanently remove all associated transactions (bills, payments, etc.) and cannot be undone.\n\nAre you sure you want to proceed?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { bulkDeleteVendors } = await import('../services/api');
+      await bulkDeleteVendors(selectedIds);
+      alert('Selected vendors and all related transactions deleted successfully.');
+      setSelectedIds([]);
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete vendors');
+    }
+  };
+
   return (
     <div className="flex h-full bg-[#f8fafc] overflow-hidden select-none font-sans">
       {/* Sidebar Area - Summary Cards */}
@@ -198,6 +239,14 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
             <button onClick={() => onOpenWindow('PURCHASE_ORDER_CENTER', 'PO Center')} className="flex-1 max-w-[150px] bg-white border-2 border-gray-200 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
               PO Center
             </button>
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex-1 max-w-[150px] bg-red-50 border-2 border-red-200 text-red-600 font-bold py-2.5 rounded-xl hover:bg-red-100 transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                🗑️ Delete ({selectedIds.length})
+              </button>
+            )}
             <div className="flex-1 max-w-[150px]">
               <label className="flex items-center justify-center w-full h-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm text-sm cursor-pointer">
                 Import
@@ -215,6 +264,9 @@ const VendorCenter: React.FC<VendorCenterProps> = ({
             selectedVendorId={selectedVendorId}
             onSelectVendor={setSelectedVendorId}
             onOpenDetail={(vendor) => onOpenWindow('VENDOR_DETAIL', vendor.name, { vendorId: vendor.id })}
+            onDeleteVendor={handleDeleteVendor}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
           />
         </div>
       </div>
