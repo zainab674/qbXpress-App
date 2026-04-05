@@ -304,7 +304,7 @@ const App: React.FC = () => {
     />
   );
 
-  if (window.location.pathname === '/payroll-connect') {
+  if (window.location.pathname.replace(/\/$/, '') === '/payroll-connect') {
     return <PayrollConnect />;
   }
 
