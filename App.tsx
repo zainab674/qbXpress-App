@@ -286,7 +286,11 @@ const App: React.FC = () => {
   };
 
   // PRIORITY ROUTE: Payroll Connect (must come before LANDING/LOGIN checks)
-  if (window.location.pathname.includes('/payroll-connect')) {
+  const isPayrollConnect =
+    window.location.pathname.includes('payroll-connect') ||
+    window.location.search.includes('callback=');
+
+  if (isPayrollConnect) {
     return <PayrollConnect />;
   }
 
