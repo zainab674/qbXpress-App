@@ -38,6 +38,7 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express.json({ limit: '50mb' }));
+app.use('/uploads', express.static('uploads'));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
@@ -56,13 +57,14 @@ const companyRoutes = [
     'accounts', 'customers', 'vendors', 'transactions', 'items', 'employees', 'leads',
     'classes', 'sales-reps', 'terms', 'time-entries', 'reports', 'mileage-entries',
     'price-levels', 'sales-tax-codes', 'budgets', 'memorized-reports', 'liabilities',
-    'custom-fields', 'currencies', 'audit-logs', 'fixed-assets', 'settings', 'utilities', 'bank-feeds', 'inventory'
+    'custom-fields', 'currencies', 'audit-logs', 'fixed-assets', 'settings', 'utilities', 'bank-feeds', 'inventory', 'recurring-templates'
 ];
 
 companyRoutes.forEach(route => {
     app.use(`/api/${route}`, auth, companyAuth, require(`./routes/${route}`));
 });
 app.use('/api/email', auth, require('./routes/email'));
+app.use('/api/payroll-connect', require('./routes/payroll-connect'));
 
 app.get('/api/store', auth, companyAuth, async (req, res, next) => {
     try {
@@ -75,6 +77,17 @@ app.get('/api/store', auth, companyAuth, async (req, res, next) => {
 });
 
 const errorHandler = require('./middleware/errorHandler');
+
+// Recurring Transaction Processing
+const RecurringTransactionService = require('./services/RecurringTransactionService');
+// Initial run after a short delay to allow DB connection to stabilize
+setTimeout(() => {
+    RecurringTransactionService.processAll().catch(err => console.error('[App] Initial Recurring Processing Failed:', err));
+}, 5000);
+// Run every 6 hours
+setInterval(() => {
+    RecurringTransactionService.processAll().catch(err => console.error('[App] Scheduled Recurring Processing Failed:', err));
+}, 6 * 60 * 60 * 1000);
 
 app.use(errorHandler);
 

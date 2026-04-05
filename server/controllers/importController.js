@@ -149,6 +149,25 @@ const importController = {
 
             await ItemService.bulkUpdate(itemsToSave, req.user.id, req.companyId, req.user.role);
 
+            // Update Account Balances for the imported inventory
+            const accounts = await AccountService.getAll(req.user.id, req.companyId);
+            const inventoryAssetAccount = accounts.find(a => a.type === 'Inventory Asset');
+
+            for (const item of itemsToSave) {
+                if (item.type === 'Inventory Part' || item.type === 'Inventory Assembly') {
+                    const totalValue = (item.onHand || 0) * (item.cost || 0);
+                    if (totalValue !== 0) {
+                        const targetAccountId = item.assetAccountId || (inventoryAssetAccount ? inventoryAssetAccount.id : null);
+                        if (targetAccountId) {
+                            await Account.findOneAndUpdate(
+                                { id: targetAccountId, userId: req.user.id, companyId: req.companyId },
+                                { $inc: { balance: totalValue } }
+                            );
+                        }
+                    }
+                }
+            }
+
             res.json({
                 message: `Successfully imported ${itemsToSave.length} items.`,
                 count: itemsToSave.length

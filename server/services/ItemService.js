@@ -18,6 +18,25 @@ const ItemService = {
 
         const item = await Item.findOneAndUpdate({ id: data.id, userId, companyId }, data, { upsert: true, new: true });
 
+        // Update Account Balance if onHand or cost changed manually
+        if (item.type === 'Inventory Part' || item.type === 'Inventory Assembly') {
+            const oldQty = existing ? (existing.onHand || 0) : 0;
+            const newQty = item.onHand || 0;
+            const oldCost = existing ? (existing.cost || 0) : 0;
+            const newCost = item.cost || 0;
+
+            const oldValue = oldQty * oldCost;
+            const newValue = newQty * newCost;
+            const diff = newValue - oldValue;
+
+            if (diff !== 0 && item.assetAccountId) {
+                await Account.findOneAndUpdate(
+                    { id: item.assetAccountId, userId, companyId },
+                    { $inc: { balance: diff } }
+                );
+            }
+        }
+
         // Audit Trail
         const auditLog = new AuditLogEntry({
             id: crypto.randomUUID(),
@@ -78,6 +97,25 @@ const ItemService = {
                 newContent: JSON.stringify(it)
             });
             await auditLog.save();
+
+            // Update Account Balance for bulk updates
+            if (it.type === 'Inventory Part' || it.type === 'Inventory Assembly') {
+                const oldQty = existing ? (existing.onHand || 0) : 0;
+                const newQty = it.onHand || 0;
+                const oldCost = existing ? (existing.cost || 0) : 0;
+                const newCost = it.cost || 0;
+
+                const oldValue = oldQty * oldCost;
+                const newValue = newQty * newCost;
+                const diff = newValue - oldValue;
+
+                if (diff !== 0 && it.assetAccountId) {
+                    await Account.findOneAndUpdate(
+                        { id: it.assetAccountId, userId, companyId },
+                        { $inc: { balance: diff } }
+                    );
+                }
+            }
         }
         return await Item.bulkWrite(operations);
     }

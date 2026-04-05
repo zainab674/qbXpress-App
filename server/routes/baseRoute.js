@@ -13,6 +13,7 @@ const createRouter = (Service) => {
     router.post('/', controller.save);
     router.delete('/:id', controller.delete);
     router.post('/bulk', controller.bulkUpdate);
+    router.post('/bulk-delete', controller.bulkDelete);
 
     return router;
 };

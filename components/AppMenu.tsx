@@ -74,7 +74,6 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers }) => {
 
             <MenuButton label="Lists">
                 <DropItem label="Chart of Accounts" onClick={() => onOpenWindow('CHART_OF_ACCOUNTS', 'Chart of Accounts')} shortcut="Ctrl+A" />
-                <DropItem label="Item List" onClick={() => onOpenWindow('ITEM_LIST', 'Item List')} />
                 <DropItem label="Fixed Asset Item List" onClick={() => onOpenWindow('FIXED_ASSET_MANAGER', 'Fixed Assets')} />
                 <DropItem label="Price Level List" onClick={() => onOpenWindow('PRICE_LEVEL_LIST', 'Price Levels')} />
                 <DropItem label="Sales Tax Code List" onClick={() => onOpenWindow('SALES_TAX_CODE_LIST', 'Sales Tax Codes')} />

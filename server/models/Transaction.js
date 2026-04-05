@@ -15,6 +15,8 @@ const TransactionItemSchema = new mongoose.Schema({
     userId: String,
     accountId: String,
     creditCategoryId: String,
+    receivedQuantity: { type: Number, default: 0 },
+    isClosed: { type: Boolean, default: false },
 });
 
 const TransactionSchema = new mongoose.Schema({
@@ -39,6 +41,7 @@ const TransactionSchema = new mongoose.Schema({
     paymentMethod: String,
     appliedCreditIds: [String],
     purchaseOrderId: String,
+    customerInvoiceNo: String,
     expectedDate: String,
     vendorMessage: String,
     itemReceiptId: String,
@@ -71,7 +74,15 @@ const TransactionSchema = new mongoose.Schema({
         innerPackDimensions: { length: Number, width: Number, height: Number, unit: String },
         outerBoxDimensions: { length: Number, width: Number, height: Number, unit: String },
         masterCartonDimensions: { length: Number, width: Number, height: Number, unit: String }
-    }
+    },
+    discountAmount: Number,
+    discountPercentage: Number,
+    isDiscountPercentage: Boolean,
+    lateFee: Number,
+    tip: Number,
+    internalNotes: String,
+    location: String,
+    taxRate: Number
 }, { timestamps: true });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);

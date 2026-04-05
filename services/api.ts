@@ -283,6 +283,68 @@ export const deleteRecurringTemplate = (id: string) => remove(`recurring-templat
 export const fetchBankFeeds = () => get('bank-feeds');
 export const saveBankFeed = (feed: any) => post('bank-feeds', feed);
 export const deleteBankFeed = (id: string) => remove(`bank-feeds/${id}`);
+export const bulkDeleteBankFeeds = (ids: string[]) => post('bank-feeds/bulk-delete', { ids });
+export const deleteAllExcludedBankFeeds = () => post('bank-feeds/delete-all-excluded', {});
+export const uploadBankFeedAttachment = async (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('attachment', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/bank-feeds/${id}/attachments`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) throw new Error('Attachment upload failed');
+    return res.json();
+};
+
+export const deleteBankFeedAttachment = async (id: string, fileName: string) => {
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/bank-feeds/${id}/attachments`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: JSON.stringify({ fileName }),
+    });
+    if (!res.ok) throw new Error('Attachment deletion failed');
+    return res.json();
+};
+
+export const uploadBankFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/bank-feeds/upload`, {
+        method: 'POST',
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Company-ID': companyId || '',
+        },
+        body: formData,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+};
+
+export const processBankImport = (data: { mapping: any; bankAccountId: string; rows: any[] }) => post('bank-feeds/process', data);
+
+export const categorizeBankTransaction = (data: {
+    transactionId: string;
+    categoryId?: string;
+    action: 'ADD' | 'EXCLUDE' | 'TRANSFER' | 'MATCH';
+    entityId?: string;
+    toAccountId?: string;
+}) => post('bank-feeds/categorize', data);
+
 export const condenseData = (cutoffDate: string) => post('utilities/condense', { cutoffDate });
 export const fetchAvailableLots = (itemId: string) => get(`inventory/lots/${itemId}`);
 

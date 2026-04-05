@@ -21,6 +21,7 @@ import { useWindow } from './contexts/WindowContext';
 import { useData } from './contexts/DataContext';
 import { useDialog } from './contexts/DialogContext';
 import HomePage from './components/HomePage';
+import PayrollConnect from './components/PayrollConnect';
 import * as api from './services/api';
 import { API_BASE_URL } from './services/api';
 
@@ -38,7 +39,7 @@ const App: React.FC = () => {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
     mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
-    isLoaded, companies, activeCompanyId, switchCompany, refreshData, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
+    isLoaded, companies, activeCompanyId, switchCompany, refreshData, bankFeeds, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
     handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings,
     setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories
   } = useData();
@@ -119,7 +120,7 @@ const App: React.FC = () => {
           case 'b': navigateTo('BILL', 'Enter Bills'); break;
           case 'w': navigateTo('BANKING', 'Write Checks'); break;
           case 'a': navigateTo('CHART_OF_ACCOUNTS', 'Chart of Accounts'); break;
-          case 'l': navigateTo('ITEM_LIST', 'Item List'); break;
+
           case 'r': navigateTo('ACCOUNT_REGISTER', 'Register'); break;
           case 'v': if (e.shiftKey) navigateTo('VENDOR_CENTER', 'Vendor Center'); else handled = false; break;
           case 'e': if (e.shiftKey) navigateTo('EMPLOYEE_CENTER', 'Employee Center'); else handled = false; break;
@@ -280,7 +281,8 @@ const App: React.FC = () => {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, classes, salesReps, mileageEntries, currencies, exchangeRates,
     auditLogs, fixedAssets, vehicles, uoms, companyConfig, homePrefs, shipVia, customFields, customerTypes, vendorTypes,
-    vendorCreditCategories, customerCreditCategories, uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate
+    vendorCreditCategories, customerCreditCategories, uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
+    bankFeeds
   };
 
   if (currentView === 'LANDING') return (
@@ -301,6 +303,10 @@ const App: React.FC = () => {
       onBackToLanding={() => setCurrentView('LANDING')}
     />
   );
+
+  if (window.location.pathname === '/payroll-connect') {
+    return <PayrollConnect />;
+  }
 
   if (!isLoaded && !['LANDING', 'LOGIN', 'SIGNUP'].includes(currentView)) {
     return (

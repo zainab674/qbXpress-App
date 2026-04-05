@@ -56,6 +56,10 @@ class BaseService {
         });
         return await this.model.bulkWrite(operations);
     }
+
+    async bulkDelete(ids, userId, companyId) {
+        return await this.model.deleteMany({ id: { $in: ids }, userId, companyId });
+    }
 }
 
 module.exports = BaseService;

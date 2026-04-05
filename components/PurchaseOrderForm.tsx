@@ -1,242 +1,477 @@
 
-import React, { useState } from 'react';
-import { Vendor, Item, Transaction, TransactionItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account } from '../types';
 
 interface Props {
   vendors: Vendor[];
   items: Item[];
+  customers: Customer[];
+  classes: QBClass[];
+  accounts: Account[];
   onSave: (po: Transaction) => void;
   onClose: () => void;
-  initialData?: { itemId: string };
+  initialData?: any;
 }
 
-const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, onSave, onClose, initialData }) => {
-  const [vendorId, setVendorId] = useState('');
-  const [poDate, setPoDate] = useState(new Date().toISOString().split('T')[0]);
-  const [expectedDate, setExpectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [refNo, setRefNo] = useState('PO-' + Math.floor(Math.random() * 9000 + 1000));
-  const [memo, setMemo] = useState('');
-  const [vendorMessage, setVendorMessage] = useState('');
-  const [lotNumber, setLotNumber] = useState('');
+const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes, accounts, onSave, onClose, initialData }) => {
+  const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Items');
+  const [vendorId, setVendorId] = useState(initialData?.entityId || '');
+  const [poDate, setPoDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+  const [expectedDate, setExpectedDate] = useState(initialData?.expectedDate || new Date().toISOString().split('T')[0]);
+  const [refNo, setRefNo] = useState(initialData?.refNo || 'PO-' + Math.floor(Math.random() * 9000 + 1000));
+  const [memo, setMemo] = useState(initialData?.memo || '');
+  const [vendorMessage, setVendorMessage] = useState(initialData?.vendorMessage || '');
+  const [shipToEntityId, setShipToEntityId] = useState(initialData?.customerId || '');
+  const [attachments, setAttachments] = useState<Attachment[]>(initialData?.attachments || []);
+  const [classId, setClassId] = useState(initialData?.classId || '');
+  const [customerInvoiceNo, setCustomerInvoiceNo] = useState(initialData?.customerInvoiceNo || '');
 
-  const [orderItems, setOrderItems] = useState<TransactionItem[]>(() => {
-    if (initialData?.itemId) {
-      const item = items.find(i => i.id === initialData.itemId);
-      if (item) {
-        return [{
-          id: Math.random().toString(),
-          description: item.purchaseDescription || item.description || item.name,
-          quantity: 1,
-          rate: item.cost || 0,
-          amount: item.cost || 0,
-          tax: false,
-          actualItemId: item.id
-        } as any];
-      }
+  const [expenseRows, setExpenseRows] = useState<any[]>(() => {
+    if (initialData?.items?.some((i: any) => i.accountId)) {
+      return initialData.items.filter((i: any) => i.accountId).map((i: any) => ({ ...i, id: Math.random().toString() }));
     }
-    return [{ id: Math.random().toString(), description: '', quantity: 1, rate: 0, amount: 0, tax: false }];
+    return [{ id: Math.random().toString(), accountId: '', amount: 0, memo: '', customerId: '', isBillable: false, classId: '' }];
   });
 
+  const [itemRows, setItemRows] = useState<TransactionItem[]>(() => {
+    if (initialData?.items?.some((i: any) => i.itemId)) {
+      return initialData.items.filter((i: any) => i.itemId).map((i: any) => ({ ...i, id: Math.random().toString() }));
+    }
+    return [{ id: Math.random().toString(), itemId: '', description: '', quantity: 1, rate: 0, amount: 0, tax: false, customerId: '', isBillable: false, classId: '' }];
+  });
+
+  const selectedVendor = vendors.find(v => v.id === vendorId);
+  const selectedShipTo = customers.find(c => c.id === shipToEntityId);
 
   const inventoryItems = items.filter(i => i.type === 'Inventory Part' || i.type === 'Non-inventory Part' || i.type === 'Service');
 
-  const addItemRow = () => {
-    setOrderItems([...orderItems, { id: Math.random().toString(), description: '', quantity: 1, rate: 0, amount: 0, tax: false }]);
+  const addRow = () => {
+    if (activeTab === 'Expenses') {
+      setExpenseRows([...expenseRows, { id: Math.random().toString(), accountId: '', amount: 0, memo: '', customerId: '', isBillable: false, classId: '' }]);
+    } else {
+      setItemRows([...itemRows, { id: Math.random().toString(), itemId: '', description: '', quantity: 1, rate: 0, amount: 0, tax: false, customerId: '', isBillable: false, classId: '' }]);
+    }
   };
 
   const handleItemChange = (index: number, itemId: string) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
-    const newItems = [...orderItems];
+    const newItems = [...itemRows];
     newItems[index] = {
       ...newItems[index],
+      itemId,
       description: item.purchaseDescription || item.description || item.name,
       rate: item.cost || 0,
       amount: (item.cost || 0) * (newItems[index].quantity || 1)
     };
-    // Note: We keep the row ID for local keys, but use the item.id as the reference
-    (newItems[index] as any).actualItemId = item.id;
-    setOrderItems(newItems);
+    setItemRows(newItems);
+  };
+
+  const calculateTotal = () => {
+    const expTotal = expenseRows.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const itemTotal = itemRows.reduce((sum, r) => sum + (r.amount || 0), 0);
+    return expTotal + itemTotal;
   };
 
   const handleRecord = () => {
     if (!vendorId) return alert("Please select a vendor.");
+
+    const allItems: TransactionItem[] = [
+      ...expenseRows.filter(r => r.accountId).map(r => ({
+        id: r.id,
+        description: r.memo || memo,
+        quantity: 1,
+        rate: r.amount,
+        amount: r.amount,
+        tax: false,
+        accountId: r.accountId,
+        customerId: r.customerId,
+        isBillable: r.isBillable,
+        classId: r.classId
+      })),
+      ...itemRows.filter(r => r.itemId).map(r => ({ ...r }))
+    ];
+
+    if (allItems.length === 0) return alert("Please add at least one line item.");
+
     const po: Transaction = {
-      id: Math.random().toString(),
+      id: initialData?.id || Math.random().toString(),
       type: 'PURCHASE_ORDER',
       refNo,
       date: poDate,
       expectedDate,
       vendorMessage,
+      memo,
       entityId: vendorId,
-      items: orderItems.filter(i => (i as any).actualItemId).map(i => ({
-        ...i,
-        itemId: (i as any).actualItemId
-      })),
-      total: orderItems.reduce((sum, i) => sum + i.amount, 0),
-      status: 'OPEN',
-      lotNumber: lotNumber || undefined
+      customerId: shipToEntityId || undefined,
+      classId: classId || undefined,
+      items: allItems,
+      total: calculateTotal(),
+      customerInvoiceNo,
+      status: initialData?.status || 'OPEN',
+      attachments,
+      ShipAddr: selectedShipTo
+        ? { Line1: selectedShipTo.name, Line2: selectedShipTo.address }
+        : { Line1: 'Omnificode LTD', Line2: 'Jhang Sadar, Punjab' }
     };
+
     onSave(po);
     onClose();
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    const newAttachments: Attachment[] = files.map(f => ({
+      id: Math.random().toString(),
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      uploadDate: new Date().toLocaleDateString()
+    }));
+    setAttachments([...attachments, ...newAttachments]);
+  };
+
   return (
-    <div className="bg-[#f0f0f0] h-full flex flex-col p-4 font-sans">
-      <div className="bg-white border-2 border-gray-400 rounded shadow-2xl flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-gray-300 p-2 flex gap-4 shadow-sm">
-          <button onClick={handleRecord} className="flex flex-col items-center group px-6 py-1 hover:bg-blue-50 rounded-sm border border-transparent hover:border-blue-200 transition-all">
-            <div className="text-xl">💾</div>
-            <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-blue-900">Save & Close</span>
+    <div className="bg-[#f0f0f0] h-full flex flex-col font-sans animate-in fade-in duration-500 overflow-hidden">
+      <div className="bg-white border-b border-gray-300">
+        <div className="flex bg-gray-100 text-sm font-bold px-2 pt-1">
+          <button className="px-5 py-2.5 border-t border-l border-r rounded-t-sm mr-0.5 bg-white border-gray-400 text-[#003366]">Purchase Order</button>
+        </div>
+        <div className="p-2 flex gap-4 bg-white border-t border-gray-300 overflow-x-auto shadow-sm">
+          <button onClick={handleRecord} className="flex flex-col items-center group">
+            <div className="w-10 h-10 bg-gray-50 border-2 border-gray-200 rounded flex items-center justify-center text-blue-700 hover:bg-blue-100 transition-colors text-xl">💾</div>
+            <span className="text-xs font-bold mt-1">Save</span>
           </button>
-          <button onClick={onClose} className="flex flex-col items-center group px-6 py-1 hover:bg-red-50 rounded-sm border border-transparent hover:border-red-200 transition-all">
-            <div className="text-xl">✖</div>
-            <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-red-700">Cancel</span>
+          <button onClick={onClose} className="flex flex-col items-center group">
+            <div className="w-10 h-10 bg-gray-50 border-2 border-gray-200 rounded flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors text-xl">✖</div>
+            <span className="text-xs font-bold mt-1">Close</span>
           </button>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-10 bg-[#f5f7fa] custom-scrollbar">
-          <div className="w-full max-w-5xl mx-auto bg-white border-2 border-gray-300 rounded shadow-2xl p-10 relative">
-            <div className="flex justify-between items-start mb-12">
-              <div>
-                <h1 className="text-5xl font-serif italic text-[#003366] drop-shadow-sm flex items-center gap-4">
-                  Purchase Order
-                </h1>
-              </div>
-              <div className="text-right space-y-4">
-                <div className="flex items-center justify-end gap-3">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">P.O. Number</label>
-                  <input className="border-b-2 border-gray-300 p-1 text-sm w-32 bg-transparent text-right font-mono font-bold text-[#003366] outline-none focus:border-blue-600" value={refNo} readOnly />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</label>
-                  <input className="border-b-2 border-gray-300 p-1 text-sm w-32 bg-transparent text-right font-bold outline-none focus:border-blue-600" value={poDate} onChange={e => setPoDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Expected Date</label>
-                  <input className="border-b-2 border-blue-200 p-1 text-sm w-32 bg-blue-50/10 text-right font-bold outline-none focus:border-blue-600" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <label className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Lot Number</label>
-                  <input className="border-b-2 border-purple-200 p-1 text-sm w-32 bg-purple-50/10 text-right font-bold outline-none focus:border-purple-600" placeholder="Optional" value={lotNumber} onChange={e => setLotNumber(e.target.value)} />
-                </div>
-              </div>
-            </div>
+      <div className="flex-1 overflow-y-auto p-6 bg-white border border-gray-300 m-2 rounded shadow-2xl custom-scrollbar">
+        <div className="w-full max-w-7xl mx-auto space-y-8">
 
-            <div className="grid grid-cols-2 gap-20 mb-12">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic flex items-center gap-2">
-                  <span className="w-4 h-4 bg-blue-100 rounded-full flex items-center justify-center text-[8px] not-italic">V</span>
-                  Vendor Selection
-                </label>
+          {/* Top Section: Header & Status */}
+          <div className="flex justify-between items-start border-b border-gray-100 pb-6">
+            <div className="space-y-4">
+              <h1 className="text-5xl font-serif italic text-[#003366]">Purchase Order</h1>
+              <div className="flex flex-col pt-2">
+                <label className="text-xs font-bold text-gray-600 uppercase italic mb-1">Vendor selection</label>
                 <select
-                  className="w-full border-b-2 border-blue-200 p-2 text-lg font-serif italic bg-blue-50/20 outline-none focus:border-blue-600 transition-colors text-[#003366]"
+                  className="w-96 border-b-2 border-blue-300 bg-blue-50/30 px-3 py-2 text-lg font-bold text-[#003366] outline-none focus:border-blue-600 transition-all shadow-sm"
                   value={vendorId}
                   onChange={e => setVendorId(e.target.value)}
                 >
-                  <option value="">&lt;Select Vendor&gt;</option>
+                  <option value="">&lt;Choose a Vendor&gt;</option>
                   {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic flex items-center gap-2">
-                  <span className="text-lg">📦</span> Ship To
-                </label>
-                <div className="p-3 border-2 border-dashed border-gray-200 rounded text-xs text-gray-400 italic bg-gray-50/30">
-                  [Your Company Address]
-                </div>
+            </div>
+            <div className="text-right flex flex-col items-end">
+              <div className="text-xs font-bold text-gray-600 uppercase mb-1">Order total</div>
+              <div className="text-5xl font-black text-blue-900 mb-4 font-mono">
+                ${calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Status</span>
+                <span className={`text-xs font-black px-4 py-1 rounded-full ${(initialData?.status || 'OPEN') === 'OPEN' ? 'bg-emerald-100 text-emerald-700' :
+                  initialData?.status === 'CLOSED' ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                  {initialData?.status || 'OPEN'}
+                </span>
+              </div>
+              <div className="mt-2 text-right">
+                <span className="text-xs font-bold text-gray-400 uppercase block">P.O. #</span>
+                <span className="text-lg font-mono font-black text-blue-600">{refNo}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Info Grid */}
+          <div className="grid grid-cols-12 gap-8">
+            <div className="col-span-4 flex flex-col gap-1">
+              <label className="text-xs font-bold text-gray-600 uppercase italic">Billing Address</label>
+              <div className="p-4 border-2 border-gray-200 rounded-lg text-sm text-gray-600 leading-relaxed bg-gray-50/50 min-h-[100px] italic">
+                {selectedVendor ? (
+                  selectedVendor.address || 'No address registered'
+                ) : (
+                  <span className="opacity-50">Select a vendor to see billing details</span>
+                )}
               </div>
             </div>
 
-            <div className="border-2 border-gray-300 rounded-sm overflow-hidden shadow-xl mb-12">
-              <table className="w-full text-[11px] border-collapse">
-                <thead className="bg-[#f0f0f0] border-b-2 border-gray-400 text-[#003366] font-black uppercase shadow-sm">
+            <div className="col-span-4 flex flex-col gap-1">
+              <label className="text-xs font-bold text-gray-600 uppercase italic">Ship to (Customer)</label>
+              <div className="p-4 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-600 leading-relaxed bg-gray-50/50 min-h-[100px]">
+                {selectedShipTo ? (
+                  <div>
+                    <div className="font-bold text-gray-800 mb-1">{selectedShipTo.name}</div>
+                    <div className="italic">{selectedShipTo.address}</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-bold text-gray-800">Omnificode LTD</div>
+                    <div className="opacity-70 italic">Jhang Sadar, Punjab</div>
+                  </div>
+                )}
+              </div>
+              <select
+                className="mt-2 w-full border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-blue-500 bg-transparent"
+                value={shipToEntityId}
+                onChange={e => setShipToEntityId(e.target.value)}
+              >
+                <option value="">&lt;Change Shipping Destination&gt;</option>
+                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div className="col-span-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-gray-600 uppercase">P.O. #</label>
+                  <input className="border-b-2 border-gray-300 px-3 py-1.5 text-sm font-bold text-[#003366] w-full outline-none focus:border-blue-600 font-mono" value={refNo} onChange={e => setRefNo(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-gray-600 uppercase">Cust Inv #</label>
+                  <input
+                    className="border-b-2 border-gray-300 px-3 py-1.5 text-sm font-bold text-[#003366] w-full outline-none focus:border-blue-600 placeholder:opacity-30"
+                    value={customerInvoiceNo}
+                    onChange={e => setCustomerInvoiceNo(e.target.value)}
+                    placeholder="INV-XXXX"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-gray-600 uppercase">Order Date</label>
+                  <input type="date" className="border-b-2 border-gray-300 px-3 py-1.5 text-sm font-bold text-gray-700 outline-none focus:border-blue-600 bg-transparent" value={poDate} onChange={e => setPoDate(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-gray-600 uppercase">Expected</label>
+                  <input type="date" className="border-b-2 border-gray-300 px-3 py-1.5 text-sm font-bold text-gray-700 outline-none focus:border-blue-600 bg-transparent" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vendor Balance Indicator */}
+          {selectedVendor && (
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center justify-between px-10 shadow-sm">
+              <div className="flex items-center gap-4">
+                <span className="text-2xl">💰</span>
+                <span className="text-xs font-bold text-emerald-800 uppercase tracking-widest">Current Vendor Open Balance:</span>
+              </div>
+              <span className="font-mono text-xl font-black text-emerald-900">${(selectedVendor.balance || 0).toLocaleString()}</span>
+            </div>
+          )}
+
+          {/* Line Items */}
+          <div className="bg-gray-50 border-2 border-gray-300 rounded-xl overflow-hidden shadow-md">
+            <div className="flex bg-gray-100 border-b border-gray-300">
+              <button
+                onClick={() => setActiveTab('Items')}
+                className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'Items' ? 'bg-white text-[#003366] border-b-2 border-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
+              >
+                Items & Products
+              </button>
+              <button
+                onClick={() => setActiveTab('Expenses')}
+                className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest transition-colors ${activeTab === 'Expenses' ? 'bg-white text-[#003366] border-b-2 border-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
+              >
+                Expenses & Categories
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-[#003366] text-white font-bold uppercase text-xs tracking-wider">
                   <tr>
-                    <th className="px-4 py-2 border-r border-gray-300 text-left w-64">Item</th>
-                    <th className="px-4 py-2 border-r border-gray-300 text-left">Description</th>
-                    <th className="px-4 py-2 border-r border-gray-300 w-24 text-center">Qty</th>
-                    <th className="px-4 py-2 border-r border-gray-300 w-32 text-right">Rate</th>
-                    <th className="px-4 py-2 w-32 text-right">Amount</th>
+                    {activeTab === 'Items' ? (
+                      <>
+                        <th className="px-6 py-4 w-64 border-r border-blue-900/50">Item / Product</th>
+                        <th className="px-6 py-4 border-r border-blue-900/50">Description</th>
+                        <th className="px-6 py-4 w-24 text-center border-r border-blue-900/50">Qty</th>
+                        <th className="px-6 py-4 w-32 text-right border-r border-blue-900/50">Rate</th>
+                        <th className="px-6 py-4 w-32 text-right border-r border-blue-900/50">Amount</th>
+                        <th className="px-6 py-4 w-24 text-center border-r border-blue-900/50 bg-blue-800/50">Rcvd</th>
+                        <th className="px-6 py-4 w-48 border-r border-blue-900/50">Customer</th>
+                        <th className="px-4 py-4 w-12"></th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-6 py-4 w-80 border-r border-blue-900/50">Expense Account</th>
+                        <th className="px-6 py-4 border-r border-blue-900/50">Memo</th>
+                        <th className="px-6 py-4 w-32 text-right border-r border-blue-900/50">Amount</th>
+                        <th className="px-6 py-4 w-48 border-r border-blue-900/50">Project</th>
+                        <th className="px-6 py-4 w-48 border-r border-blue-900/50">Class</th>
+                        <th className="px-4 py-4 w-12"></th>
+                      </>
+                    )}
                   </tr>
                 </thead>
-                <tbody>
-                  {orderItems.map((oi, idx) => (
-                    <tr key={oi.id} className="border-b h-10 hover:bg-blue-50/50 group transition-colors">
-                      <td className="p-0 border-r border-gray-200 relative">
-                        <select
-                          className="w-full h-full px-4 bg-transparent outline-none appearance-none font-bold text-[#003366]"
-                          onChange={e => handleItemChange(idx, e.target.value)}
-                        >
-                          <option value="">--Select Item--</option>
+                <tbody className="divide-y divide-slate-50">
+                  {activeTab === 'Items' ? itemRows.map((row, idx) => (
+                    <tr key={row.id} className="hover:bg-blue-50/30 group transition-all duration-300">
+                      <td className="p-0 border-r border-slate-50">
+                        <select className="w-full h-14 px-8 bg-transparent outline-none font-bold text-slate-700 focus:bg-white transition-colors appearance-none text-sm" value={row.itemId} onChange={e => handleItemChange(idx, e.target.value)}>
+                          <option value="">-- Choose Item --</option>
                           {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                         </select>
                       </td>
-                      <td className="p-0 border-r border-gray-200">
-                        <input className="w-full h-full px-4 bg-transparent outline-none italic text-gray-600" value={oi.description} readOnly />
+                      <td className="p-0 border-r border-slate-50">
+                        <input className="w-full h-14 px-8 bg-transparent outline-none italic text-slate-500 placeholder:text-slate-300 focus:bg-white transition-colors text-sm" value={row.description} onChange={e => {
+                          const nr = [...itemRows]; nr[idx].description = e.target.value; setItemRows(nr);
+                        }} placeholder="Description will auto-populate..." />
                       </td>
-                      <td className="p-0 border-r border-gray-200">
-                        <input
-                          className="w-full h-full px-4 text-center font-bold outline-none"
-                          type="number"
-                          value={oi.quantity}
-                          onChange={e => {
-                            const newItems = [...orderItems];
-                            newItems[idx].quantity = parseFloat(e.target.value) || 0;
-                            newItems[idx].amount = newItems[idx].rate * newItems[idx].quantity;
-                            setOrderItems(newItems);
-                          }}
-                        />
+                      <td className="p-0 border-r border-slate-50">
+                        <input type="number" className="w-full h-14 px-4 text-center outline-none bg-transparent font-black text-slate-700 focus:bg-white transition-colors" value={row.quantity} onChange={e => {
+                          const nr = [...itemRows]; nr[idx].quantity = parseFloat(e.target.value) || 0; nr[idx].amount = nr[idx].rate * nr[idx].quantity; setItemRows(nr);
+                        }} />
                       </td>
-                      <td className="p-0 border-r border-gray-200 px-4 text-right text-gray-500 font-mono">
-                        ${oi.rate.toFixed(2)}
+                      <td className="p-0 border-r border-slate-50 px-8 text-right font-mono font-bold text-slate-400">
+                        ${row.rate.toFixed(2)}
                       </td>
-                      <td className="p-0 px-4 text-right font-black text-blue-900 font-mono">
-                        ${oi.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <td className="p-0 border-r border-slate-50 px-8 text-right font-black text-blue-900 font-mono text-sm">
+                        ${row.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-0 border-r border-slate-50 text-center bg-blue-50/10 font-black text-blue-600">
+                        {row.receivedQuantity || 0}
+                      </td>
+                      <td className="p-0">
+                        <select className="w-full h-14 px-6 bg-transparent outline-none text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors" value={row.customerId} onChange={e => {
+                          const nr = [...itemRows]; nr[idx].customerId = e.target.value; setItemRows(nr);
+                        }}>
+                          <option value="">&lt;Unlinked&gt;</option>
+                          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 text-center">
+                        <button onClick={() => setItemRows(itemRows.filter(r => r.id !== row.id))} className="w-8 h-8 rounded-full border border-slate-100 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                      </td>
+                    </tr>
+                  )) : expenseRows.map((row, idx) => (
+                    <tr key={row.id} className="hover:bg-blue-50/30 group transition-all duration-300">
+                      <td className="p-0 border-r border-slate-50">
+                        <select className="w-full h-14 px-8 bg-transparent outline-none font-bold text-slate-700 focus:bg-white transition-colors text-sm" value={row.accountId} onChange={e => {
+                          const nr = [...expenseRows]; nr[idx].accountId = e.target.value; setExpenseRows(nr);
+                        }}>
+                          <option value="">-- Choose Account --</option>
+                          {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-0 border-r border-slate-50">
+                        <input className="w-full h-14 px-8 bg-transparent outline-none italic text-slate-500 focus:bg-white transition-colors text-sm" value={row.memo} onChange={e => {
+                          const nr = [...expenseRows]; nr[idx].memo = e.target.value; setExpenseRows(nr);
+                        }} placeholder="Expense details..." />
+                      </td>
+                      <td className="p-0 border-r border-slate-50 px-8">
+                        <input type="number" className="w-full h-14 text-right bg-transparent outline-none font-black text-blue-900 font-mono text-sm focus:bg-white transition-colors" value={row.amount || ''} onChange={e => {
+                          const nr = [...expenseRows]; nr[idx].amount = parseFloat(e.target.value) || 0; setExpenseRows(nr);
+                        }} placeholder="0.00" />
+                      </td>
+                      <td className="p-0 border-r border-slate-50">
+                        <select className="w-full h-14 px-6 bg-transparent outline-none text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors" value={row.customerId} onChange={e => {
+                          const nr = [...expenseRows]; nr[idx].customerId = e.target.value; setExpenseRows(nr);
+                        }}>
+                          <option value="">&lt;Unlinked&gt;</option>
+                          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-0">
+                        <select className="w-full h-14 px-6 bg-transparent outline-none text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors" value={row.classId} onChange={e => {
+                          const nr = [...expenseRows]; nr[idx].classId = e.target.value; setExpenseRows(nr);
+                        }}>
+                          <option value="">-- Track Class --</option>
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 text-center">
+                        <button onClick={() => setExpenseRows(expenseRows.filter(r => r.id !== row.id))} className="w-8 h-8 rounded-full border border-slate-100 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100 opacity-0 group-hover:opacity-100 transition-all">✕</button>
                       </td>
                     </tr>
                   ))}
-                  <tr className="bg-gray-50/50">
-                    <td colSpan={5} className="p-2 px-4 shadow-inner">
-                      <button onClick={addItemRow} className="text-blue-600 font-black text-[10px] uppercase hover:underline tracking-tighter underline cursor-pointer">+ Add New Item Row</button>
-                    </td>
-                  </tr>
-                  {[1, 2, 3].map(i => <tr key={i} className="h-10 border-b border-gray-100 opacity-10"><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td></td></tr>)}
                 </tbody>
-                <tfoot className="bg-[#003366] text-white">
-                  <tr>
-                    <td colSpan={4} className="p-4 text-right font-black uppercase text-[10px] tracking-widest opacity-70">Purchase order total:</td>
-                    <td className="p-4 text-right font-black font-mono text-2xl drop-shadow-md">
-                      ${orderItems.reduce((acc, i) => acc + i.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
+              <div className="bg-slate-50/50 p-6 flex items-center justify-between border-t border-slate-100">
+                <button onClick={addRow} className="group flex items-center gap-3 text-blue-600 font-black text-[11px] uppercase tracking-widest hover:text-blue-700 transition-all active:scale-95">
+                  <span className="bg-blue-600 text-white w-6 h-6 rounded-xl flex items-center justify-center text-sm group-hover:shadow-lg group-hover:shadow-blue-200 transition-all animate-bounce">＋</span>
+                  Add a New Line
+                </button>
+                <div className="text-xs text-slate-400 font-bold uppercase tracking-widest flex gap-6">
+                  <span>Double-tap row to focus</span>
+                  <span>Values auto-save as drafts</span>
+                </div>
+              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-12 items-start">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic block mb-1">Vendor Message</label>
+          {/* Bottom Section: Messages & Attachments */}
+          <div className="grid grid-cols-12 gap-8 pb-10">
+            <div className="col-span-8 grid grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block ml-1">Message to Vendor</label>
                   <textarea
-                    className="w-full border-2 border-blue-50 p-3 text-xs h-16 outline-none focus:border-blue-200 bg-blue-50/10 rounded resize-none italic text-blue-800"
-                    placeholder="Message for vendor (will print on PO)..."
+                    className="w-full border border-slate-200 p-6 text-[13px] h-36 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-400 bg-white rounded-[1.5rem] shadow-sm resize-none italic text-blue-950/70 transition-all placeholder:text-slate-300"
+                    placeholder="Special instructions or thank you notes..."
                     value={vendorMessage}
                     onChange={e => setVendorMessage(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic block mb-1">Memo</label>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block ml-1">Internal Memo</label>
                   <textarea
-                    className="w-full border-2 border-gray-100 p-3 text-xs h-16 outline-none focus:border-blue-200 bg-gray-50/30 rounded resize-none"
-                    placeholder="Internal communication for this order..."
+                    className="w-full border border-slate-200 p-6 text-[13px] h-36 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-400 bg-white rounded-[1.5rem] shadow-sm resize-none transition-all placeholder:text-slate-300"
+                    placeholder="Records for internal auditing..."
                     value={memo}
                     onChange={e => setMemo(e.target.value)}
                   />
                 </div>
               </div>
 
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block ml-1">Documentation & Attachments</label>
+                <div className="border-2 border-dashed border-slate-200 rounded-[2rem] p-10 flex flex-col items-center justify-center bg-white hover:bg-blue-50/20 hover:border-blue-400/50 transition-all group cursor-pointer relative overflow-hidden h-52 group shadow-sm">
+                  <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer z-20" onChange={handleFileUpload} />
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 shadow-sm border border-slate-100">📎</div>
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Click or Drop Files</p>
+                  <p className="text-xs text-slate-400 font-medium">PDF, DOCX or Images (Max 20MB per file)</p>
+                </div>
+
+                {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2.5 animate-in fade-in duration-500 px-2 pt-2">
+                    {attachments.map(att => (
+                      <div key={att.id} className="bg-white border border-slate-200 text-slate-700 pl-4 pr-3 py-2 rounded-2xl flex items-center gap-3 text-xs font-black shadow-sm group hover:border-blue-300 transition-all">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
+                        <span className="truncate max-w-[140px] tracking-tight">{att.name}</span>
+                        <button onClick={() => setAttachments(attachments.filter(a => a.id !== att.id))} className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-300 transition-colors ml-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="col-span-4 bg-gray-50 border-2 border-gray-100 p-8 rounded-2xl flex flex-col gap-4">
+              <div className="flex justify-between items-center text-gray-500">
+                <span className="text-xs font-bold uppercase">Subtotal</span>
+                <span className="font-mono text-sm font-bold">${calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between items-center text-gray-500">
+                <span className="text-xs font-bold uppercase">Shipping</span>
+                <span className="font-mono text-sm font-bold">$0.00</span>
+              </div>
+              <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
+                <span className="text-sm font-black text-blue-900 uppercase tracking-tighter">Grand Total</span>
+                <span className="text-4xl font-black text-[#003366] font-mono leading-none tracking-tighter">
+                  ${calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>

@@ -16,6 +16,8 @@ interface Props {
   onOpenEstimate?: () => void;
   onOpenSalesOrder?: () => void;
   onOpenCredit?: () => void;
+  onOpenDelayedCharge?: () => void;
+  onOpenDelayedCredit?: () => void;
   refreshData?: () => Promise<void>;
 }
 
@@ -31,6 +33,8 @@ const CustomerCenter: React.FC<Props> = ({
   onOpenEstimate,
   onOpenSalesOrder,
   onOpenCredit,
+  onOpenDelayedCharge,
+  onOpenDelayedCredit,
   refreshData
 }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id);
@@ -239,6 +243,12 @@ const CustomerCenter: React.FC<Props> = ({
             </button>
             <button onClick={onOpenSalesOrder} className="flex-1 max-w-[150px] bg-white border-2 border-slate-900 text-slate-900 font-bold py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-sm">
               Create Sales Order
+            </button>
+            <button onClick={onOpenDelayedCharge} className="flex-1 max-w-[150px] bg-green-50 border-2 border-green-600 text-green-700 font-bold py-2.5 rounded-xl hover:bg-green-100 transition-colors text-sm">
+              Delayed Charge
+            </button>
+            <button onClick={onOpenDelayedCredit} className="flex-1 max-w-[150px] bg-red-50 border-2 border-red-600 text-red-700 font-bold py-2.5 rounded-xl hover:bg-red-100 transition-colors text-sm">
+              Delayed Credit
             </button>
             {selectedIds.length > 0 && (
               <button

@@ -1,36 +1,37 @@
-
-import React, { useState } from 'react';
-import { Transaction, Account } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Transaction, Account, BankTransaction } from '../types';
+import * as api from '../services/api';
 
 interface Props {
     transactions: Transaction[];
     accounts: Account[];
+    bankFeeds: BankTransaction[];
     handlers: {
         onSaveTransaction: (tx: any) => Promise<void>;
+        refreshData: () => Promise<void>;
     };
     onClose: () => void;
 }
 
-interface BankTransaction {
-    id: string;
-    date: string;
-    description: string;
-    amount: number;
-    matchedId?: string;
-}
-
-const BankFeedMatching: React.FC<Props> = ({ transactions, accounts, handlers, onClose }) => {
+const BankFeedMatching: React.FC<Props> = ({ transactions, accounts, bankFeeds, handlers, onClose }) => {
     const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
 
+    useEffect(() => {
+        // Initialize state with UNMATCHED bank feeds
+        setBankTransactions(bankFeeds.filter(f => f.status === 'UNMATCHED' || f.status === 'FOR_REVIEW'));
+    }, [bankFeeds]);
+
     const handleMatch = async (btId: string, txId: string) => {
-        const tx = transactions.find(t => t.id === txId);
-        if (tx) {
-            try {
-                await handlers.onSaveTransaction({ ...tx, status: 'CLEARED' });
-                setBankTransactions(prev => prev.map(bt => bt.id === btId ? { ...bt, matchedId: txId } : bt));
-            } catch (err) {
-                alert("Failed to update transaction status.");
-            }
+        try {
+            await api.categorizeBankTransaction({
+                transactionId: btId,
+                categoryId: txId, // Using categoryId field for the target txId
+                action: 'MATCH'
+            });
+            setBankTransactions(prev => prev.filter(b => b.id !== btId));
+            await handlers.refreshData();
+        } catch (err) {
+            alert("Failed to complete match.");
         }
     };
 
@@ -63,20 +64,14 @@ const BankFeedMatching: React.FC<Props> = ({ transactions, accounts, handlers, o
                             </thead>
                             <tbody className="divide-y">
                                 {bankTransactions.map(bt => (
-                                    <tr key={bt.id} className={`hover:bg-blue-50/50 transition-colors ${bt.matchedId ? 'opacity-50 grayscale' : ''}`}>
+                                    <tr key={bt.id} className="hover:bg-blue-50/50 transition-colors">
                                         <td className="p-3 text-slate-500 font-medium">{bt.date}</td>
                                         <td className="p-3 font-bold text-slate-900 italic tracking-tight">{bt.description}</td>
                                         <td className={`p-3 text-right font-black text-sm ${bt.amount < 0 ? 'text-red-500' : 'text-green-600'}`}>
                                             {bt.amount < 0 ? `- $${Math.abs(bt.amount).toFixed(2)}` : `+ $${bt.amount.toFixed(2)}`}
                                         </td>
                                         <td className="p-3">
-                                            {bt.matchedId ? (
-                                                <div className="text-green-600 font-bold flex items-center gap-1 uppercase text-[10px]">
-                                                    <span>✅</span> Matched
-                                                </div>
-                                            ) : (
-                                                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Pending</span>
-                                            )}
+                                            <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Pending</span>
                                         </td>
                                     </tr>
                                 ))}

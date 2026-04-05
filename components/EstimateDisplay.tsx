@@ -92,10 +92,14 @@ const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, i
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-12 bg-slate-50 border-y-2 border-slate-200 py-8 px-10 mb-12">
+                    <div className="grid grid-cols-4 gap-8 bg-slate-50 border-y-2 border-slate-200 py-8 px-10 mb-12">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Estimate Date</p>
                             <p className="text-lg font-black text-slate-900 italic">{estimate.date}</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Expiration Date</p>
+                            <p className="text-lg font-black text-slate-900 italic">{estimate.dueDate || '-'}</p>
                         </div>
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Status</p>
@@ -167,12 +171,39 @@ const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, i
                                 </span>
                             </div>
                         </div>
-                        {estimate.memo && (
-                            <div className="mt-8 border-l-4 border-slate-200 pl-6">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Note</p>
-                                <p className="text-sm text-slate-600 font-medium italic leading-relaxed">{estimate.memo}</p>
+                        {estimate.acceptedBy && (
+                            <div className="mt-8 grid grid-cols-2 gap-8 border-t border-slate-100 pt-8">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Accepted By</p>
+                                    <p className="text-sm font-bold text-slate-900">{estimate.acceptedBy}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Accepted Date</p>
+                                    <p className="text-sm font-bold text-slate-900">{estimate.acceptedDate || '-'}</p>
+                                </div>
                             </div>
                         )}
+                        <div className="mt-8 flex gap-12">
+                            {estimate.memo && (
+                                <div className="flex-1 border-l-4 border-slate-200 pl-6">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Note</p>
+                                    <p className="text-sm text-slate-600 font-medium italic leading-relaxed">{estimate.memo}</p>
+                                </div>
+                            )}
+                            {estimate.attachments && estimate.attachments.length > 0 && (
+                                <div className="w-64 border-l-4 border-blue-200 pl-6">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-2">Attachments ({estimate.attachments.length})</p>
+                                    <div className="space-y-2">
+                                        {estimate.attachments.map(att => (
+                                            <div key={att.id} className="text-xs flex items-center gap-2 text-slate-600 group cursor-pointer hover:text-blue-600">
+                                                <span>📄</span>
+                                                <span className="font-bold border-b border-transparent group-hover:border-blue-600 truncate">{att.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

@@ -25,6 +25,14 @@ const RecurringInvoiceDialog: React.FC<Props> = ({ entities, entityType, initial
     const [endType, setEndType] = useState<'Never' | 'After' | 'OnDate'>(initialTemplate?.endType || 'Never');
     const [endAfterOccurrences, setEndAfterOccurrences] = useState(initialTemplate?.endAfterOccurrences || 1);
     const [endDate, setEndDate] = useState(initialTemplate?.endDate || '');
+    const [isAuthorized, setIsAuthorized] = useState(initialTemplate?.isAuthorized || false);
+    const [lineItems, setLineItems] = useState(initialTemplate?.transactionData?.items || baseTransaction.items || []);
+
+    const toggleOneTime = (index: number) => {
+        const newItems = [...lineItems];
+        newItems[index] = { ...newItems[index], isOneTime: !newItems[index].isOneTime };
+        setLineItems(newItems);
+    };
 
     const handleSave = () => {
         if (!templateName) {
@@ -52,10 +60,14 @@ const RecurringInvoiceDialog: React.FC<Props> = ({ entities, entityType, initial
             endType,
             endAfterOccurrences: endType === 'After' ? endAfterOccurrences : undefined,
             endDate: endType === 'OnDate' ? endDate : undefined,
+            isAuthorized,
+            authorizationDate: isAuthorized ? (initialTemplate?.authorizationDate || new Date().toISOString()) : undefined,
             transactionData: {
                 ...baseTransaction,
                 entityId: selectedEntityId,
                 id: undefined, // Clear ID so it's fresh when generated
+                items: lineItems,
+                total: lineItems.reduce((sum, item) => sum + (item.amount || 0), 0)
             },
         };
 
@@ -137,6 +149,65 @@ const RecurringInvoiceDialog: React.FC<Props> = ({ entities, entityType, initial
                                 <input type="checkbox" checked={markAsPrintLater} onChange={e => setMarkAsPrintLater(e.target.checked)} />
                                 Mark as print later
                             </label>
+                        </div>
+                    </div>
+
+                    {/* Authorization */}
+                    <div className={`p-3 rounded border-2 transition-all ${isAuthorized ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                        <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                checked={isAuthorized}
+                                onChange={e => setIsAuthorized(e.target.checked)}
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-xs font-bold text-gray-800">Customer Authorization</span>
+                                <p className="text-[10px] text-gray-600 leading-tight">
+                                    By checking this box, I confirm that the customer has provided written or electronic authorization to automatically charge their account on the schedule defined above. This protects your business from unauthorized charge disputes.
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+
+                    {/* Line Items with One-Time Toggle */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase block">Transaction Items & One-Time Fees</label>
+                        <div className="border rounded overflow-hidden">
+                            <table className="w-full text-[11px] text-left">
+                                <thead className="bg-gray-100 text-gray-600 font-bold uppercase text-[9px]">
+                                    <tr>
+                                        <th className="px-3 py-2">Product/Service</th>
+                                        <th className="px-3 py-2 text-right">Amount</th>
+                                        <th className="px-3 py-2 text-center w-24">One-Time?</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {lineItems.map((item, idx) => (
+                                        <tr key={idx} className="hover:bg-gray-50">
+                                            <td className="px-3 py-2 font-medium">{item.description}</td>
+                                            <td className="px-3 py-2 text-right">${(item.amount || 0).toFixed(2)}</td>
+                                            <td className="px-3 py-2 text-center">
+                                                <button
+                                                    onClick={() => toggleOneTime(idx)}
+                                                    className={`px-2 py-0.5 rounded text-[9px] font-bold transition-colors ${item.isOneTime ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                                >
+                                                    {item.isOneTime ? 'YES' : 'NO'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot className="bg-gray-50 font-bold">
+                                    <tr>
+                                        <td className="px-3 py-2">Recurring Total</td>
+                                        <td className="px-3 py-2 text-right text-blue-700">
+                                            ${lineItems.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
                     </div>
 

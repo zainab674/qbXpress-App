@@ -58,81 +58,112 @@ const VendorCreditCategoryList: React.FC<VendorCreditCategoryListProps> = ({ cat
     };
 
     return (
-        <div className="flex flex-col h-full bg-white select-none">
-            <div className="bg-gray-100 border-b border-gray-300 p-1 flex gap-2">
+        <div className="flex flex-col h-full bg-slate-50 select-none animate-in">
+            {/* Toolbar */}
+            <div className="bg-white border-b border-slate-200 p-2 flex gap-3 items-center shadow-sm z-10">
                 <button
                     onClick={() => { setShowNewForm(true); setEditingId(null); setNewName(''); }}
-                    className="px-4 py-1 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-300 transition-all text-[11px] font-medium text-gray-700"
+                    className="px-5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-[12px] font-semibold flex items-center gap-2 shadow-sm active:scale-95"
                 >
-                    New
+                    <span className="text-lg leading-none">+</span> New Category
                 </button>
+                <div className="h-6 w-px bg-slate-200 mx-1"></div>
+                <span className="text-slate-400 text-[11px] font-medium italic">Double-click any row to edit</span>
             </div>
 
-            <div className="flex-1 overflow-auto">
-                <table className="w-full text-left text-[12px]">
-                    <thead className="bg-gray-50 border-b sticky top-0 font-bold text-[#003366] uppercase tracking-tighter">
-                        <tr>
-                            <th className="px-4 py-1 border-x">Vendor Credit Reason Category</th>
-                            <th className="px-4 py-1 border-x w-20 text-center">Active</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                            <tr
-                                key={c.id}
-                                onDoubleClick={() => handleEdit(c)}
-                                className="hover:bg-blue-600 hover:text-white group cursor-default border-b border-gray-100"
-                            >
-                                <td className="px-4 py-0.5 border-x">{c.name}</td>
-                                <td className="px-4 py-0.5 border-x text-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={c.isActive}
-                                        onChange={() => toggleActive(c)}
-                                        className="accent-blue-600"
-                                    />
-                                </td>
+            {/* Table Container */}
+            <div className="flex-1 overflow-auto custom-scrollbar p-0.5">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden m-2">
+                    <table className="w-full text-left text-[13px] border-collapse">
+                        <thead className="bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-20">
+                            <tr>
+                                <th className="px-6 py-3 font-semibold text-slate-600 uppercase text-[11px] tracking-wider">Vendor Credit Reason Category</th>
+                                <th className="px-6 py-3 w-32 text-center font-semibold text-slate-600 uppercase text-[11px] tracking-wider">Status</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                                <tr
+                                    key={c.id}
+                                    onDoubleClick={() => handleEdit(c)}
+                                    className="hover:bg-blue-50/50 group cursor-pointer transition-colors"
+                                >
+                                    <td className="px-6 py-3.5 text-slate-700 font-medium">{c.name}</td>
+                                    <td className="px-6 py-3.5 text-center">
+                                        <div className="flex items-center justify-center">
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={c.isActive}
+                                                    onChange={() => toggleActive(c)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                                <span className="ml-2 text-[11px] font-medium text-slate-500 w-12 text-left">
+                                                    {c.isActive ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <div className="bg-[#003366] text-white p-1 text-[9px] font-bold uppercase tracking-widest text-center">
-                Double-click to edit category • Ctrl+N for New
+            {/* Info Bar */}
+            <div className="bg-white border-t border-slate-200 px-4 py-2 flex justify-between items-center text-[11px] text-slate-400 font-medium">
+                <div className="flex gap-4">
+                    <span>Total: {categories.length} Categories</span>
+                    <span>Active: {categories.filter(c => c.isActive).length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-slate-600 text-[10px]">Ctrl + N</kbd>
+                    <span>Quick New</span>
+                </div>
             </div>
 
+            {/* Modal */}
             {showNewForm && (
-                <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[2000]">
-                    <div className="bg-[#f0f0f0] border-4 border-[#003366] w-96 shadow-2xl">
-                        <div className="bg-[#003366] p-2 flex justify-between items-center">
-                            <h3 className="text-white font-bold text-xs uppercase tracking-widest">{editingId ? 'Edit Category' : 'New Credit Category'}</h3>
-                            <button onClick={() => setShowNewForm(false)} className="text-white hover:text-red-400 text-sm">✕</button>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] animate-in">
+                    <div className="bg-white rounded-2xl w-[420px] shadow-2xl overflow-hidden border border-white/20 slide-in-from-top-1">
+                        <div className="bg-slate-50 px-6 py-4 flex justify-between items-center border-b border-slate-100">
+                            <h3 className="text-slate-800 font-bold text-sm tracking-tight">
+                                {editingId ? 'Edit Category' : 'Create New Category'}
+                            </h3>
+                            <button
+                                onClick={() => setShowNewForm(false)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                ✕
+                            </button>
                         </div>
-                        <div className="p-6">
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase">Category Name</label>
+                        <div className="p-8">
+                            <div className="space-y-2">
+                                <label className="text-[12px] font-semibold text-slate-500 ml-1">Category Name</label>
                                 <input
                                     autoFocus
-                                    className="border border-gray-400 p-1.5 text-sm outline-none focus:border-blue-600 bg-white"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm transition-all focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none text-slate-700 placeholder:text-slate-300"
                                     value={newName}
                                     onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                                     onChange={e => setNewName(e.target.value)}
                                     placeholder="e.g. Defective Item, Shortage..."
                                 />
                             </div>
-                            <div className="mt-8 flex justify-end gap-3">
+                            <div className="mt-10 flex gap-3">
                                 <button
                                     onClick={() => setShowNewForm(false)}
-                                    className="px-6 py-1.5 border border-gray-400 text-xs font-bold hover:bg-gray-100 transition-colors"
+                                    className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold rounded-xl transition-all active:scale-95"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleSave}
-                                    className="px-8 py-1.5 bg-[#003366] text-white text-xs font-bold hover:bg-blue-900 transition-colors shadow-md"
+                                    className="flex-[1.5] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50"
+                                    disabled={!newName.trim()}
                                 >
-                                    Save
+                                    {editingId ? 'Update Category' : 'Save Category'}
                                 </button>
                             </div>
                         </div>

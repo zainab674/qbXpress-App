@@ -38,10 +38,12 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const [selectedSalesRepId, setSelectedSalesRepId] = useState(initialData?.salesRepId || '');
   const [selectedShipVia, setSelectedShipVia] = useState(initialData?.shipVia || '');
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+  const [exchangeRate, setExchangeRate] = useState(initialData?.exchangeRate || 1);
 
   const lastInvoice = transactions.filter(t => t.type === 'INVOICE').reduce((max, t) => Math.max(max, parseInt(t.refNo) || 0), 1000);
   const [invoiceNo, setInvoiceNo] = useState(initialData?.refNo || (lastInvoice + 1).toString());
   const [memo, setMemo] = useState(initialData?.vendorMessage || initialData?.memo || '');
+  const [internalNotes, setInternalNotes] = useState(initialData?.internalNotes || '');
   const [trackingNo, setTrackingNo] = useState(initialData?.trackingNo || '');
   const [shipDate, setShipDate] = useState(initialData?.shipDate || '');
   const [fob, setFob] = useState(initialData?.fob || '');
@@ -73,6 +75,11 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const [memoOnStatement, setMemoOnStatement] = useState(initialData?.memoOnStatement || '');
   const [attachments, setAttachments] = useState<any[]>(initialData?.attachments || []);
   const [deposit, setDeposit] = useState(initialData?.deposit || 0);
+  const [discountAmount, setDiscountAmount] = useState(initialData?.discountAmount || 0);
+  const [discountPercentage, setDiscountPercentage] = useState(initialData?.discountPercentage || 0);
+  const [isDiscountPercentage, setIsDiscountPercentage] = useState(initialData?.isDiscountPercentage || false);
+  const [lateFee, setLateFee] = useState(initialData?.lateFee || 0);
+  const [tip, setTip] = useState(initialData?.tip || 0);
   const [shippingDetails, setShippingDetails] = useState(initialData?.shippingDetails || {
     shipmentCost: 0,
     innerPackDimensions: { length: 0, width: 0, height: 0, unit: 'in' },
@@ -86,7 +93,9 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const taxItem = availableItems.find(i => i.id === selectedTaxItemId);
   const taxRate = (taxItem?.taxRate || taxItem?.taxRateValue || 0) / 100;
   const taxAmount = lineItems.filter(i => i.tax).reduce((acc, item) => acc + (item.amount || 0) * taxRate, 0);
-  const total = subtotal + taxAmount - deposit;
+
+  const discountVal = isDiscountPercentage ? (subtotal * (discountPercentage / 100)) : discountAmount;
+  const total = subtotal + taxAmount + lateFee + tip - discountVal - deposit;
   const balanceDue = (customer?.balance || 0) + total;
 
   const getDueDate = () => {
@@ -231,6 +240,13 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
       memoOnStatement,
       attachments,
       deposit,
+      discountAmount,
+      discountPercentage,
+      isDiscountPercentage,
+      lateFee,
+      tip,
+      internalNotes,
+      exchangeRate,
       shippingDetails,
       items: validItems.map(i => ({
         id: i.id || crypto.randomUUID(),
@@ -523,6 +539,8 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
             </select>
             <div className="text-xs font-bold text-gray-600 uppercase self-center">Due Date</div>
             <div className="px-2 py-1.5 text-sm text-right text-red-600 font-black border-b-2 border-dashed border-red-200 bg-red-50/30">{getDueDate()}</div>
+            <div className="text-xs font-bold text-gray-600 uppercase self-center">Exch. Rate</div>
+            <input type="number" step="0.0001" className="border-b-2 border-gray-300 px-2 py-1.5 text-sm text-right outline-none focus:border-blue-600 font-bold" value={exchangeRate} onChange={e => setExchangeRate(parseFloat(e.target.value) || 1)} />
           </div>
         </div>
 
@@ -596,6 +614,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
               </div>
             </div>
             <div><label className="text-[10px] font-bold text-gray-500 uppercase italic block mb-1">Note to customer</label><textarea className="w-full max-w-md border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-16 resize-none focus:ring-1 ring-blue-500" placeholder="Thank you for your business." value={memo} onChange={e => setMemo(e.target.value)} /></div>
+            <div><label className="text-[10px] font-bold text-yellow-600 uppercase italic block mb-1">Internal Notes (Hidden from customer)</label><textarea className="w-full max-w-md border border-yellow-300 rounded p-2 text-xs bg-yellow-50 outline-none h-16 resize-none focus:ring-1 ring-yellow-500 font-medium" placeholder="Keep private..." value={internalNotes} onChange={e => setInternalNotes(e.target.value)} /></div>
             <div><label className="text-[10px] font-bold text-gray-500 uppercase italic block mb-1">Memo on statement (hidden)</label><textarea className="w-full max-w-md border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-12 resize-none focus:ring-1 ring-blue-500" placeholder="Statement memo..." value={memoOnStatement} onChange={e => setMemoOnStatement(e.target.value)} /></div>
             <div className="flex flex-col gap-2 pt-4">
               <label className="text-xs font-bold text-gray-600 uppercase italic">Attachments</label>
@@ -627,6 +646,41 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
               </div>
               <span className="font-black text-lg text-red-700">${taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
+            <div className="flex justify-between items-center gap-4 text-sm text-gray-700 border-t pt-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold">Discount</span>
+                <div className="flex border rounded overflow-hidden">
+                  <button onClick={() => setIsDiscountPercentage(false)} className={`px-2 py-0.5 text-[10px] font-bold ${!isDiscountPercentage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>$</button>
+                  <button onClick={() => setIsDiscountPercentage(true)} className={`px-2 py-0.5 text-[10px] font-bold ${isDiscountPercentage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>%</button>
+                </div>
+              </div>
+              <div className="relative">
+                <span className="absolute left-2 top-1 text-gray-400 text-xs">{isDiscountPercentage ? '%' : '$'}</span>
+                <input
+                  type="number"
+                  className="w-32 border-2 border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm font-black focus:border-blue-500 outline-none"
+                  value={isDiscountPercentage ? discountPercentage : discountAmount}
+                  onChange={e => isDiscountPercentage ? setDiscountPercentage(parseFloat(e.target.value) || 0) : setDiscountAmount(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between text-sm text-gray-700 items-center border-t pt-2">
+              <span className="font-bold">Late Fee</span>
+              <div className="relative">
+                <span className="absolute left-2 top-1 text-gray-400">$</span>
+                <input type="number" className="w-32 border-2 border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm font-black focus:border-blue-500 outline-none" value={lateFee} onChange={e => setLateFee(parseFloat(e.target.value) || 0)} />
+              </div>
+            </div>
+
+            <div className="flex justify-between text-sm text-gray-700 items-center border-t pt-2">
+              <span className="font-bold">Tip</span>
+              <div className="relative">
+                <span className="absolute left-2 top-1 text-gray-400">$</span>
+                <input type="number" className="w-32 border-2 border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm font-black focus:border-blue-500 outline-none" value={tip} onChange={e => setTip(parseFloat(e.target.value) || 0)} />
+              </div>
+            </div>
+
             <div className="flex justify-between text-sm text-gray-700 items-center border-t pt-2">
               <span className="font-bold">Deposit</span>
               <div className="relative">
@@ -748,6 +802,14 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
             terms: terms.find(t => t.id === selectedTermId)?.name,
             dueDate: getDueDate(),
             taxItemId: selectedTaxItemId,
+            discountAmount,
+            discountPercentage,
+            isDiscountPercentage,
+            lateFee,
+            tip,
+            internalNotes,
+            exchangeRate,
+            attachments,
             items: lineItems.filter(i => (i.amount || 0) !== 0 || i.description).map(i => ({
               id: i.id || crypto.randomUUID(),
               itemId: i.itemId,

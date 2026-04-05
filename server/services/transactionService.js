@@ -10,6 +10,9 @@ const PayrollLiability = require('../models/PayrollLiability');
 const InventoryLot = require('../models/InventoryLot');
 
 const transactionService = {
+    getOne: async (id, userId, companyId) => {
+        return await Transaction.findOne({ id, userId, companyId });
+    },
     saveTransaction: async (txData, userRole, userId, companyId) => {
         const session = await mongoose.startSession();
         session.startTransaction();
@@ -29,10 +32,20 @@ const transactionService = {
                 // 2. Save/Update Transaction
                 let savedTx;
                 t.userId = userId; t.companyId = companyId;
+
                 if (t.id) {
-                    savedTx = await Transaction.findOneAndUpdate({ id: t.id, userId, companyId }, t, { upsert: true, new: true, session });
+                    const existing = await Transaction.findOne({ id: t.id, userId, companyId }).session(session);
+                    if (existing) {
+                        // Update existing
+                        savedTx = await Transaction.findOneAndUpdate({ id: t.id, userId, companyId }, t, { new: true, session });
+                    } else {
+                        // Create new with provided ID
+                        savedTx = new Transaction(t);
+                        await savedTx.save({ session });
+                    }
                 } else {
-                    t.id = t.id || crypto.randomUUID();
+                    // Create new with generated ID
+                    t.id = crypto.randomUUID();
                     savedTx = new Transaction(t);
                     await savedTx.save({ session });
                 }
@@ -166,8 +179,20 @@ const transactionService = {
             if (t.bankAccountId) {
                 await Account.findOneAndUpdate({ id: t.bankAccountId }, { $inc: { balance: total } }, { session });
             }
-            const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
-            if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: -total } }, { session });
+
+            // Handle direct account categorization (from bank feeds) vs standard deposits from UF
+            const hasDirectAccounts = t.items.some(item => item.accountId);
+            if (hasDirectAccounts) {
+                for (const item of t.items) {
+                    if (item.accountId) {
+                        const amount = (item.amount || 0) * multiplier;
+                        await Account.findOneAndUpdate({ id: item.accountId }, { $inc: { balance: amount } }, { session });
+                    }
+                }
+            } else {
+                const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
+                if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: -total } }, { session });
+            }
 
             const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
             for (const item of t.items) {
@@ -189,8 +214,16 @@ const transactionService = {
                 await Customer.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: -total } }, { session });
                 if (arAccount) await Account.findOneAndUpdate({ _id: arAccount._id }, { $inc: { balance: -total } }, { session });
 
-                const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
-                if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: total } }, { session });
+                let depositAccount;
+                if (t.depositToId) {
+                    depositAccount = await Account.findOne({ id: t.depositToId, userId: t.userId, companyId: t.companyId }).session(session);
+                } else {
+                    depositAccount = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
+                }
+
+                if (depositAccount) {
+                    await Account.findOneAndUpdate({ _id: depositAccount._id }, { $inc: { balance: total } }, { session });
+                }
 
                 if (t.appliedCreditIds) {
                     if (multiplier === 1) {
@@ -219,6 +252,14 @@ const transactionService = {
                 } else {
                     const uf = await Account.findOne({ name: 'Undeposited Funds', userId: t.userId, companyId: t.companyId }).session(session);
                     if (uf) await Account.findOneAndUpdate({ _id: uf._id }, { $inc: { balance: total } }, { session });
+                }
+            }
+
+            // Sales Tax Posting
+            if ((isInvoice || isReceipt) && t.taxAmount) {
+                const taxAccount = await Account.findOne({ name: 'Sales Tax Payable', userId: t.userId, companyId: t.companyId }).session(session);
+                if (taxAccount) {
+                    await Account.findOneAndUpdate({ _id: taxAccount._id }, { $inc: { balance: (t.taxAmount * multiplier) } }, { session });
                 }
             }
 
@@ -302,18 +343,82 @@ const transactionService = {
                         }
                     }
                 }
+                // Total-level adjustments
+                if (t.discountAmount || t.discountPercentage) {
+                    const sub = t.subtotal || 0;
+                    const disc = t.isDiscountPercentage ? (sub * ((t.discountPercentage || 0) / 100)) : (t.discountAmount || 0);
+                    if (disc > 0) {
+                        const discAcc = await Account.findOne({ name: 'Discounts Given', userId: t.userId, companyId: t.companyId }).session(session);
+                        if (discAcc) await Account.findOneAndUpdate({ _id: discAcc._id }, { $inc: { balance: -disc * multiplier } }, { session });
+                    }
+                }
+                if (t.lateFee) {
+                    const feeAcc = await Account.findOne({ name: 'Late Fee Income', userId: t.userId, companyId: t.companyId }).session(session);
+                    if (feeAcc) await Account.findOneAndUpdate({ _id: feeAcc._id }, { $inc: { balance: t.lateFee * multiplier } }, { session });
+                }
+                if (t.tip) {
+                    const tipAcc = await Account.findOne({ name: 'Tips', userId: t.userId, companyId: t.companyId }).session(session);
+                    if (tipAcc) await Account.findOneAndUpdate({ _id: tipAcc._id }, { $inc: { balance: t.tip * multiplier } }, { session });
+                }
             }
         } else if (t.type === 'CREDIT_MEMO') {
             await Customer.findOneAndUpdate({ id: t.entityId }, { $inc: { balance: -total } }, { session });
             const arAccount = await Account.findOne({ name: 'Accounts Receivable', userId: t.userId, companyId: t.companyId }).session(session);
             if (arAccount) await Account.findOneAndUpdate({ _id: arAccount._id }, { $inc: { balance: -total } }, { session });
 
+            // Revenue Impact: Debit "Returns and Allowances" or a Sales account
+            // We'll look for "Returns and Allowances" or use the item's income account
             for (const lineItem of t.items) {
-                const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }], userId: t.userId, companyId: t.companyId }).session(session);
-                if (item && item.type === 'Inventory Part') {
-                    await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: (lineItem.quantity || 0) * multiplier } }, { session });
+                const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }, { id: lineItem.itemId }], userId: t.userId, companyId: t.companyId }).session(session);
+                const itemAmount = (lineItem.amount || 0) * multiplier; // Apply multiplier here
+                const qty = (lineItem.quantity || 0) * multiplier; // Apply multiplier here
+
+                if (item && item.incomeAccountId) {
+                    await Account.findOneAndUpdate({ id: item.incomeAccountId }, { $inc: { balance: -itemAmount } }, { session });
+                } else {
+                    // Fallback to a generic "Returns and Allowances" if it exists, otherwise "Sales"
+                    const fallbackAcc = await Account.findOne({ name: { $in: ['Returns and Allowances', 'Sales', 'Income'] }, userId: t.userId, companyId: t.companyId }).session(session);
+                    if (fallbackAcc) await Account.findOneAndUpdate({ _id: fallbackAcc._id }, { $inc: { balance: -itemAmount } }, { session });
+                }
+
+            }
+        } else if (t.type === 'REFUND_RECEIPT') {
+            // Refund Receipt: Bank Source DECREASES, Income/AR DECREASES
+            const bankAccId = t.depositToId; // Reused field for refund source
+            if (bankAccId) {
+                const bankAcc = await Account.findOne({ id: bankAccId }).session(session);
+                if (bankAcc) await Account.findOneAndUpdate({ _id: bankAcc._id }, { $inc: { balance: -total } }, { session });
+            }
+
+            // Debit Income Accounts (Reduction of Revenue)
+            for (const lineItem of t.items) {
+                const item = await Item.findOne({ $or: [{ id: lineItem.id }, { name: lineItem.description }, { id: lineItem.itemId }], userId: t.userId, companyId: t.companyId }).session(session);
+                const itemAmount = lineItem.amount || 0;
+
+                if (item && item.incomeAccountId) {
+                    await Account.findOneAndUpdate({ id: item.incomeAccountId }, { $inc: { balance: -itemAmount } }, { session });
+                } else {
+                    const fallbackAcc = await Account.findOne({ name: { $in: ['Returns and Allowances', 'Sales', 'Income'] }, userId: t.userId, companyId: t.companyId }).session(session);
+                    if (fallbackAcc) await Account.findOneAndUpdate({ _id: fallbackAcc._id }, { $inc: { balance: -itemAmount } }, { session });
+                }
+
+                // Inventory reversal if applicable
+                if (item && (item.type === 'Inventory Part' || item.type === 'Inventory Assembly')) {
+                    const qty = lineItem.quantity || 0;
+                    const costVal = (item.cost || 0) * qty;
+                    await Item.findOneAndUpdate({ _id: item._id }, { $inc: { onHand: qty } }, { session });
+
+                    const assetAcc = await Account.findOne({ name: 'Inventory Asset', userId: t.userId }).session(session);
+                    const cogsAcc = await Account.findOne({ name: 'Cost of Goods Sold', userId: t.userId }).session(session);
+
+                    if (assetAcc) await Account.findOneAndUpdate({ _id: assetAcc._id }, { $inc: { balance: costVal } }, { session });
+                    if (cogsAcc) await Account.findOneAndUpdate({ _id: cogsAcc._id }, { $inc: { balance: -costVal } }, { session });
                 }
             }
+        } else if (t.type === 'DELAYED_CHARGE' || t.type === 'DELAYED_CREDIT') {
+            // These are non-posting transactions. They do not impact accounts.
+            console.log(`[transactionService] skipping accounting for non-posting type: ${t.type}`);
+            return;
         } else if (t.type === 'TRANSFER') {
             if (t.transferFromId) await Account.findOneAndUpdate({ id: t.transferFromId }, { $inc: { balance: -total } }, { session });
             if (t.transferToId) await Account.findOneAndUpdate({ id: t.transferToId }, { $inc: { balance: total } }, { session });
@@ -468,9 +573,36 @@ const transactionService = {
             }
         }
         if (t.purchaseOrderId) {
-            await Transaction.findOneAndUpdate({ id: t.purchaseOrderId }, { status: multiplier === 1 ? 'CLOSED' : 'OPEN' }, { session });
+            const po = await Transaction.findOne({ id: t.purchaseOrderId, userId: t.userId, companyId: t.companyId }).session(session);
+            if (po) {
+                let allItemsClosed = true;
+                const updatedPoItems = po.items.map(poItem => {
+                    const receivedItem = t.items.find(ri => (ri.itemId || ri.id) === (poItem.itemId || poItem.id));
+                    if (receivedItem) {
+                        poItem.receivedQuantity = (poItem.receivedQuantity || 0) + (receivedItem.quantity * multiplier);
+                        if (poItem.receivedQuantity >= poItem.quantity) {
+                            poItem.isClosed = true;
+                        } else {
+                            poItem.isClosed = false;
+                        }
+                    }
+                    if (!poItem.isClosed) allItemsClosed = false;
+                    return poItem;
+                });
+
+                let newStatus = 'PARTIALLY_RECEIVED';
+                if (allItemsClosed) newStatus = 'CLOSED';
+                if (updatedPoItems.every(i => (i.receivedQuantity || 0) <= 0)) newStatus = 'OPEN';
+
+                await Transaction.findOneAndUpdate(
+                    { _id: po._id },
+                    { items: updatedPoItems, status: newStatus },
+                    { session }
+                );
+            }
         }
     }
 };
 
 module.exports = transactionService;
+

@@ -12,9 +12,10 @@ interface Props {
   onDelete: (id: string) => void;
   onClose: () => void;
   initialData?: any;
+  onMakeRecurring?: (data: any) => void;
 }
 
-const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, paymentMethods, onSave, onDelete, onClose, initialData }) => {
+const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, paymentMethods, onSave, onDelete, onClose, initialData, onMakeRecurring }) => {
   const [activeTab, setActiveTab] = useState('Main');
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialData?.entityId || '');
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
@@ -27,9 +28,19 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
   const [shipDate, setShipDate] = useState(initialData?.shipDate || '');
   const [trackingNo, setTrackingNo] = useState(initialData?.trackingNo || '');
   const [fob, setFob] = useState(initialData?.fob || '');
+  const [email, setEmail] = useState(initialData?.email || '');
+  const [cc, setCc] = useState(initialData?.cc || '');
+  const [bcc, setBcc] = useState(initialData?.bcc || '');
+  const [location, setLocation] = useState(initialData?.location || '');
+  const [discountAmount, setDiscountAmount] = useState(initialData?.discountAmount || 0);
+  const [discountPercentage, setDiscountPercentage] = useState(initialData?.discountPercentage || 0);
+  const [isDiscountPercentage, setIsDiscountPercentage] = useState(initialData?.isDiscountPercentage || false);
+  const [taxRate, setTaxRate] = useState(initialData?.taxRate || 0);
+  const [memoOnStatement, setMemoOnStatement] = useState(initialData?.memoOnStatement || '');
+  const [attachments, setAttachments] = useState<any[]>(initialData?.attachments || []);
   const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
     initialData?.items?.map((li: any) => ({ ...li, id: li.id || Math.random().toString() })) ||
-    [{ id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0, lotNumber: '' }]
+    [{ id: Math.random().toString(), itemId: '', description: '', quantity: 1, rate: 0, amount: 0, tax: false, lotNumber: '' }]
   );
 
   const [availableLotsMap, setAvailableLotsMap] = useState<Record<string, any[]>>({});
@@ -72,9 +83,12 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
     setLineItems([...lineItems, { id: Math.random().toString(), itemId: '', description: '', quantity: 0, rate: 0, amount: 0, lotNumber: '' }]);
   };
 
-  const total = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
+  const subtotal = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
+  const taxAmount = lineItems.filter(li => li.tax).reduce((acc, li) => acc + ((li.amount || 0) * (taxRate / 100)), 0);
+  const discVal = isDiscountPercentage ? (subtotal * (discountPercentage / 100)) : discountAmount;
+  const total = subtotal + taxAmount - discVal;
 
-  const handleSave = async () => {
+  const handleSave = async (send: boolean = false) => {
     const tx = {
       id: initialData?.id || crypto.randomUUID(),
       type: 'SALES_RECEIPT',
@@ -89,10 +103,24 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
       shipDate,
       trackingNo,
       fob,
+      email,
+      cc,
+      bcc,
+      location,
+      discountAmount,
+      discountPercentage,
+      isDiscountPercentage,
+      taxAmount,
+      taxRate,
       total,
+      memoOnStatement,
+      attachments,
       items: lineItems.filter(li => li.itemId)
     };
     await onSave(tx);
+    if (send) {
+      alert(`Sales Receipt #${receiptNo} has been queued for sending to ${email}`);
+    }
     onClose();
   };
 
@@ -117,8 +145,25 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
           {activeTab === 'Main' && (
             <>
               <button onClick={handleAddItem} className="flex flex-col items-center group"><div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-green-600 hover:bg-green-100 transition-colors">✚</div><span className="text-[9px] font-bold mt-1">New Row</span></button>
-              <button onClick={handleSave} className="flex flex-col items-center group"><div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-blue-700 hover:bg-blue-100 transition-colors">💾</div><span className="text-[9px] font-bold mt-1">Save</span></button>
+              <button onClick={() => handleSave()} className="flex flex-col items-center group"><div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-blue-700 hover:bg-blue-100 transition-colors">💾</div><span className="text-[9px] font-bold mt-1">Save</span></button>
+              <button onClick={() => handleSave(true)} className="flex flex-col items-center group"><div className="w-8 h-8 bg-blue-600 border rounded flex items-center justify-center text-white hover:bg-blue-700 transition-colors">✉</div><span className="text-[9px] font-bold mt-1">Save & Send</span></button>
               <button onClick={handleDelete} className="flex flex-col items-center group"><div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-red-600 hover:bg-red-100 transition-colors">✖</div><span className="text-[9px] font-bold mt-1">Delete</span></button>
+              <button
+                onClick={() => onMakeRecurring?.({
+                  type: 'SALES_RECEIPT',
+                  entityId: selectedCustomerId,
+                  items: lineItems.filter(li => li.itemId),
+                  total,
+                  taxRate,
+                  depositToId: depositTo,
+                  paymentMethod: pmtMethod,
+                  email
+                })}
+                className="flex flex-col items-center group"
+              >
+                <div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-purple-600 hover:bg-purple-100 transition-colors">🔄</div>
+                <span className="text-[9px] font-bold mt-1">Memorize</span>
+              </button>
               <button onClick={onClose} className="flex flex-col items-center group"><div className="w-8 h-8 bg-gray-50 border rounded flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">⎋</div><span className="text-[9px] font-bold mt-1">Close</span></button>
             </>
           )}
@@ -149,22 +194,30 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
         <div className="flex justify-between items-start mb-6">
           <h1 className="text-4xl font-serif italic text-blue-900/80">Enter Sales Receipt</h1>
           <div className="text-right">
-            <div className="text-[10px] font-bold text-gray-500 uppercase">Sale No.</div>
+            <div className="text-[10px] font-bold text-gray-500 uppercase">Receipt No.</div>
             <input className="border border-gray-300 rounded px-2 py-1 text-xs bg-blue-50 w-24 outline-none font-mono" value={receiptNo} onChange={e => setReceiptNo(e.target.value)} />
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          <div className="col-span-2 flex flex-col">
-            <label className="text-[10px] font-bold text-gray-500 uppercase italic">Customer:Job</label>
-            <select className="border border-gray-300 rounded px-2 py-1 text-xs bg-blue-50 outline-none" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}>
+        <div className="grid grid-cols-4 gap-6 mb-8 bg-[#fafafa] p-6 border rounded shadow-md">
+          <div className="col-span-1 flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Customer:Job</label>
+            <select className="border-b-2 border-blue-200 p-1 text-xs bg-blue-50/10 font-bold outline-none focus:border-blue-500" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}>
               <option value="">&lt;Select Customer&gt;</option>
               {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-500 uppercase italic">Date</label>
-            <input type="text" className="border border-gray-300 rounded px-2 py-1 text-xs bg-blue-50 outline-none" value={date} onChange={e => setDate(e.target.value)} />
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Email</label>
+            <input className="border-b-2 border-gray-200 p-1 text-xs bg-transparent outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} placeholder="customer@example.com" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Location</label>
+            <input className="border-b-2 border-gray-200 p-1 text-xs bg-transparent outline-none focus:border-blue-500" value={location} onChange={e => setLocation(e.target.value)} placeholder="Main Store" />
+          </div>
+          <div className="flex flex-col gap-1 text-right">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Date</label>
+            <input type="date" className="border-b-2 border-gray-200 p-1 text-xs bg-transparent text-right outline-none focus:border-blue-500 font-bold" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
 
@@ -176,7 +229,7 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
             </select>
           </div>
           <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-500 uppercase italic">Check No.</label>
+            <label className="text-[10px] font-bold text-gray-500 uppercase italic">Reference No.</label>
             <input className="border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none font-mono" value={checkNo} onChange={e => setCheckNo(e.target.value)} />
           </div>
           <div className="flex flex-col col-span-2">
@@ -196,6 +249,7 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
                 <th className="px-3 py-2 text-left border-r w-48">Item</th>
                 <th className="px-3 py-2 text-left border-r">Description</th>
                 <th className="px-3 py-2 text-left border-r w-32">Lot Number</th>
+                <th className="px-3 py-2 text-left border-r w-12">Tax</th>
                 <th className="px-3 py-2 text-right border-r w-24">Rate</th>
                 <th className="px-3 py-2 text-right w-24">Amount</th>
               </tr>
@@ -225,6 +279,9 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
                       ))}
                     </select>
                   </td>
+                  <td className="border-r p-0 text-center">
+                    <input type="checkbox" className="w-4 h-4 cursor-pointer mt-2" checked={item.tax || false} onChange={e => updateLineItem(item.id!, { tax: e.target.checked })} />
+                  </td>
                   <td className="border-r p-0"><input type="number" className="w-full h-full px-2 outline-none bg-transparent text-right font-mono" value={item.rate || ''} onChange={e => updateLineItem(item.id!, { rate: parseFloat(e.target.value) || 0 })} /></td>
                   <td className="px-3 text-right font-bold text-blue-900 font-mono">${(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
@@ -233,15 +290,92 @@ const SalesReceiptForm: React.FC<Props> = ({ customers, accounts, items, payment
             </tbody>
           </table>
         </div>
-        <div className="flex justify-end mt-8">
-          <div className="bg-blue-50/50 p-4 border rounded min-w-[300px]">
+        <div className="flex justify-between items-start mt-8">
+          <div className="bg-white p-6 border rounded shadow-md border-l-8 border-l-blue-600 w-1/2">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic block mb-2">Message on Sales Receipt</label>
+            <textarea
+              className="w-full border-2 border-gray-100 p-3 text-xs h-20 outline-none focus:border-blue-200 bg-blue-50/10 rounded transition-all resize-none"
+              placeholder="Note to customer..."
+              value={memo}
+              onChange={e => setMemo(e.target.value)}
+            />
+
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic block mt-4 mb-2">Message Displayed on Statement</label>
+            <input
+              type="text"
+              className="w-full border-b-2 border-gray-100 p-2 text-xs outline-none focus:border-blue-200 bg-transparent"
+              placeholder="Appears on customer statements..."
+              value={memoOnStatement}
+              onChange={e => setMemoOnStatement(e.target.value)}
+            />
+
+            <div className="mt-6 flex flex-col gap-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Attachments (Max 20MB)</label>
+              <div
+                className="border-2 border-dashed border-gray-200 rounded p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                onClick={() => {
+                  const name = prompt("Enter attachment name:");
+                  if (name) setAttachments([...attachments, { id: Math.random().toString(), name, size: 1024, type: 'application/pdf', uploadDate: new Date().toISOString() }]);
+                }}
+              >
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">📎 Drop files or click to upload</span>
+                {attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {attachments.map(a => (
+                      <span key={a.id} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[9px] font-bold">📎 {a.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 border-2 border-blue-900 rounded shadow-xl min-w-[350px] space-y-3">
             <div className="flex justify-between text-sm py-1">
               <span className="text-gray-500 font-bold uppercase italic text-[10px]">Subtotal:</span>
-              <span className="font-mono font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold">${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
-            <div className="flex justify-between text-xl border-t border-blue-200 mt-2 pt-2 text-blue-900 font-serif italic">
-              <span className="font-bold">Total:</span>
-              <span className="font-bold font-mono">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+
+            <div className="flex justify-between items-center gap-4 text-xs border-t pt-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold uppercase text-gray-400">Discount</span>
+                <div className="flex border rounded overflow-hidden scale-75 origin-left">
+                  <button onClick={() => setIsDiscountPercentage(false)} className={`px-2 py-0.5 font-bold ${!isDiscountPercentage ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>$</button>
+                  <button onClick={() => setIsDiscountPercentage(true)} className={`px-2 py-0.5 font-bold ${isDiscountPercentage ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>%</button>
+                </div>
+              </div>
+              <input
+                type="number"
+                className="w-24 border border-gray-300 rounded px-2 py-1 text-right text-xs font-black focus:border-blue-900 outline-none"
+                value={isDiscountPercentage ? discountPercentage : discountAmount}
+                onChange={e => isDiscountPercentage ? setDiscountPercentage(parseFloat(e.target.value) || 0) : setDiscountAmount(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-xs border-t pt-2">
+              <span className="font-bold uppercase text-gray-400">Tax (%)</span>
+              <input type="number" className="w-24 border border-gray-300 rounded px-2 py-1 text-right text-xs font-black focus:border-blue-900 outline-none" value={taxRate} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} />
+            </div>
+
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-bold uppercase text-gray-400">Tax Amount</span>
+              <span className="font-mono font-bold text-red-600">${taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+
+            <div className="flex justify-between text-2xl border-t-2 border-blue-900 mt-2 pt-2 text-blue-900 font-serif italic">
+              <span className="font-black">Total:</span>
+              <span className="font-black font-mono">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+
+            <div className="flex flex-col gap-1 border-t pt-2 opacity-60">
+              <div className="flex justify-between text-[10px] font-bold uppercase italic text-gray-500">
+                <span>Amount Received:</span>
+                <span>${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-black uppercase italic text-blue-700">
+                <span>Balance Due:</span>
+                <span>$0.00</span>
+              </div>
             </div>
           </div>
         </div>

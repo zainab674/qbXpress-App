@@ -98,6 +98,9 @@ export type ViewState =
   | 'PREFERENCES'
   | 'REORDER_ITEMS'
   | 'PRINTER_SETUP'
+  | 'DELAYED_CHARGE'
+  | 'DELAYED_CREDIT'
+  | 'REFUND_RECEIPT'
   | 'COMPANY_FILE'
   | 'SHORTCUT_MODAL'
   | 'SETUP_WIZARD'
@@ -143,10 +146,20 @@ export interface BankTransaction {
   id: string;
   date: string;
   description: string;
+  originalDescription?: string;
   amount: number;
   bankAccountId: string;
-  status: 'MATCHED' | 'UNMATCHED' | 'ADDED';
+  category?: string;
+  type?: 'DEBIT' | 'CREDIT';
+  status: 'FOR_REVIEW' | 'CATEGORIZED' | 'EXCLUDED' | 'MATCHED' | 'UNMATCHED' | 'ADDED';
   potentialMatchId?: string;
+}
+
+export interface BankRule {
+  id: string;
+  descriptionContains: string;
+  suggestedCategoryId: string;
+  isActive: boolean;
 }
 
 export interface Note {
@@ -711,6 +724,9 @@ export interface TransactionItem {
   accountId?: string;    // Expense Account
   creditCategoryId?: string; // Vendor Credit Category
   lotNumber?: string;    // Lot Number Tracking
+  isOneTime?: boolean;   // Recurring Template: Only includes in first generation
+  receivedQuantity?: number; // PO Tracking
+  isClosed?: boolean;        // PO Tracking
 }
 
 export interface Transaction {
@@ -732,6 +748,8 @@ export interface Transaction {
   paymentMethod?: string;
   appliedCreditIds?: string[];
   purchaseOrderId?: string;
+  customerId?: string; // For PO Ship-To or Job Linking
+  customerInvoiceNo?: string; // Link to customer's invoice
   expectedDate?: string;
   vendorMessage?: string;
   itemReceiptId?: string;
@@ -756,6 +774,9 @@ export interface Transaction {
   memoOnStatement?: string;
   attachments?: Attachment[];
   deposit?: number;
+  acceptedBy?: string;
+  acceptedDate?: string;
+  customFieldValues?: Record<string, any>;
   BillAddr?: Address;
   ShipAddr?: Address;
   shippingDetails?: {
@@ -764,6 +785,14 @@ export interface Transaction {
     outerBoxDimensions?: { length: number; width: number; height: number; unit: string };
     masterCartonDimensions?: { length: number; width: number; height: number; unit: string };
   };
+  discountAmount?: number;
+  discountPercentage?: number;
+  isDiscountPercentage?: boolean;
+  lateFee?: number;
+  tip?: number;
+  internalNotes?: string;
+  location?: string;
+  taxRate?: number;
 }
 
 export interface Term {
@@ -793,6 +822,10 @@ export interface RecurringTemplate {
   endAfterOccurrences?: number;
   endDate?: string;
   transactionData: Partial<Transaction>;
+  isAuthorized: boolean;
+  authorizationDate?: string;
+  lastProcessedDate?: string;
+  nextScheduledDate?: string;
 }
 
 export interface Vehicle {

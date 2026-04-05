@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
-import { Customer, Transaction } from '../types';
+import { Customer, Transaction, Account } from '../types';
 
 interface Props {
   customers: Customer[];
   transactions: Transaction[];
+  accounts: Account[];
   paymentMethods: string[];
   customerCreditCategories: any[];
   initialData?: { customerId?: string, invoiceId?: string };
@@ -12,12 +13,15 @@ interface Props {
   onClose: () => void;
 }
 
-const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentMethods, customerCreditCategories, initialData, onSave, onClose }) => {
+const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, accounts, paymentMethods, customerCreditCategories, initialData, onSave, onClose }) => {
   const [selectedCustId, setSelectedCustId] = useState(initialData?.customerId || '');
   const [amount, setAmount] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [pmtMethod, setPmtMethod] = useState(paymentMethods[0] || 'Check');
   const [refNo, setRefNo] = useState('');
+  const [depositToId, setDepositToId] = useState('');
+  const [memo, setMemo] = useState('');
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>(initialData?.invoiceId ? [initialData.invoiceId] : []);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
 
@@ -51,6 +55,9 @@ const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentM
       total: amount,
       status: 'CLEARED',
       paymentMethod: pmtMethod,
+      depositToId: depositToId || undefined,
+      memo: memo || undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
       appliedCreditIds: [...selectedInvoices, ...selectedCreditIds]
     };
 
@@ -151,7 +158,7 @@ const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentM
             </div>
           </div>
 
-          <div className="flex gap-6 items-end px-4">
+          <div className="flex gap-6 items-end px-4 py-2">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-gray-500 uppercase">Pmt. Method</label>
               <select className="border p-1 text-xs outline-none bg-white rounded shadow-sm" value={pmtMethod} onChange={e => setPmtMethod(e.target.value)}>
@@ -160,7 +167,20 @@ const ReceivePaymentForm: React.FC<Props> = ({ customers, transactions, paymentM
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-gray-500 uppercase">Ref/Check No.</label>
-              <input className="border p-1 text-xs w-48 outline-none bg-white rounded shadow-sm font-mono" value={refNo} onChange={e => setRefNo(e.target.value)} />
+              <input className="border p-1 text-xs w-32 outline-none bg-white rounded shadow-sm font-mono" value={refNo} onChange={e => setRefNo(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Deposit To</label>
+              <select
+                className="border p-1 text-xs outline-none bg-white rounded shadow-sm w-48"
+                value={depositToId}
+                onChange={e => setDepositToId(e.target.value)}
+              >
+                <option value="">-- Undeposited Funds --</option>
+                {accounts.filter(a => ['Bank', 'Other Current Asset'].includes(a.type)).map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory } from '../types';
+import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, BankTransaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory } from '../types';
 import EntityForm from './EntityForm';
 import ItemForm from './ItemForm';
 import PreferencesDialog from './PreferencesDialog';
@@ -14,6 +14,7 @@ import SalesOrderForm from './SalesOrderForm';
 import CustomerCenter from './CustomerCenter';
 import InvoiceCenter from './InvoiceCenter';
 import InvoiceDisplay from './InvoiceDisplay';
+import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 import SalesOrderDisplay from './SalesOrderDisplay';
 import EstimateDisplay from './EstimateDisplay';
 import BillCenter from './BillCenter';
@@ -79,7 +80,9 @@ import CreditCardChargeForm from './CreditCardChargeForm';
 import MyCompany from './MyCompany';
 import InsightsTab from './InsightsTab';
 import SalesReceiptForm from './SalesReceiptForm';
+import RefundReceiptForm from './RefundReceiptForm';
 import ReceivePaymentForm from './ReceivePaymentForm';
+import DelayedTransactionForm from './DelayedTransactionForm';
 import HomePage from './HomePage';
 import Reminders from './Reminders';
 import ClassList from './ClassList';
@@ -134,6 +137,7 @@ interface WindowRendererProps {
         vendorTypes: string[];
         vendorCreditCategories: VendorCreditCategory[];
         customerCreditCategories: CustomerCreditCategory[];
+        bankFeeds: BankTransaction[];
     };
     handlers: {
         onOpenWindow: (type: ViewState, title: string, params?: any) => void;
@@ -201,7 +205,7 @@ interface WindowRendererProps {
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handlers }) => {
     const { type, id: winId, params } = win;
-    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onDeleteReport, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert } = handlers;
+    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onDeleteReport, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert, refreshData } = handlers;
 
     const businessName = data.companyConfig?.businessName || 'My Company';
 
@@ -220,7 +224,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'INVOICE': return <InvoiceForm customers={data.customers} items={data.items} classes={data.classes} salesReps={data.salesReps} shipVia={data.shipVia} terms={data.terms} transactions={data.transactions} timeEntries={data.timeEntries} mileageEntries={data.mileageEntries} priceLevels={data.priceLevels} onSave={onSaveTransaction} onDelete={onDeleteTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'SALES_ORDER': return <SalesOrderForm customers={data.customers} items={data.items} classes={data.classes} salesReps={data.salesReps} shipVia={data.shipVia} terms={data.terms} transactions={data.transactions} priceLevels={data.priceLevels} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'BILL': return <BillForm vendors={data.vendors} accounts={data.accounts} items={data.items} customers={data.customers} terms={data.terms} transactions={data.transactions} classes={data.classes} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
-        case 'PURCHASE_ORDER': return <PurchaseOrderForm vendors={data.vendors} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
+        case 'PURCHASE_ORDER': return <PurchaseOrderForm vendors={data.vendors} items={data.items} customers={data.customers} classes={data.classes} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'RECEIVE_INVENTORY': return <ReceiveInventoryForm vendors={data.vendors} transactions={data.transactions} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'INVENTORY_ADJUSTMENT': return <InventoryAdjustmentForm items={data.items} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'BUILD_ASSEMBLY': return <BuildAssemblyForm items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
@@ -236,7 +240,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'TAX_LIABILITY': return <ReportView type="TAX_LIABILITY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'TAX_LIABILITY')} params={params} />;
         case 'PHYSICAL_INVENTORY': return <ReportView type="PHYSICAL_INVENTORY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PHYSICAL_INVENTORY')} params={params} />;
         case 'BALANCE_SHEET': return <ReportView type="BS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS')} params={params} />;
-        case 'CUSTOMER_CENTER': return <CustomerCenter customers={data.customers} transactions={data.transactions} onUpdateCustomers={onUpdateCustomers} onOpenWindow={onOpenWindow} onOpenForm={(type, entity) => onOpenForm('CUSTOMER', entity)} onOpenInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenPayment={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payment')} onOpenReceipt={() => onOpenWindow('SALES_RECEIPT', 'Sales Receipt')} onOpenEstimate={() => onOpenWindow('ESTIMATE', 'Estimate')} onOpenSalesOrder={() => onOpenWindow('SALES_ORDER', 'Sales Order')} onOpenCredit={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} refreshData={handlers.refreshData} />;
+        case 'CUSTOMER_CENTER': return <CustomerCenter customers={data.customers} transactions={data.transactions} onUpdateCustomers={onUpdateCustomers} onOpenWindow={onOpenWindow} onOpenForm={(type, entity) => onOpenForm('CUSTOMER', entity)} onOpenInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenPayment={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payment')} onOpenReceipt={() => onOpenWindow('SALES_RECEIPT', 'Sales Receipt')} onOpenEstimate={() => onOpenWindow('ESTIMATE', 'Estimate')} onOpenSalesOrder={() => onOpenWindow('SALES_ORDER', 'Sales Order')} onOpenCredit={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} onOpenDelayedCharge={() => onOpenWindow('DELAYED_CHARGE', 'Delayed Charge')} onOpenDelayedCredit={() => onOpenWindow('DELAYED_CREDIT', 'Delayed Credit')} refreshData={handlers.refreshData} />;
         case 'INVOICE_CENTER': return <InvoiceCenter transactions={data.transactions} customers={data.customers} terms={data.terms} onOpenInvoice={(inv) => onOpenWindow('INVOICE_DISPLAY', `Invoice #${inv.refNo}`, { transactionId: inv.id })} onOpenNewInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenWindow={onOpenWindow} />;
         case 'INVOICE_DISPLAY': {
             const invoice = data.transactions.find(t => t.id === params?.transactionId);
@@ -372,7 +376,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'CURRENCY_LIST': return <CurrencyList currencies={data.currencies} exchangeRates={data.exchangeRates} onUpdateRates={onUpdateRates} onUpdateCurrencies={handlers.handleSaveCurrency} onClose={() => onCloseWindow(winId)} />;
         case 'FIXED_ASSET_MANAGER': return <FixedAssetManager fixedAssets={data.fixedAssets} accounts={data.accounts} vendors={data.vendors} onSave={onUpdateFixedAssets} onClose={() => onCloseWindow(winId)} />;
         case 'COLLECTION_LETTERS': return <CollectionLetterGenerator customers={data.customers} transactions={data.transactions} onClose={() => onCloseWindow(winId)} />;
-        case 'BANK_FEED_MATCHING': return <BankFeedMatching transactions={data.transactions} accounts={data.accounts} handlers={{ onSaveTransaction }} onClose={() => onCloseWindow(winId)} />;
+        case 'BANK_FEED_MATCHING': return <BankFeedMatching bankFeeds={data.bankFeeds} transactions={data.transactions} accounts={data.accounts} handlers={{ onSaveTransaction, refreshData }} onClose={() => onCloseWindow(winId)} />;
         case 'LAYOUT_DESIGNER': return <LayoutDesigner onClose={() => onCloseWindow(winId)} />;
         case 'WEEKLY_TIMESHEET': return <WeeklyTimesheet employees={data.employees} customers={data.customers} items={data.items} onSave={(entries) => setTimeEntries([...data.timeEntries, ...entries])} onClose={() => onCloseWindow(winId)} />;
         case 'SINGLE_TIME_ENTRY': return <SingleTimeEntry employees={data.employees} customers={data.customers} items={data.items} onSave={(entry) => setTimeEntries([...data.timeEntries, entry])} onClose={() => onCloseWindow(winId)} />;
@@ -384,9 +388,13 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'CREDIT_CARD_CHARGE': return <CreditCardChargeForm accounts={data.accounts} vendors={data.vendors} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'MY_COMPANY': return <MyCompany config={data.companyConfig} onUpdate={setCompanyConfig} />;
         case 'ESTIMATE': return <EstimateForm customers={data.customers} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} onConvertToInvoice={(est) => { onSaveTransaction(est); onOpenWindow('INVOICE', 'Invoice', { initialData: est }); }} initialData={params?.initialData} />;
-        case 'SALES_RECEIPT': return <SalesReceiptForm customers={data.customers} items={data.items} accounts={data.accounts} paymentMethods={data.paymentMethods} onSave={onSaveTransaction} onDelete={onDeleteTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData || data.transactions.find(t => t.id === params?.transactionId)} />;
-        case 'RECEIVE_PAYMENT': return <ReceivePaymentForm customers={data.customers} transactions={data.transactions} paymentMethods={data.paymentMethods} customerCreditCategories={data.customerCreditCategories} initialData={params} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
-        case 'CREDIT_MEMO': return <CreditMemoForm customers={data.customers} items={data.items} customerCreditCategories={data.customerCreditCategories} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
+        case 'SALES_RECEIPT': return <SalesReceiptForm customers={data.customers} items={data.items} accounts={data.accounts} paymentMethods={data.paymentMethods} onSave={onSaveTransaction} onDelete={onDeleteTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData || data.transactions.find(t => t.id === params?.transactionId)} onMakeRecurring={(data) => onOpenWindow('RECURRING_DIALOG', 'Memorize Transaction', { baseTransaction: data })} />;
+        case 'RECEIVE_PAYMENT': return <ReceivePaymentForm customers={data.customers} transactions={data.transactions} accounts={data.accounts} paymentMethods={data.paymentMethods} customerCreditCategories={data.customerCreditCategories} initialData={params} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
+        case 'CREDIT_MEMO': return <CreditMemoForm customers={data.customers} items={data.items} customerCreditCategories={data.customerCreditCategories} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} onRefund={(data) => onOpenWindow('REFUND_RECEIPT', 'Refund Receipt', { initialData: data })} onMakeRecurring={(data) => onOpenWindow('RECURRING_DIALOG', 'Memorize Transaction', { baseTransaction: data })} />;
+        case 'RECURRING_DIALOG': return <RecurringInvoiceDialog entities={data.customers.map(c => ({ id: c.id, name: c.name }))} entityType="Customer" baseTransaction={params.baseTransaction} onSave={(template) => { handlers.onSaveRecurringTemplate?.(template); onCloseWindow(winId); }} onClose={() => onCloseWindow(winId)} initialTemplate={params.initialTemplate} />;
+        case 'REFUND_RECEIPT': return <RefundReceiptForm customers={data.customers} accounts={data.accounts} items={data.items} paymentMethods={data.paymentMethods} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
+        case 'DELAYED_CHARGE': return <DelayedTransactionForm type="DELAYED_CHARGE" customers={data.customers} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
+        case 'DELAYED_CREDIT': return <DelayedTransactionForm type="DELAYED_CREDIT" customers={data.customers} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'VENDOR_CREDIT': return <VendorCreditForm vendors={data.vendors} items={data.items} accounts={data.accounts} vendorCreditCategories={data.vendorCreditCategories} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'VENDOR_CREDIT_CATEGORY_LIST': return <VendorCreditCategoryList categories={data.vendorCreditCategories} onUpdateCategories={onUpdateVendorCreditCategories} />;
         case 'CUSTOMER_CREDIT_CATEGORY_LIST': return <CustomerCreditCategoryList categories={data.customerCreditCategories} onUpdateCategories={onUpdateCustomerCreditCategories} onClose={() => onCloseWindow(winId)} />;

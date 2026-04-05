@@ -24,6 +24,10 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
    const [shipAddr, setShipAddr] = useState<string>(initialData?.ShipAddr?.Line1 || '');
    const [status, setStatus] = useState<'Pending' | 'Accepted' | 'Converted' | 'Declined'>(initialData?.status as any || 'Pending');
    const [selectedTaxItemId, setSelectedTaxItemId] = useState(initialData?.taxItemId || '');
+   const [expirationDate, setExpirationDate] = useState(initialData?.dueDate || '');
+   const [acceptedBy, setAcceptedBy] = useState(initialData?.acceptedBy || '');
+   const [acceptedDate, setAcceptedDate] = useState(initialData?.acceptedDate || '');
+   const [customerPaymentOptions, setCustomerPaymentOptions] = useState<string[]>(initialData?.paymentOptions || []);
 
    const subtotal = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
    const taxItem = availableItems.find(i => i.id === selectedTaxItemId);
@@ -52,6 +56,7 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
       const item = availableItems.find(i => i.id === itemId);
       if (item) {
          updateLineItem(id, {
+            itemId: item.id,
             description: item.description || item.name,
             rate: item.salesPrice || 0,
          });
@@ -63,14 +68,19 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
       type: 'ESTIMATE',
       refNo: estimateNo,
       date: date,
+      dueDate: expirationDate,
       entityId: selectedCustId,
       subtotal: subtotal,
       taxAmount: taxAmount,
       taxItemId: selectedTaxItemId,
       total: total,
       status: status,
+      acceptedBy: acceptedBy,
+      acceptedDate: acceptedDate,
+      paymentOptions: customerPaymentOptions,
       items: lineItems.filter(i => i.description || i.rate).map(i => ({
          id: i.id || Math.random().toString(),
+         itemId: i.itemId,
          description: i.description || '',
          quantity: i.quantity || 0,
          rate: i.rate || 0,
@@ -122,12 +132,16 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                   </div>
                   <div className="space-y-1">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Date</label>
-                     <input className="border-b border-gray-300 p-1 text-sm w-32 text-right outline-none focus:border-blue-500" value={date} onChange={e => setDate(e.target.value)} />
+                     <input type="date" className="border-b border-gray-300 p-1 text-sm w-40 text-right outline-none focus:border-blue-500" value={date} onChange={e => setDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Expiration Date</label>
+                     <input type="date" className="border-b border-gray-300 p-1 text-sm w-40 text-right outline-none focus:border-blue-500" value={expirationDate} onChange={e => setExpirationDate(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Status</label>
                      <select
-                        className="border-b border-gray-300 p-1 text-sm w-32 text-right outline-none focus:border-blue-500 bg-transparent font-bold"
+                        className="border-b border-gray-300 p-1 text-sm w-40 text-right outline-none focus:border-blue-500 bg-transparent font-bold"
                         value={status}
                         onChange={e => setStatus(e.target.value as any)}
                      >
@@ -137,11 +151,25 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                         <option value="Declined">Declined</option>
                      </select>
                   </div>
+                  {status === 'Accepted' && (
+                     <div className="bg-green-50 p-2 rounded border border-green-200 mt-2 text-left animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-2 gap-2">
+                           <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-green-700 uppercase block">Accepted By</label>
+                              <input className="bg-white border border-green-200 rounded px-2 py-1 text-xs w-full outline-none focus:border-green-500" value={acceptedBy} onChange={e => setAcceptedBy(e.target.value)} placeholder="Full Name" />
+                           </div>
+                           <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-green-700 uppercase block">Accepted Date</label>
+                              <input type="date" className="bg-white border border-green-200 rounded px-2 py-1 text-xs w-full outline-none focus:border-green-500" value={acceptedDate} onChange={e => setAcceptedDate(e.target.value)} />
+                           </div>
+                        </div>
+                     </div>
+                  )}
                </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-20">
-               <div className="flex flex-col gap-2">
+            <div className="flex gap-10">
+               <div className="flex-1">
                   <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-1 italic">Customer:Job</label>
                   <select
                      className="border-b-2 border-blue-200 bg-blue-50/20 px-3 py-2 text-sm font-bold w-full outline-none focus:border-blue-600 transition-colors"
@@ -160,6 +188,25 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                      <option value="">&lt;Select Customer:Job&gt;</option>
                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+               </div>
+               <div className="w-64">
+                  <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-1 italic">Payment Options</label>
+                  <div className="flex gap-4 mt-2">
+                     {['Cards', 'Bank', 'PayPal'].map(opt => (
+                        <label key={opt} className="flex items-center gap-1.5 cursor-pointer group">
+                           <input
+                              type="checkbox"
+                              className="w-3 h-3 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                              checked={customerPaymentOptions.includes(opt)}
+                              onChange={e => {
+                                 if (e.target.checked) setCustomerPaymentOptions([...customerPaymentOptions, opt]);
+                                 else setCustomerPaymentOptions(customerPaymentOptions.filter(o => o !== opt));
+                              }}
+                           />
+                           <span className="text-[10px] font-bold text-gray-600 group-hover:text-blue-900 transition-colors">{opt}</span>
+                        </label>
+                     ))}
+                  </div>
                </div>
             </div>
 
@@ -226,8 +273,8 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                </table>
             </div>
 
-            <div className="mt-12 flex justify-between items-end">
-               <div className="w-1/2">
+            <div className="mt-12 grid grid-cols-3 gap-10 border-t border-gray-200 pt-8">
+               <div className="col-span-1">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 italic">Memo</label>
                   <textarea
                      className="w-full border border-gray-300 rounded p-3 text-xs bg-gray-50 outline-none h-20 resize-none focus:ring-1 ring-blue-500 italic"
@@ -236,6 +283,40 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                      onChange={e => setMemo(e.target.value)}
                   />
                </div>
+               <div className="col-span-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1 italic">Attachments</label>
+                  <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50/50 flex flex-col items-center justify-center gap-2 group hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer">
+                     <div className="text-2xl opacity-40 group-hover:scale-110 transition-transform">📎</div>
+                     <span className="text-[10px] font-bold text-gray-400 group-hover:text-blue-600">Drag/Drop or Click to Upload</span>
+                     <span className="text-[8px] text-gray-300">Max size: 20 MB</span>
+                  </div>
+                  {initialData?.attachments && initialData.attachments.length > 0 && (
+                     <div className="mt-2 space-y-1">
+                        {initialData.attachments.map(att => (
+                           <div key={att.id} className="text-[10px] flex items-center justify-between bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                              <span className="truncate max-w-[120px] font-medium">{att.name}</span>
+                              <span className="text-blue-600 hover:underline cursor-pointer">View</span>
+                           </div>
+                        ))}
+                     </div>
+                  )}
+               </div>
+               <div className="col-span-1 border-l border-gray-100 pl-10">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2 italic">Custom Fields</label>
+                  <div className="space-y-3">
+                     <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">Project ID</label>
+                        <input className="border-b border-gray-200 py-1 text-xs outline-none focus:border-blue-500 bg-transparent" placeholder="PROJ-000" />
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">Site Contact</label>
+                        <input className="border-b border-gray-200 py-1 text-xs outline-none focus:border-blue-500 bg-transparent" placeholder="Name" />
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="mt-12 flex justify-end items-end border-t border-gray-200 pt-8">
                <div className="text-right space-y-1">
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Estimate Total</div>
                   <div className="text-5xl font-black text-[#003366] font-mono tracking-tighter">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>

@@ -47,6 +47,14 @@ const createController = (Service) => ({
         } catch (err) {
             next(err);
         }
+    },
+    bulkDelete: async (req, res, next) => {
+        try {
+            await Service.bulkDelete(req.body.ids, req.user.id, req.companyId);
+            res.json({ message: 'Bulk delete successful' });
+        } catch (err) {
+            next(err);
+        }
     }
 });
 
