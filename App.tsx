@@ -327,6 +327,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="flex h-screen w-screen overflow-hidden text-gray-900 bg-[#54738c] font-sans">
+        {/* DEBUG MARKER: v2.0.1 */}
         <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
           <AppMenu handlers={{
             onOpenWindow: navigateTo, onLogOut: handleLogOut, onImport: handleImport,
