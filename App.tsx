@@ -285,6 +285,11 @@ const App: React.FC = () => {
     bankFeeds
   };
 
+  // PRIORITY ROUTE: Payroll Connect (must come before LANDING/LOGIN checks)
+  if (window.location.pathname.includes('/payroll-connect')) {
+    return <PayrollConnect />;
+  }
+
   if (currentView === 'LANDING') return (
     <LandingPage
       onLogin={() => setCurrentView('LOGIN')}
@@ -304,9 +309,6 @@ const App: React.FC = () => {
     />
   );
 
-  if (window.location.pathname.replace(/\/$/, '') === '/payroll-connect') {
-    return <PayrollConnect />;
-  }
 
   if (!isLoaded && !['LANDING', 'LOGIN', 'SIGNUP'].includes(currentView)) {
     return (
