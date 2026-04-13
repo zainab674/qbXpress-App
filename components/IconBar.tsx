@@ -69,20 +69,6 @@ const IconBar: React.FC<Props> = ({ onAction, onLogOut, onShortcuts }) => {
 
             <div className="flex items-center gap-1 px-2">
                 <button
-                    onClick={onShortcuts}
-                    className="flex flex-col items-center justify-center min-w-[64px] h-[58px] hover:bg-white rounded transition-all active:scale-95 group"
-                >
-                    <div className="bg-purple-600 w-8 h-8 rounded flex items-center justify-center text-white text-lg shadow-sm group-hover:brightness-110 mb-0.5">
-                        ⚡
-                    </div>
-                    <span className="text-[10px] font-bold text-gray-700 leading-tight">
-                        Shortcuts
-                    </span>
-                </button>
-
-                <div className="w-[1px] h-8 bg-gray-300 mx-1"></div>
-
-                <button
                     onClick={onLogOut}
                     className="flex flex-col items-center justify-center min-w-[64px] h-[58px] hover:bg-white rounded transition-all active:scale-95 group text-red-600"
                 >

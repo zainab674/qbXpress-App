@@ -16,5 +16,10 @@ const AuditLogEntrySchema = new mongoose.Schema({
     newContent: String,
 }, { timestamps: true });
 
+// ── Indexes ──────────────────────────────────────────────────────────────────
+AuditLogEntrySchema.index({ companyId: 1, userId: 1, timestamp: -1 });
+AuditLogEntrySchema.index({ companyId: 1, userId: 1, action: 1, timestamp: -1 });
+AuditLogEntrySchema.index({ companyId: 1, userId: 1, transactionId: 1 }, { sparse: true });
+
 module.exports = mongoose.model('AuditLogEntry', AuditLogEntrySchema);
 

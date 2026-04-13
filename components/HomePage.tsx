@@ -1,7 +1,9 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Transaction, Account, ViewState, HomePagePreferences } from '../types';
 import { ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, Tooltip } from 'recharts';
+
+type TimePeriod = '30d' | '7d' | '1y';
 
 interface Props {
   transactions: Transaction[];
@@ -10,7 +12,21 @@ interface Props {
   prefs: HomePagePreferences;
 }
 
+const PERIOD_OPTIONS: { value: TimePeriod; label: string }[] = [
+  { value: '7d', label: 'Last Week' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: '1y', label: 'Last Year' },
+];
+
+const PERIOD_LABELS: Record<TimePeriod, string> = {
+  '7d': '7d',
+  '30d': '30d',
+  '1y': '1y',
+};
+
 const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs }) => {
+  const [period, setPeriod] = useState<TimePeriod>('30d');
+
   // 1. Data Calculations
   const now = new Date();
   const toLocalDateStr = (d: Date) => {
@@ -20,19 +36,35 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
     return `${year}-${month}-${day}`;
   };
 
-  const thirtyDaysAgo = useMemo(() => {
+  const periodStart = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 30);
+    if (period === '7d') d.setDate(d.getDate() - 7);
+    else if (period === '30d') d.setDate(d.getDate() - 30);
+    else d.setFullYear(d.getFullYear() - 1);
+    d.setHours(0, 0, 0, 0);
     return d;
-  }, []);
+  }, [period]);
 
   const dashboardStats = useMemo(() => {
-    const dailyStats: { [key: string]: { date: string, income: number, expense: number, net: number } } = {};
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(now.getDate() - i);
-      const dateStr = toLocalDateStr(d);
-      dailyStats[dateStr] = { date: dateStr, income: 0, expense: 0, net: 0 };
+    const isYearly = period === '1y';
+    const buckets: { [key: string]: { date: string; income: number; expense: number; net: number } } = {};
+
+    if (isYearly) {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        buckets[key] = { date: key, income: 0, expense: 0, net: 0 };
+      }
+    } else {
+      const days = period === '7d' ? 6 : 29;
+      for (let i = days; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = toLocalDateStr(d);
+        buckets[key] = { date: key, income: 0, expense: 0, net: 0 };
+      }
     }
 
     let totalCashIn = 0;
@@ -40,22 +72,24 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
 
     transactions.forEach(tx => {
       const txDate = new Date(tx.date);
-      if (txDate >= thirtyDaysAgo && txDate <= now) {
-        const dateStr = toLocalDateStr(txDate);
-        if (dailyStats[dateStr]) {
+      if (txDate >= periodStart && txDate <= now) {
+        const key = isYearly
+          ? `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`
+          : toLocalDateStr(txDate);
+        if (buckets[key]) {
           if (['INVOICE', 'SALES_RECEIPT', 'PAYMENT', 'DEPOSIT'].includes(tx.type)) {
-            dailyStats[dateStr].income += tx.total;
+            buckets[key].income += tx.total;
             totalCashIn += tx.total;
           } else if (['BILL', 'CHECK', 'VENDOR_CREDIT', 'EXPENSE', 'CC_CHARGE'].includes(tx.type)) {
-            dailyStats[dateStr].expense += tx.total;
+            buckets[key].expense += tx.total;
             totalCashOut += tx.total;
           }
-          dailyStats[dateStr].net = dailyStats[dateStr].income - dailyStats[dateStr].expense;
+          buckets[key].net = buckets[key].income - buckets[key].expense;
         }
       }
     });
 
-    const chart = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
+    const chart = Object.values(buckets).sort((a, b) => a.date.localeCompare(b.date));
 
     return {
       cashIn: { total: totalCashIn, chart: chart.map(d => ({ date: d.date, value: d.income })) },
@@ -63,19 +97,19 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
       netChange: { total: totalCashIn - totalCashOut, chart: chart.map(d => ({ date: d.date, value: d.net })) },
       chart
     };
-  }, [transactions]);
+  }, [transactions, period, periodStart]);
 
   const totalIncome = useMemo(() => {
     return transactions
-      .filter(tx => ['INVOICE', 'SALES_RECEIPT', 'PAYMENT', 'DEPOSIT'].includes(tx.type))
+      .filter(tx => ['INVOICE', 'SALES_RECEIPT', 'PAYMENT', 'DEPOSIT'].includes(tx.type) && new Date(tx.date) >= periodStart)
       .reduce((s, tx) => s + tx.total, 0);
-  }, [transactions]);
+  }, [transactions, periodStart]);
 
   const totalExpenses = useMemo(() => {
     return transactions
-      .filter(tx => ['BILL', 'CHECK', 'VENDOR_CREDIT', 'EXPENSE', 'CC_CHARGE'].includes(tx.type))
+      .filter(tx => ['BILL', 'CHECK', 'VENDOR_CREDIT', 'EXPENSE', 'CC_CHARGE'].includes(tx.type) && new Date(tx.date) >= periodStart)
       .reduce((s, tx) => s + tx.total, 0);
-  }, [transactions]);
+  }, [transactions, periodStart]);
 
   const overallHealthData = totalIncome - totalExpenses;
   const profitMargin = totalIncome > 0 ? (overallHealthData / totalIncome) * 100 : 0;
@@ -165,14 +199,31 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
   return (
     <div className="p-8 bg-[#f8fafc] h-full overflow-y-auto font-sans">
       <div className="max-w-7xl mx-auto">
-        <header className="mb-10 flex justify-between items-end">
+        <header className="mb-10 flex justify-between items-end flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-semibold text-slate-800">Your business looks healthy overall!</h1>
             <p className="text-slate-500 mt-1">Real-time performance overview</p>
           </div>
-          <div className="flex bg-slate-100 p-1 rounded-xl">
-            <button className="px-4 py-2 bg-white text-slate-800 font-bold text-xs rounded-lg shadow-sm">Overview</button>
-            <button onClick={() => onOpenWindow('INSIGHTS', 'Insights')} className="px-4 py-2 text-slate-500 font-bold text-xs rounded-lg hover:bg-white hover:text-slate-800 transition-all">Trends</button>
+          <div className="flex items-center gap-3">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              {PERIOD_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriod(opt.value)}
+                  className={`px-4 py-2 font-bold text-xs rounded-lg transition-all ${
+                    period === opt.value
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:bg-white hover:text-slate-800'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button className="px-4 py-2 bg-white text-slate-800 font-bold text-xs rounded-lg shadow-sm">Overview</button>
+              <button onClick={() => onOpenWindow('INSIGHTS', 'Insights')} className="px-4 py-2 text-slate-500 font-bold text-xs rounded-lg hover:bg-white hover:text-slate-800 transition-all">Trends</button>
+            </div>
           </div>
         </header>
 
@@ -203,12 +254,12 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
             )}
 
             {prefs.showNetChange && (
-              <Card title="Net Profit (30d)">
+              <Card title={`Net Profit (${PERIOD_LABELS[period]})`}>
                 <div className="flex flex-col">
                   <span className={`text-2xl font-bold ${dashboardStats.netChange.total < 0 ? 'text-rose-500' : 'text-slate-800'}`}>
                     ${dashboardStats.netChange.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-xs text-slate-400 mt-1">30 Day Net profit</span>
+                  <span className="text-xs text-slate-400 mt-1">{PERIOD_OPTIONS.find(o => o.value === period)?.label} Net profit</span>
                   <div className="h-12 mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={netChangeHardcoded}>
@@ -253,10 +304,10 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
             )}
 
             {prefs.showCashIn && (
-              <Card title="Cash In (30d)">
+              <Card title={`Cash In (${PERIOD_LABELS[period]})`}>
                 <div className="flex flex-col">
                   <span className="text-2xl font-bold text-slate-800">${dashboardStats.cashIn.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  <span className="text-xs text-slate-400 mt-1">Last 30 days</span>
+                  <span className="text-xs text-slate-400 mt-1">{PERIOD_OPTIONS.find(o => o.value === period)?.label}</span>
                   <div className="h-12 mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={cashInHardcoded}>
@@ -269,10 +320,10 @@ const HomePage: React.FC<Props> = ({ transactions, accounts, onOpenWindow, prefs
             )}
 
             {prefs.showCashOut && (
-              <Card title="Cash Out (30d)">
+              <Card title={`Cash Out (${PERIOD_LABELS[period]})`}>
                 <div className="flex flex-col">
                   <span className="text-2xl font-bold text-slate-800">${dashboardStats.cashOut.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  <span className="text-xs text-slate-400 mt-1">Last 30 days</span>
+                  <span className="text-xs text-slate-400 mt-1">{PERIOD_OPTIONS.find(o => o.value === period)?.label}</span>
                   <div className="h-12 mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={cashOutHardcoded}>

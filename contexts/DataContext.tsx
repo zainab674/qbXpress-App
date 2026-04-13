@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import * as api from '../services/api';
-import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory, RecurringTemplate } from '../types';
+import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory, RecurringTemplate, ItemCategory, UOMSet } from '../types';
 import { INITIAL_DATA } from '../store';
 
 interface DataContextType {
@@ -45,7 +45,7 @@ interface DataContextType {
     checkingPrefs: CheckingPreferences;
     formLayouts: FormLayout[];
     recurringTemplates: RecurringTemplate[];
-    userRole: 'Admin' | 'Standard';
+    userRole: 'Admin' | 'Manager' | 'Standard' | 'View-Only';
     closingDate: string;
     isLoaded: boolean;
     activeCompanyId: string | null;
@@ -75,6 +75,9 @@ interface DataContextType {
     handleUpdateReps: (reps: SalesRep[]) => Promise<void>;
     handleUpdateShipVia: (shipVia: string[]) => Promise<void>;
     handleUpdateUOMs: (uoms: any[]) => Promise<void>;
+    uomSets: UOMSet[];
+    handleSaveUOMSet: (set: UOMSet) => Promise<void>;
+    handleDeleteUOMSet: (id: string) => Promise<void>;
     handleSaveBudget: (b: Budget[]) => Promise<void>;
     handleSaveFixedAsset: (a: FixedAsset) => Promise<void>;
     handleSaveTimeEntries: (e: TimeEntry[]) => Promise<void>;
@@ -83,6 +86,7 @@ interface DataContextType {
     handleSaveExchangeRates: (r: ExchangeRate[]) => Promise<void>;
     handleSaveCurrency: (c: Currency) => Promise<void>;
     handleSaveSettings: (settings: any) => Promise<void>;
+    handleCreateNewCompany: (config: CompanyConfig) => Promise<void>;
     setCompanyConfig: (c: CompanyConfig) => void;
     setUiPrefs: React.Dispatch<React.SetStateAction<UIPreferences>>;
     setAccPrefs: React.Dispatch<React.SetStateAction<AccountingPreferences>>;
@@ -98,6 +102,8 @@ interface DataContextType {
     setShortcuts: React.Dispatch<React.SetStateAction<Shortcut[]>>;
     onUpdateVendorCreditCategories: (categories: VendorCreditCategory[]) => void;
     onUpdateCustomerCreditCategories: (categories: CustomerCreditCategory[]) => void;
+    itemCategories: ItemCategory[];
+    onUpdateItemCategories: (categories: ItemCategory[]) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -128,6 +134,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [shortcutGroups, setShortcutGroups] = useState<ShortcutGroup[]>([]);
     const [classes, setClasses] = useState<QBClass[]>(INITIAL_DATA.classes || []);
     const [uoms, setUOMs] = useState<any[]>(INITIAL_DATA.uoms || []);
+    const [uomSets, setUOMSets] = useState<UOMSet[]>([]);
     const [salesReps, setSalesReps] = useState<SalesRep[]>(INITIAL_DATA.salesReps || []);
     const [shipVia, setShipVia] = useState<string[]>(INITIAL_DATA.shipVia || []);
     const [mileageEntries, setMileageEntries] = useState<MileageEntry[]>(INITIAL_DATA.mileageEntries || []);
@@ -141,6 +148,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [vendorTypes, setVendorTypes] = useState<string[]>(INITIAL_DATA.vendorTypes || []);
     const [vendorCreditCategories, setVendorCreditCategories] = useState<VendorCreditCategory[]>(INITIAL_DATA.vendorCreditCategories || []);
     const [customerCreditCategories, setCustomerCreditCategories] = useState<CustomerCreditCategory[]>(INITIAL_DATA.customerCreditCategories || []);
+    const [itemCategories, setItemCategories] = useState<ItemCategory[]>((INITIAL_DATA as any).itemCategories || []);
     const [bankFeeds, setBankFeeds] = useState<BankTransaction[]>([]);
     const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>(INITIAL_DATA.recurringTemplates || []);
 
@@ -175,7 +183,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ]
         }
     ]);
-    const [userRole, setUserRole] = useState<'Admin' | 'Standard'>('Admin');
+    // Decode role from stored JWT (no signature verification needed — server validates on every request)
+    const getRoleFromToken = (): 'Admin' | 'Manager' | 'Standard' | 'View-Only' => {
+        try {
+            const token = localStorage.getItem('authToken');
+            if (!token) return 'View-Only';
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const role = payload.role;
+            if (['Admin', 'Manager', 'Standard', 'View-Only'].includes(role)) return role;
+        } catch { /* ignore malformed tokens */ }
+        return 'View-Only';
+    };
+
+    const [userRole, setUserRole] = useState<'Admin' | 'Manager' | 'Standard' | 'View-Only'>(getRoleFromToken);
     const [closingDate, setClosingDate] = useState('12/31/2023');
     const [companies, setCompanies] = useState<any[]>([]);
     const [activeCompanyId, setActiveCompanyId] = useState<string | null>(localStorage.getItem('activeCompanyId'));
@@ -183,7 +203,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const refreshData = useCallback(async () => {
         const token = localStorage.getItem('authToken');
-        if (!token) return;
+        if (!token) {
+            setIsLoaded(true);
+            return;
+        }
+        // Sync role from token on every refresh (catches post-login and role-change scenarios)
+        setUserRole(getRoleFromToken());
 
         // Fetch companies first if not already loaded
         const companyList = await api.fetchCompanies().catch(() => []);
@@ -198,7 +223,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (companyList.length > 0) {
                 currentCompanyId = companyList[0]._id;
             } else {
-                currentCompanyId = null;
+                // Sub-user: no owned companies — use companyId from JWT token
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    currentCompanyId = payload.companyId || null;
+                } catch {
+                    currentCompanyId = null;
+                }
             }
         }
 
@@ -240,6 +271,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (data.salesReps) setSalesReps(data.salesReps);
             if (data.shipVia) setShipVia(data.shipVia);
             if ((data as any).uoms) setUOMs((data as any).uoms);
+            if ((data as any).uomSets) setUOMSets((data as any).uomSets);
             const activeCompany = companyList.find(c => c._id === currentCompanyId);
             const config = { ...INITIAL_DATA.companyConfig, ...(data.companyConfig || {}) } as any;
 
@@ -275,6 +307,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             } else if (INITIAL_DATA.vendorCreditCategories && INITIAL_DATA.vendorCreditCategories.length > 0) {
                 setVendorCreditCategories(INITIAL_DATA.vendorCreditCategories);
             }
+            if ((data as any).itemCategories) {
+                setItemCategories((data as any).itemCategories);
+            }
             if ((data as any).customerCreditCategories && (data as any).customerCreditCategories.length > 0) {
                 setCustomerCreditCategories((data as any).customerCreditCategories);
             } else if (INITIAL_DATA.customerCreditCategories && INITIAL_DATA.customerCreditCategories.length > 0) {
@@ -294,22 +329,157 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [activeCompanyId]);
 
     const switchCompany = useCallback(async (id: string) => {
+        // Clear all company-specific data so old company's data is not shown
+        setAccounts([]);
+        setCustomers([]);
+        setVendors([]);
+        setEmployees([]);
+        setItems([]);
+        setTransactions([]);
+        setTimeEntries([]);
+        setLiabilities([]);
+        setMemorizedReports([]);
+        setLeads([]);
+        setBudgets([]);
+        setClasses([]);
+        setSalesReps([]);
+        setShipVia([]);
+        setUOMs([]);
+        setUOMSets([]);
+        setMileageEntries([]);
+        setCurrencies([]);
+        setExchangeRates([]);
+        setAuditLogs([]);
+        setFixedAssets([]);
+        setVehicles([]);
+        setCustomFields([]);
+        setSalesTaxCodes([]);
+        setPriceLevels([]);
+        setTerms([]);
+        setBankFeeds([]);
+        setRecurringTemplates([]);
+        setVendorCreditCategories([]);
+        setCustomerCreditCategories([]);
+        setItemCategories([]);
         setActiveCompanyId(id);
         localStorage.setItem('activeCompanyId', id);
         setIsLoaded(false); // Trigger reload
     }, []);
 
-    // Ensure state stays in sync with localStorage if changed externally
+    // Always keep localStorage in sync with activeCompanyId state
     useEffect(() => {
-        const storedId = localStorage.getItem('activeCompanyId');
-        if (storedId !== activeCompanyId) {
-            setActiveCompanyId(storedId);
+        if (activeCompanyId) {
+            localStorage.setItem('activeCompanyId', activeCompanyId);
+        } else {
+            localStorage.removeItem('activeCompanyId');
         }
-    }, []);
+    }, [activeCompanyId]);
 
     const handleSaveTransaction = async (tx: Transaction | Transaction[]) => {
         try {
-            await api.saveTransaction(tx, userRole);
+            const saveResult = await api.saveTransaction(tx);
+
+            // Show notification if the backend auto-created POs for SO shortfalls
+            if (saveResult && saveResult.autoCreatedPOs && saveResult.autoCreatedPOs.length > 0) {
+                const pos = saveResult.autoCreatedPOs as Array<{ vendorName: string; poRefNo: string; lineCount: number }>;
+                const msg = pos.map(p => `• ${p.poRefNo} for ${p.vendorName} (${p.lineCount} item${p.lineCount !== 1 ? 's' : ''})`).join('\n');
+                alert(`${pos.length} Purchase Order${pos.length !== 1 ? 's' : ''} auto-created for inventory shortfalls:\n${msg}`);
+            }
+
+            const savedTxList = Array.isArray(tx) ? tx : [tx];
+            let freshData: any = null;
+
+            // ── Progress invoices: update linked estimate status ──────────────────────
+            const progressInvoices = savedTxList.filter(t => t.type === 'INVOICE' && (t as any).estimateId);
+            if (progressInvoices.length > 0) {
+                freshData = await api.fetchFullStore().catch(() => null);
+                const allTx: Transaction[] = freshData?.transactions || transactions;
+                for (const inv of progressInvoices) {
+                    const estId = (inv as any).estimateId as string;
+                    const estimate = allTx.find(t => t.id === estId && t.type === 'ESTIMATE');
+                    if (!estimate) continue;
+                    const totalInvoiced = allTx
+                        .filter(t => t.type === 'INVOICE' && (t as any).estimateId === estId)
+                        .reduce((sum, t) => sum + (t.total || 0), 0);
+                    const estTotal = estimate.total || 0;
+                    let newStatus: Transaction['status'];
+                    if (estTotal > 0 && totalInvoiced >= estTotal - 0.01) {
+                        newStatus = 'Converted';
+                    } else if (totalInvoiced > 0) {
+                        newStatus = 'Accepted';
+                    } else {
+                        continue;
+                    }
+                    if (estimate.status !== newStatus) {
+                        await api.saveTransaction({ ...estimate, status: newStatus });
+                    }
+                }
+            }
+
+            // ── Invoices converted from SO: confirm SO is Converted ───────────────────
+            const invoicesFromSO = savedTxList.filter(
+                t => t.type === 'INVOICE' && t.linkedDocumentIds?.length
+            );
+            if (invoicesFromSO.length > 0) {
+                if (!freshData) freshData = await api.fetchFullStore().catch(() => null);
+                const allTx: Transaction[] = freshData?.transactions || transactions;
+                for (const invoice of invoicesFromSO) {
+                    const linkedSOIds = (invoice.linkedDocumentIds || []).filter(docId => {
+                        const linked = allTx.find(t => t.id === docId);
+                        return linked?.type === 'SALES_ORDER';
+                    });
+                    for (const soId of linkedSOIds) {
+                        const so = allTx.find(t => t.id === soId && t.type === 'SALES_ORDER');
+                        if (so && so.status !== 'Converted' && so.status !== 'CLOSED') {
+                            await api.saveTransaction({ ...so, status: 'Converted' });
+                        }
+                    }
+                }
+            }
+
+            // ── Item onSalesOrder / onPurchaseOrder quantity tracking ─────────────────
+            const needsQtySync = savedTxList.some(t =>
+                t.type === 'SALES_ORDER' || t.type === 'PURCHASE_ORDER' ||
+                t.type === 'RECEIVE_ITEM' || t.type === 'INVOICE'
+            );
+            if (needsQtySync) {
+                if (!freshData) freshData = await api.fetchFullStore().catch(() => null);
+                const allTx: Transaction[] = freshData?.transactions || transactions;
+                const allItems: Item[] = freshData?.items || items;
+
+                // Sum open SO quantities per item
+                const onSOMap: Record<string, number> = {};
+                allTx
+                    .filter(t => t.type === 'SALES_ORDER' && t.status !== 'Converted' && t.status !== 'CLOSED')
+                    .forEach(so => so.items.forEach(li => {
+                        if (li.itemId) onSOMap[li.itemId] = (onSOMap[li.itemId] || 0) + (li.quantity || 0);
+                    }));
+
+                // Sum remaining (not yet received) PO quantities per item
+                const onPOMap: Record<string, number> = {};
+                allTx
+                    .filter(t => t.type === 'PURCHASE_ORDER' && (t.status === 'OPEN' || t.status === 'PARTIALLY_RECEIVED'))
+                    .forEach(po => po.items.forEach(li => {
+                        if (li.itemId) {
+                            const remaining = Math.max(0, (li.quantity || 0) - (li.receivedQuantity || 0));
+                            onPOMap[li.itemId] = (onPOMap[li.itemId] || 0) + remaining;
+                        }
+                    }));
+
+                // Save only items whose quantities changed
+                const itemsToUpdate = allItems.filter(item =>
+                    (item.onSalesOrder || 0) !== (onSOMap[item.id] || 0) ||
+                    (item.onPurchaseOrder || 0) !== (onPOMap[item.id] || 0)
+                );
+                for (const item of itemsToUpdate) {
+                    await api.saveItem({
+                        ...item,
+                        onSalesOrder: onSOMap[item.id] || 0,
+                        onPurchaseOrder: onPOMap[item.id] || 0,
+                    });
+                }
+            }
+
             await refreshData();
         } catch (error) {
             console.error("Error saving transaction:", error);
@@ -333,7 +503,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Check if it's a new customer
         const isNew = !customers.find(existing => existing.id === c.id);
 
-        await api.saveCustomer(c);
+        const savedCustomer = await api.saveCustomer(c);
 
         // If it's a new customer with an opening balance, create an invoice
         if (isNew && c.OpenBalance && c.OpenBalance > 0) {
@@ -342,7 +512,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 type: 'INVOICE',
                 refNo: 'Opening Balance',
                 date: c.OpenBalanceDate || new Date().toISOString().split('T')[0],
-                entityId: c.id,
+                entityId: savedCustomer?.id || c.id,
                 total: c.OpenBalance,
                 status: 'OPEN',
                 items: [
@@ -358,7 +528,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 ],
                 memo: 'Opening Balance'
             };
-            await api.saveTransaction(openingInvoice, userRole);
+            await api.saveTransaction(openingInvoice);
         }
 
         await refreshData();
@@ -369,7 +539,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Check if it's a new vendor
         const isNew = !vendors.find(existing => existing.id === v.id);
 
-        await api.saveVendor(v);
+        const savedVendor = await api.saveVendor(v);
 
         // If it's a new vendor with an opening balance, create a bill
         if (isNew && v.OpenBalance && v.OpenBalance > 0) {
@@ -378,7 +548,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 type: 'BILL',
                 refNo: 'Opening Balance',
                 date: v.OpenBalanceDate || new Date().toISOString().split('T')[0],
-                entityId: v.id,
+                entityId: savedVendor?.id || v.id,
                 total: v.OpenBalance,
                 status: 'OPEN',
                 items: [
@@ -394,7 +564,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 ],
                 memo: 'Opening Balance'
             };
-            await api.saveTransaction(openingBill, userRole);
+            await api.saveTransaction(openingBill);
         }
 
         await refreshData();
@@ -428,6 +598,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!activeCompanyId) throw new Error("No active company");
         await api.saveSettings({ uoms: u });
         await refreshData();
+    };
+
+    const handleSaveUOMSet = async (set: UOMSet) => {
+        if (!activeCompanyId) throw new Error("No active company");
+        if (set.id && uomSets.some(s => s.id === set.id)) {
+            await api.updateUOMSet(set.id, set);
+        } else {
+            await api.createUOMSet(set);
+        }
+        const updated = await api.getUOMSets();
+        setUOMSets(updated);
+    };
+
+    const handleDeleteUOMSet = async (id: string) => {
+        if (!activeCompanyId) throw new Error("No active company");
+        await api.deleteUOMSet(id);
+        setUOMSets(prev => prev.filter(s => s.id !== id));
     };
 
     const handleSaveFixedAsset = async (a: FixedAsset) => {
@@ -480,6 +667,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await api.saveSettings(settings);
     };
 
+    const handleCreateNewCompany = async (config: CompanyConfig) => {
+        const newCompany = await api.createCompany({
+            name: config.businessName,
+            industry: config.industry,
+        });
+        // Point localStorage to the new company before saving settings
+        localStorage.setItem('activeCompanyId', newCompany._id);
+        await api.saveSettings({ companyConfig: config });
+        await switchCompany(newCompany._id);
+    };
+
     const handleSaveBankFeed = async (feed: BankTransaction) => {
         if (!activeCompanyId) throw new Error("No active company");
         await api.saveBankFeed(feed);
@@ -490,13 +688,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setVendorCreditCategories(categories);
     };
 
+    const handleUpdateItemCategories = (categories: ItemCategory[]) => {
+        setItemCategories(categories);
+    };
+
     const handleUpdateCustomerCreditCategories = (categories: CustomerCreditCategory[]) => {
         setCustomerCreditCategories(categories);
     };
 
     useEffect(() => {
-        const token = localStorage.getItem('authToken');
-        if (token) refreshData();
+        refreshData();
     }, [refreshData]);
 
     // Auto-save settings when they change
@@ -505,10 +706,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             handleSaveSettings({
                 companyConfig, shortcuts, shortcutGroups, paymentMethods, customerMessages,
                 exchangeRates, uiPrefs, accPrefs, homePrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, vehicles, recurringTemplates,
-                customerTypes: INITIAL_DATA.customerTypes, vendorTypes: INITIAL_DATA.vendorTypes, shipVia, uoms, vendorCreditCategories, customerCreditCategories
+                customerTypes: INITIAL_DATA.customerTypes, vendorTypes: INITIAL_DATA.vendorTypes, shipVia, uoms, vendorCreditCategories, customerCreditCategories, itemCategories
             });
         }
-    }, [isLoaded, companyConfig, shortcuts, shortcutGroups, paymentMethods, customerMessages, exchangeRates, uiPrefs, accPrefs, homePrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, shipVia, vehicles, uoms, vendorCreditCategories, customerCreditCategories]);
+    }, [isLoaded, companyConfig, shortcuts, shortcutGroups, paymentMethods, customerMessages, exchangeRates, uiPrefs, accPrefs, homePrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, shipVia, vehicles, uoms, vendorCreditCategories, customerCreditCategories, itemCategories]);
 
     // Sync company name in collection if businessName changes
     useEffect(() => {
@@ -527,12 +728,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const value = {
         accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
         paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
-        mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, recurringTemplates,
-        isLoaded, activeCompanyId, companies, bankFeeds, switchCompany, refreshData, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
-        handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveRecurringTemplate, handleDeleteRecurringTemplate, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings, handleSaveBankFeed,
+        mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, uomSets, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, itemCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, formLayouts, userRole, closingDate, recurringTemplates,
+        isLoaded, activeCompanyId, companies, bankFeeds, switchCompany, refreshData, handleCreateNewCompany, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
+        handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveRecurringTemplate, handleDeleteRecurringTemplate, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveUOMSet, handleDeleteUOMSet, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings, handleSaveBankFeed,
         setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setFormLayouts, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods,
         onUpdateVendorCreditCategories: handleUpdateVendorCreditCategories,
-        onUpdateCustomerCreditCategories: handleUpdateCustomerCreditCategories
+        onUpdateCustomerCreditCategories: handleUpdateCustomerCreditCategories,
+        onUpdateItemCategories: handleUpdateItemCategories
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

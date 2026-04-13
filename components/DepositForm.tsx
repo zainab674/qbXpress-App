@@ -12,7 +12,7 @@ interface Props {
 
 const DepositForm: React.FC<Props> = ({ accounts, vendors, customers, onSave, onClose }) => {
     const [depositToId, setDepositToId] = useState(accounts.find(a => a.type === 'Bank')?.id || '');
-    const [date, setDate] = useState(new Date().toLocaleDateString('en-US'));
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [memo, setMemo] = useState('');
     const [rows, setRows] = useState<any[]>([
         { id: Math.random().toString(), entityId: '', accountId: '', memo: '', amount: 0, pmtMethod: 'Check', refNo: '' }

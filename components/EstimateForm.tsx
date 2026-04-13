@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Customer, Item, Transaction, TransactionItem } from '../types';
+import AddressSelector, { formatAddress } from './AddressSelector';
 
 interface Props {
    customers: Customer[];
@@ -8,10 +9,11 @@ interface Props {
    onSave: (estimate: Transaction) => void;
    onClose: () => void;
    onConvertToInvoice?: (estimate: Transaction) => void;
+   onConvertToSalesOrder?: (estimate: Transaction) => void;
    initialData?: Transaction;
 }
 
-const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSave, onClose, onConvertToInvoice, initialData }) => {
+const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSave, onClose, onConvertToInvoice, onConvertToSalesOrder, initialData }) => {
    const [selectedCustId, setSelectedCustId] = useState(initialData?.entityId || '');
    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
    const [estimateNo, setEstimateNo] = useState(initialData?.refNo || (Math.floor(Math.random() * 9000) + 1000).toString());
@@ -108,6 +110,16 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
       }
    };
 
+   const handleCreateSalesOrder = () => {
+      if (!selectedCustId) return alert("Select a customer.");
+      if (onConvertToSalesOrder) {
+         const estimate = getEstimateObject();
+         estimate.status = 'Accepted';
+         setStatus('Accepted');
+         onConvertToSalesOrder(estimate);
+      }
+   };
+
    return (
       <div className="bg-[#f0f0f0] h-full flex flex-col font-sans">
          <div className="bg-white border-b border-gray-300 p-2 flex gap-4 shadow-sm">
@@ -115,6 +127,20 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                <div className="text-xl">💾</div>
                <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-blue-900">Save & Close</span>
             </button>
+
+            {onConvertToInvoice && (
+               <button onClick={handleCreateInvoice} className="flex flex-col items-center group px-4 py-1 hover:bg-green-50 rounded-sm border border-transparent hover:border-green-200 transition-all">
+                  <div className="text-xl">🧾</div>
+                  <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-green-800">Create Invoice</span>
+               </button>
+            )}
+
+            {onConvertToSalesOrder && (
+               <button onClick={handleCreateSalesOrder} className="flex flex-col items-center group px-4 py-1 hover:bg-blue-50 rounded-sm border border-transparent hover:border-blue-200 transition-all">
+                  <div className="text-xl">📋</div>
+                  <span className="text-[9px] font-bold mt-1 uppercase tracking-tighter text-blue-800">Create SO</span>
+               </button>
+            )}
 
             <button onClick={onClose} className="flex flex-col items-center group px-4 py-1 hover:bg-red-50 rounded-sm border border-transparent hover:border-red-200 transition-all ml-auto">
                <div className="text-xl">✖</div>
@@ -179,9 +205,10 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
                         setSelectedCustId(custId);
                         const customer = customers.find(c => c.id === custId);
                         if (customer) {
-                           const addr = customer.address || '';
-                           setBillAddr(addr);
-                           setShipAddr(addr);
+                           const bill = formatAddress(customer.BillAddr) || customer.address || '';
+                           const ship = formatAddress(customer.ShipAddr) || bill;
+                           setBillAddr(bill);
+                           setShipAddr(ship);
                         }
                      }}
                   >
@@ -211,22 +238,18 @@ const EstimateForm: React.FC<Props> = ({ customers, items: availableItems, onSav
             </div>
 
             <div className="grid grid-cols-2 gap-20 mt-6">
-               <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block italic">Bill To</label>
-                  <textarea
-                     className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-24 resize-none focus:ring-1 ring-blue-500 italic"
-                     value={billAddr}
-                     onChange={e => setBillAddr(e.target.value)}
-                  />
-               </div>
-               <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block italic">Ship To</label>
-                  <textarea
-                     className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50 outline-none h-24 resize-none focus:ring-1 ring-blue-500 italic"
-                     value={shipAddr}
-                     onChange={e => setShipAddr(e.target.value)}
-                  />
-               </div>
+               <AddressSelector
+                  entity={customers.find(c => c.id === selectedCustId) || null}
+                  value={billAddr}
+                  onChange={setBillAddr}
+                  label="Bill To"
+               />
+               <AddressSelector
+                  entity={customers.find(c => c.id === selectedCustId) || null}
+                  value={shipAddr}
+                  onChange={setShipAddr}
+                  label="Ship To"
+               />
             </div>
 
             <div className="mt-12 border border-gray-400 rounded overflow-hidden shadow-inner bg-gray-50">

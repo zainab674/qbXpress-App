@@ -20,7 +20,7 @@ const CreditCardChargeForm: React.FC<Props> = ({ accounts, vendors, onSave, onCl
    const [ccAccountId, setCcAccountId] = useState(accounts.find(a => a.type === 'Credit Card')?.id || '');
    const [vendorId, setVendorId] = useState('');
    const [totalAmount, setTotalAmount] = useState(0);
-   const [date, setDate] = useState(new Date().toLocaleDateString());
+   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
    const [memo, setMemo] = useState('');
    const [refNo, setRefNo] = useState('CC-' + Date.now().toString().slice(-4));
    const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([

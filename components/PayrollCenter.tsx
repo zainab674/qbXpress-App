@@ -1,37 +1,35 @@
 
 import React, { useState, useMemo } from 'react';
-import { Employee, PayrollLiability, Transaction } from '../types';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Transaction } from '../types';
 
 interface Props {
-   employees: Employee[];
-   liabilities: PayrollLiability[];
-   onOpenPayEmployees: () => void;
-   onOpenPayLiabilities: () => void;
+   transactions: Transaction[];
    onOpenReport: (type: string, title: string) => void;
+   onOpenTransaction?: (id: string, type: string) => void;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+const PayrollCenter: React.FC<Props> = ({ transactions, onOpenReport, onOpenTransaction }) => {
+   const [activeTab, setActiveTab] = useState<'CONNECTED_PROVIDER' | 'PAYROLL_HISTORY'>('CONNECTED_PROVIDER');
 
-const PayrollCenter: React.FC<Props> = ({ employees, liabilities, onOpenPayEmployees, onOpenPayLiabilities, onOpenReport }) => {
-   const [activeTab, setActiveTab] = useState<'PAY_EMPLOYEES' | 'PAY_LIABILITIES'>('PAY_EMPLOYEES');
+   const payrollTransactions = useMemo(() => {
+      return transactions.filter(t =>
+         t.type === 'JOURNAL_ENTRY' &&
+         t.refNo?.startsWith('PAY-')
+      ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+   }, [transactions]);
 
-   const liabilityData = useMemo(() => {
-      const groups: { [key: string]: number } = {};
-      liabilities.forEach(l => {
-         groups[l.type] = (groups[l.type] || 0) + l.amount;
-      });
-      return Object.entries(groups).map(([name, value]) => ({ name, value }));
-   }, [liabilities]);
+   const lastSync = useMemo(() => {
+      if (payrollTransactions.length === 0) return null;
+      return payrollTransactions[0].date;
+   }, [payrollTransactions]);
 
    return (
       <div className="flex h-full bg-white overflow-hidden select-none">
-         {/* Dashboard Style Detail */}
          <div className="flex-1 flex flex-col min-w-0">
             <div className="p-6 bg-[#f0f4f8] border-b border-gray-300 flex justify-between items-center shadow-sm">
                <div>
                   <h1 className="text-2xl font-bold text-slate-800 uppercase tracking-tight">Payroll Center</h1>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase mt-1 italic">Running Payroll</p>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase mt-1 italic">3rd Party Payroll Integration</p>
                </div>
                <div className="flex gap-4">
                   <button onClick={() => onOpenReport('PAYROLL_SUMMARY', 'Payroll Summary')} className="bg-blue-900 text-white border border-blue-950 px-4 py-1 text-xs font-bold rounded shadow-lg hover:brightness-110 uppercase tracking-tighter">Payroll Summary</button>
@@ -41,8 +39,8 @@ const PayrollCenter: React.FC<Props> = ({ employees, liabilities, onOpenPayEmplo
             <div className="flex-1 flex flex-col">
                <div className="flex px-6 bg-gray-100 border-b border-gray-300">
                   {[
-                     { id: 'PAY_EMPLOYEES', label: 'Pay Employees' },
-                     { id: 'PAY_LIABILITIES', label: 'Pay Liabilities' }
+                     { id: 'CONNECTED_PROVIDER', label: 'Connected Provider' },
+                     { id: 'PAYROLL_HISTORY', label: 'Payroll History' }
                   ].map(t => (
                      <button
                         key={t.id}
@@ -55,104 +53,132 @@ const PayrollCenter: React.FC<Props> = ({ employees, liabilities, onOpenPayEmplo
                </div>
 
                <div className="flex-1 p-8 overflow-auto bg-white">
-                  {activeTab === 'PAY_EMPLOYEES' && (
-                     <div className="space-y-8">
-                        <div className="bg-blue-50 border border-blue-200 p-6 rounded shadow-inner flex justify-between items-center">
-                           <div className="space-y-1">
-                              <h3 className="text-lg font-bold text-blue-900">Create Paychecks</h3>
-                              <p className="text-xs text-gray-600">Start the process to pay your employees for their tracked hours.</p>
+                  {activeTab === 'CONNECTED_PROVIDER' && (
+                     <div className="space-y-6 max-w-2xl">
+                        {/* Connection Status Banner */}
+                        <div className="bg-emerald-50 border border-emerald-200 rounded p-5 flex items-start gap-4">
+                           <div className="mt-0.5 w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-sm font-bold shrink-0">P</div>
+                           <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                 <span className="text-sm font-bold text-emerald-800">PayrollOS Connected</span>
+                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold uppercase tracking-wider">Active</span>
+                              </div>
+                              <p className="text-xs text-gray-500">Payroll is processed externally by your connected provider. Journal entries sync automatically into qbXpress.</p>
+                              {lastSync && (
+                                 <p className="text-[10px] text-gray-400 mt-2">Last sync: <span className="font-mono font-bold text-gray-600">{lastSync}</span></p>
+                              )}
                            </div>
-                           <button
-                              onClick={onOpenPayEmployees}
-                              className="bg-blue-600 text-white px-10 py-2 rounded font-bold hover:brightness-110 shadow-lg active:scale-95 transition-all uppercase text-sm"
-                           >
-                              Start Scheduled Payroll
-                           </button>
                         </div>
 
+                        {/* How it Works */}
                         <div className="border border-gray-200 rounded">
-                           <div className="bg-gray-50 p-2 text-[10px] font-bold uppercase text-gray-500 border-b tracking-widest">Active Employees</div>
+                           <div className="bg-gray-50 p-3 text-[10px] font-bold uppercase text-gray-500 border-b tracking-widest">How Payroll Sync Works</div>
+                           <div className="p-5 space-y-4">
+                              <div className="flex items-start gap-3">
+                                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">1</div>
+                                 <div>
+                                    <div className="text-xs font-bold text-slate-700">Run payroll in your provider</div>
+                                    <p className="text-[11px] text-gray-500 mt-0.5">Process payroll, tax calculations, and direct deposits in PayrollOS or your connected provider.</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-start gap-3">
+                                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">2</div>
+                                 <div>
+                                    <div className="text-xs font-bold text-slate-700">Sync to qbXpress</div>
+                                    <p className="text-[11px] text-gray-500 mt-0.5">Your provider pushes payroll journal entries to qbXpress automatically. Each run creates a journal entry with a <span className="font-mono bg-gray-100 px-1 rounded">PAY-</span> reference.</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-start gap-3">
+                                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">3</div>
+                                 <div>
+                                    <div className="text-xs font-bold text-slate-700">View payroll reports</div>
+                                    <p className="text-[11px] text-gray-500 mt-0.5">Synced payroll data flows into your Payroll Summary, P&L, and other financial reports automatically.</p>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+
+                        {/* Sync Stats */}
+                        <div className="grid grid-cols-3 gap-4">
+                           <div className="bg-slate-50 border border-slate-200 rounded p-4">
+                              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Total Synced Runs</div>
+                              <div className="text-2xl font-black text-slate-800">{payrollTransactions.length}</div>
+                           </div>
+                           <div className="bg-slate-50 border border-slate-200 rounded p-4">
+                              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Total Gross</div>
+                              <div className="text-2xl font-black text-slate-800">
+                                 ${payrollTransactions.reduce((sum, t) => sum + (t.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </div>
+                           </div>
+                           <div className="bg-slate-50 border border-slate-200 rounded p-4">
+                              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Provider</div>
+                              <div className="text-lg font-black text-emerald-700">PayrollOS</div>
+                           </div>
+                        </div>
+
+                        <p className="text-[10px] text-gray-400 italic">
+                           To manage connection settings, authorize a new provider, or disconnect, contact your administrator.
+                        </p>
+                     </div>
+                  )}
+
+                  {activeTab === 'PAYROLL_HISTORY' && (
+                     <div className="space-y-4">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 border border-gray-200 rounded">
+                           <div>
+                              <h3 className="text-lg font-bold text-slate-700">Payroll Records</h3>
+                              <p className="text-xs text-gray-500">History of payroll runs synchronized from your connected provider.</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Total Transactions</span>
+                              <div className="text-2xl font-black text-blue-900">{payrollTransactions.length}</div>
+                           </div>
+                        </div>
+
+                        <div className="border border-gray-200 rounded overflow-hidden">
                            <table className="w-full text-xs text-left">
-                              <thead className="bg-white border-b">
+                              <thead className="bg-[#f8fafc] border-b border-gray-200 uppercase text-[10px] font-bold text-gray-500">
                                  <tr>
-                                    <th className="p-3 border-r">Employee</th>
-                                    <th className="p-3 border-r">SSN</th>
-                                    <th className="p-3 border-r">Pay Period</th>
-                                    <th className="p-3 text-right">Hourly Rate</th>
+                                    <th className="p-3 border-r w-32">Date</th>
+                                    <th className="p-3 border-r w-48">Reference No</th>
+                                    <th className="p-3 border-r w-32">Type</th>
+                                    <th className="p-3 border-r">Memo</th>
+                                    <th className="p-3 text-right w-40">Amount</th>
                                  </tr>
                               </thead>
                               <tbody>
-                                 {employees.map(e => (
-                                    <tr key={e.id} className="border-b hover:bg-slate-50">
-                                       <td className="p-3 border-r font-bold text-slate-800">{e.name}</td>
-                                       <td className="p-3 border-r font-mono text-gray-400">{e.ssn}</td>
-                                       <td className="p-3 border-r">Weekly</td>
-                                       <td className="p-3 text-right font-bold text-blue-900">${e.hourlyRate.toFixed(2)}</td>
+                                 {payrollTransactions.length === 0 ? (
+                                    <tr>
+                                       <td colSpan={5} className="p-20 text-center text-gray-400 italic">
+                                          No payroll sync records found. Connect a payroll provider to get started.
+                                       </td>
                                     </tr>
-                                 ))}
+                                 ) : (
+                                    payrollTransactions.map(t => (
+                                       <tr
+                                          key={t.id}
+                                          className="border-b hover:bg-blue-50 cursor-pointer transition-colors"
+                                          onClick={() => onOpenTransaction?.(t.id, t.type)}
+                                       >
+                                          <td className="p-3 border-r font-mono">{t.date}</td>
+                                          <td className="p-3 border-r">
+                                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${t.refNo?.startsWith('PAY-') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                                {t.refNo}
+                                             </span>
+                                          </td>
+                                          <td className="p-3 border-r uppercase text-[9px] font-bold text-gray-400">{t.type.replace('_', ' ')}</td>
+                                          <td className="p-3 border-r italic text-gray-600">{t.memo || 'No memo available'}</td>
+                                          <td className="p-3 text-right font-bold text-slate-800">
+                                             ${t.total?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                          </td>
+                                       </tr>
+                                    ))
+                                 )}
                               </tbody>
                            </table>
                         </div>
                      </div>
                   )}
-
-                  {activeTab === 'PAY_LIABILITIES' && (
-                     <div className="space-y-6">
-                        <div className="flex justify-between items-start gap-8">
-                           <div className="flex-1">
-                              <h3 className="text-lg font-bold text-slate-700 mb-4">Pay Taxes & Other Liabilities</h3>
-                              <table className="w-full text-xs text-left border border-gray-200">
-                                 <thead className="bg-gray-50 border-b">
-                                    <tr>
-                                       <th className="p-3 border-r">Tax/Insurance Type</th>
-                                       <th className="p-3 border-r">Payee</th>
-                                       <th className="p-3 border-r">Due Date</th>
-                                       <th className="p-3 text-right">Amount Due</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody>
-                                    {liabilities.map(l => (
-                                       <tr key={l.id} className="border-b hover:bg-yellow-50">
-                                          <td className="p-3 border-r font-bold">{l.type}</td>
-                                          <td className="p-3 border-r text-gray-500">U.S. Treasury</td>
-                                          <td className="p-3 border-r">{l.dueDate}</td>
-                                          <td className="p-3 text-right font-bold text-red-700 font-mono">${l.amount.toLocaleString()}</td>
-                                       </tr>
-                                    ))}
-                                 </tbody>
-                              </table>
-                           </div>
-                           <div className="w-80 bg-slate-50 border border-slate-200 p-4 rounded shadow-inner">
-                              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Liability Breakdown</h4>
-                              <div className="h-48">
-                                 <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                       <Pie data={liabilityData} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
-                                          {liabilityData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                       </Pie>
-                                       <Tooltip contentStyle={{ fontSize: '10px' }} />
-                                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                                    </PieChart>
-                                 </ResponsiveContainer>
-                              </div>
-                              <div className="mt-4 pt-4 border-t border-slate-200 text-right">
-                                 <div className="text-[10px] text-slate-400 font-bold uppercase">Total Due</div>
-                                 <div className="text-xl font-black text-slate-800">${liabilities.reduce((acc, l) => acc + l.amount, 0).toLocaleString()}</div>
-                              </div>
-                           </div>
-                        </div>
-                        <div className="flex justify-end">
-                           <button
-                              onClick={onOpenPayLiabilities}
-                              className="bg-green-600 text-white px-8 py-2 rounded font-bold shadow-md hover:bg-green-700"
-                           >
-                              View/Pay Selected Liabilities
-                           </button>
-                        </div>
-                     </div>
-                  )}
-
-
                </div>
             </div>
          </div>

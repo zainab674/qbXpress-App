@@ -32,12 +32,32 @@ const AccountForm: React.FC<Props> = ({ isOpen, onClose, onSave, existingAccount
 
   const handleNext = () => setStep(1);
 
-  const handleSave = () => {
+  const defaultFormData: Partial<Account> = {
+    type: 'Bank',
+    isActive: true,
+    balance: 0,
+    currency: 'US Dollar',
+    openingBalance: 0,
+    openingBalanceDate: new Date().toISOString().split('T')[0]
+  };
+
+  const handleSaveAndClose = () => {
     const finalData = { ...formData };
     if (formData.openingBalance && !initialData) {
       finalData.balance = formData.openingBalance;
     }
     onSave(finalData);
+    onClose();
+  };
+
+  const handleSaveAndNew = () => {
+    const finalData = { ...formData };
+    if (formData.openingBalance && !initialData) {
+      finalData.balance = formData.openingBalance;
+    }
+    onSave(finalData);
+    setFormData(defaultFormData);
+    setStep(0);
   };
 
   const renderStep0 = () => (
@@ -265,13 +285,13 @@ const AccountForm: React.FC<Props> = ({ isOpen, onClose, onSave, existingAccount
         </button>
         <div className="flex gap-2">
           <button
-            onClick={handleSave}
+            onClick={handleSaveAndNew}
             className="px-5 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 transition-colors"
           >
             Save & New
           </button>
           <button
-            onClick={handleSave}
+            onClick={handleSaveAndClose}
             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
           >
             Save & Close

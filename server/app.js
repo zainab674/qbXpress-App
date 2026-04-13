@@ -7,6 +7,7 @@ const AppStore = require('./models/AppStore');
 const settingsRouter = require('./routes/settings');
 const auth = require('./middleware/auth');
 const companyAuth = require('./middleware/companyAuth');
+const { ensureAllIndexes } = require('./db/indexes');
 
 dotenv.config();
 
@@ -41,15 +42,45 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB'))
+// maxPoolSize=60 sustains 40 simultaneous app users plus headroom for background jobs.
+// minPoolSize=5 keeps warm connections ready so the first queries after idle don't pay
+// the TCP handshake cost.
+mongoose.connect(process.env.MONGODB_URI, {
+    maxPoolSize: 60,
+    minPoolSize: 5,
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 60000,
+    heartbeatFrequencyMS: 10000,
+    connectTimeoutMS: 10000,
+    // Write concern: majority ensures data durability across replica set members
+    w: 'majority',
+    wtimeoutMS: 10000,
+})
+    .then(async () => {
+        console.log('[DB] Connected to MongoDB');
+        // Ensure all schema-defined indexes exist (non-blocking background task)
+        ensureAllIndexes().catch(err => console.error('[DB] Index initialization error:', err));
+        // Initialize scheduled report cron jobs after DB is ready
+        require('./jobs/scheduledReportRunner').initScheduler();
+    })
     .catch(err => {
         console.error('Could not connect to MongoDB', err);
         process.exit(1);
     });
 
+// Monitor connection pool health for 40-user concurrency target
+mongoose.connection.on('poolCreated', () => console.log('[DB] Connection pool created'));
+mongoose.connection.on('connectionPoolReady', () => console.log('[DB] Connection pool ready'));
+mongoose.connection.on('connectionCheckedOut', () => {
+    const { poolSize, checkedOut } = mongoose.connection.db?.serverConfig?.s?.pool ?? {};
+    if (checkedOut > 45) {
+        console.warn(`[DB] High pool utilization: ${checkedOut} connections in use`);
+    }
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
 app.use('/api/companies', auth, require('./routes/companies'));
 app.use('/api/backup', auth, require('./routes/backup'));
 
@@ -57,13 +88,15 @@ const companyRoutes = [
     'accounts', 'customers', 'vendors', 'transactions', 'items', 'employees', 'leads',
     'classes', 'sales-reps', 'terms', 'time-entries', 'reports', 'mileage-entries',
     'price-levels', 'sales-tax-codes', 'budgets', 'memorized-reports', 'liabilities',
-    'custom-fields', 'currencies', 'audit-logs', 'fixed-assets', 'settings', 'utilities', 'bank-feeds', 'inventory', 'recurring-templates'
+    'custom-fields', 'currencies', 'audit-logs', 'fixed-assets', 'settings', 'utilities', 'bank-feeds', 'inventory', 'recurring-templates', 'warehouses', 'bins', 'landed-costs', 'uom-sets', 'jobs'
 ];
 
 companyRoutes.forEach(route => {
     app.use(`/api/${route}`, auth, companyAuth, require(`./routes/${route}`));
 });
 app.use('/api/email', auth, require('./routes/email'));
+app.use('/api/report-exports', auth, companyAuth, require('./routes/report-exports'));
+app.use('/api/carrier', auth, companyAuth, require('./routes/carrier'));
 app.use('/api/payroll-connect', require('./routes/payroll-connect'));
 
 app.get('/api/store', auth, companyAuth, async (req, res, next) => {

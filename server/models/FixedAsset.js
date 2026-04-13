@@ -15,6 +15,16 @@ const FixedAssetSchema = new mongoose.Schema({
     usefulLifeYears: Number,
     salvageValue: Number,
     isActive: { type: Boolean, default: true },
+
+    // Disposal
+    disposalDate: String,
+    disposalAmount: Number,
+    disposalType: { type: String, enum: ['Sale', 'Scrapped', 'Donation'] },
+
+    // Depreciation tracking (updated by post-depreciation endpoint)
+    accumulatedDepreciation: { type: Number, default: 0 },
+    lastDepreciationDate: String,
+
     userId: { type: String, required: true },
     companyId: { type: String, required: true },
 }, { timestamps: true });

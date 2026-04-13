@@ -4,7 +4,7 @@ import CustomDialog from '../components/CustomDialog';
 
 interface DialogContextType {
     showAlert: (message: string, title?: string) => void;
-    showConfirm: (message: string, onConfirm: () => void, title?: string) => void;
+    showConfirm: (message: string, onConfirmOrTitle?: (() => void) | string, title?: string) => Promise<boolean>;
 }
 
 const DialogContext = createContext<DialogContextType | undefined>(undefined);
@@ -18,8 +18,23 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setDialog({ isOpen: true, title, message, type: 'alert', onConfirm: () => setDialog(d => ({ ...d, isOpen: false })) });
     };
 
-    const showConfirm = (message: string, onConfirm: () => void, title: string = 'QuickBooks Confirmation') => {
-        setDialog({ isOpen: true, title, message, type: 'confirm', onConfirm: () => { onConfirm(); setDialog(d => ({ ...d, isOpen: false })); }, onCancel: () => setDialog(d => ({ ...d, isOpen: false })) });
+    const showConfirm = (message: string, onConfirmOrTitle?: (() => void) | string, title: string = 'QuickBooks Confirmation'): Promise<boolean> => {
+        const callback = typeof onConfirmOrTitle === 'function' ? onConfirmOrTitle : undefined;
+        const resolvedTitle = typeof onConfirmOrTitle === 'string' ? onConfirmOrTitle : title;
+        return new Promise<boolean>((resolve) => {
+            setDialog({
+                isOpen: true, title: resolvedTitle, message, type: 'confirm',
+                onConfirm: () => {
+                    if (callback) callback();
+                    setDialog(d => ({ ...d, isOpen: false }));
+                    resolve(true);
+                },
+                onCancel: () => {
+                    setDialog(d => ({ ...d, isOpen: false }));
+                    resolve(false);
+                }
+            });
+        });
     };
 
     return (

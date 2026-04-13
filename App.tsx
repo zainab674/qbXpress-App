@@ -16,6 +16,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SetupWizard from './components/SetupWizard';
 import PrinterSetupDialog from './components/PrinterSetupDialog';
 import CompanyFileDialog from './components/CompanyFileDialog';
+import CondenseDataDialog from './components/CondenseDataDialog';
 import PrintFormsDialog from './components/PrintFormsDialog';
 import { useWindow } from './contexts/WindowContext';
 import { useData } from './contexts/DataContext';
@@ -38,15 +39,16 @@ const App: React.FC = () => {
   const {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, shortcuts, shortcutGroups, classes, salesReps, shipVia,
-    mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
+    mileageEntries, currencies, exchangeRates, auditLogs, fixedAssets, vehicles, uoms, uomSets, customFields, customerTypes, vendorTypes, vendorCreditCategories, customerCreditCategories, itemCategories, companyConfig, uiPrefs, homePrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
     isLoaded, companies, activeCompanyId, switchCompany, refreshData, bankFeeds, handleSaveTransaction, handleDeleteTransaction, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveAccount, handleSaveItem,
-    handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings,
-    setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories
+    handleSaveLead, handleSaveClass, handleSavePriceLevel, handleSaveTerm, handleDeleteTerm, handleSaveVehicle, handleDeleteVehicle, handleSaveSalesTaxCode, handleSaveMileageEntry, handleUpdateReps, handleUpdateShipVia, handleUpdateUOMs, handleSaveUOMSet, handleDeleteUOMSet, handleSaveBudget, handleSaveFixedAsset, handleSaveTimeEntries, handleSaveMemorizedReports, handleDeleteMemorizedReport, handleSaveExchangeRates, handleSaveCurrency, handleSaveSettings, handleCreateNewCompany,
+    setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setShortcutGroups, setShortcuts, setCustomerMessages, setPaymentMethods, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateItemCategories
   } = useData();
   const { showAlert, showConfirm } = useDialog();
 
 
   // Modal states removed - now managed via window system
+  const [condenseOpen, setCondenseOpen] = useState(false);
 
   const [activeRoute, setActiveRoute] = useState<{ type: ViewState, title: string, params?: any }>({ type: 'HOME', title: 'Dashboard' });
 
@@ -150,7 +152,9 @@ const App: React.FC = () => {
       }
     },
     onSaveInventoryAdjustment: async (adj: any) => { await handleSaveTransaction(adj); },
-    onReconcileFinish: (accId: string, txIds: Set<string>) => {
+    onReconcileFinish: async (accId: string, txIds: Set<string>) => {
+      const toUpdate = transactions.filter(t => txIds.has(t.id) && t.status !== 'CLEARED');
+      await Promise.all(toUpdate.map(t => handleSaveTransaction({ ...t, status: 'CLEARED' })));
       refreshData();
       navigateTo('HOME', 'Dashboard');
     },
@@ -216,6 +220,8 @@ const App: React.FC = () => {
     onUpdateReps: (reps: any[]) => handleUpdateReps(reps),
     onUpdateShipVia: (sv: string[]) => handleUpdateShipVia(sv),
     onUpdateUOMs: (u: any[]) => handleUpdateUOMs(u),
+    onSaveUOMSet: handleSaveUOMSet,
+    onDeleteUOMSet: handleDeleteUOMSet,
     onSaveBudget: handleSaveBudget,
     onUpdateVehicle: handleSaveVehicle,
     onDeleteVehicle: handleDeleteVehicle,
@@ -269,19 +275,20 @@ const App: React.FC = () => {
         });
       });
     },
-    setCompanyConfig, setTimeEntries: handleSaveTimeEntries, setMemorizedReports: handleSaveMemorizedReports, onDeleteReport: handleDeleteMemorizedReport, handleSaveCurrency, showAlert,
+    setCompanyConfig, handleCreateNewCompany, setTimeEntries: handleSaveTimeEntries, setMemorizedReports: handleSaveMemorizedReports, onDeleteReport: handleDeleteMemorizedReport, handleSaveCurrency, showAlert,
     switchCompany, companies, refreshData, setShortcuts, setShortcutGroups, existingGroups: shortcutGroups,
     handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem,
     onUpdateVendorCreditCategories,
     onUpdateCustomerCreditCategories,
+    onUpdateItemCategories,
     setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate
   };
 
   const windowData = {
     accounts, customers, vendors, employees, items, transactions, timeEntries, liabilities, memorizedReports, leads, budgets,
     paymentMethods, salesTaxCodes, priceLevels, terms, customerMessages, classes, salesReps, mileageEntries, currencies, exchangeRates,
-    auditLogs, fixedAssets, vehicles, uoms, companyConfig, homePrefs, shipVia, customFields, customerTypes, vendorTypes,
-    vendorCreditCategories, customerCreditCategories, uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
+    auditLogs, fixedAssets, vehicles, uoms, uomSets, companyConfig, homePrefs, shipVia, customFields, customerTypes, vendorTypes,
+    vendorCreditCategories, customerCreditCategories, itemCategories, uiPrefs, accPrefs, billPrefs, checkingPrefs, userRole, closingDate,
     bankFeeds
   };
 
@@ -329,59 +336,70 @@ const App: React.FC = () => {
       <div className="flex h-screen w-screen overflow-hidden text-gray-900 bg-[#54738c] font-sans">
         {/* DEBUG MARKER: v2.0.1 */}
         <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-          <AppMenu handlers={{
+          <AppMenu
+            companies={companies}
+            activeCompanyId={activeCompanyId}
+            onSwitchCompany={switchCompany}
+            handlers={{
             onOpenWindow: navigateTo, onLogOut: handleLogOut, onImport: handleImport,
             setShowPrefs: () => navigateTo('PREFERENCES', 'Preferences'),
             onBackup: async () => {
-              const token = localStorage.getItem('authToken');
-              const res = await fetch(`${API_BASE_URL}/backup/create`, {
-                method: 'POST',
-                headers: { 'Authorization': token ? `Bearer ${token}` : '' }
-              });
-              if (res.ok) {
+              try {
+                const token = localStorage.getItem('authToken');
+                const companyId = localStorage.getItem('activeCompanyId');
+                const res = await fetch(`${API_BASE_URL}/backup/create`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': token ? `Bearer ${token}` : '',
+                    'X-Company-ID': companyId || '',
+                  },
+                });
+                if (!res.ok) throw new Error((await res.json()).message || 'Backup failed');
                 const data = await res.json();
-                showAlert(`Real Server Backup Created: ${data.filename}`, "Archive Complete");
+                const counts = Object.entries(data.recordCounts).map(([k, v]) => `${k}: ${v}`).join(', ');
+                showAlert(`Backup created successfully.\n\nFile: ${data.filename}\n${counts}`, "Back Up Company");
+              } catch (err: any) {
+                showAlert(err.message || 'Backup failed. Please try again.', 'Backup Error');
               }
             },
-            onVerify: () => {
-              const orphans = transactions.filter(t => !customers.find(c => c.id === t.entityId) && !vendors.find(v => v.id === t.entityId));
-              if (orphans.length > 0) showAlert(`Verify found ${orphans.length} transactions with missing or unlinked entities.`, "Data Integrity Result");
-              else showAlert("Data integrity verified.", "Verification Successful");
+            onVerify: async () => {
+              try {
+                const result = await api.verifyIntegrity();
+                if (result.issueCount === 0) {
+                  showAlert('QuickBooks found no problems with your data.', 'Verify Data');
+                } else {
+                  const lines = result.issues.map((i: any) =>
+                    `• [${i.severity.toUpperCase()}] ${i.type}: ${typeof i.details === 'string' ? i.details : `${i.count} record(s)`}`
+                  ).join('\n');
+                  showAlert(`Found ${result.issueCount} issue(s):\n\n${lines}`, 'Verify Data');
+                }
+              } catch (err: any) {
+                showAlert(err.message || 'Verification failed.', 'Verify Error');
+              }
             },
             onRebuild: async () => {
-              showAlert("Rebuilding local cache...");
-              await refreshData();
-              showAlert("Rebuilt successfully.", "Utility Complete");
-            },
-            onCondense: async () => {
-              const d = prompt("Cutoff date for condensing (MM/DD/YYYY)?");
-              if (d) {
-                try {
-                  const result = await api.condenseData(d);
-                  showAlert(`Success: ${result.message}. Removed ${result.deletedCount} records.`, "Condense Data");
-                  await refreshData();
-                } catch (err) {
-                  showAlert("Failed to condense data. Ensure the date is in valid format.", "Error");
-                }
+              const confirmed = await showConfirm?.('Rebuild will re-create all database indexes. This may take a moment. Continue?', 'Rebuild Data');
+              if (!confirmed) return;
+              try {
+                const result = await api.rebuildIndexes();
+                await refreshData();
+                showAlert(`Rebuild complete in ${result.durationMs}ms.\n${result.succeeded} index group(s) rebuilt.${result.failed > 0 ? `\n${result.failed} failed (check server logs).` : ''}`, 'Rebuild Data');
+              } catch (err: any) {
+                showAlert(err.message || 'Rebuild failed.', 'Rebuild Error');
               }
             },
+            onCondense: () => setCondenseOpen(true),
             onNewCompany: () => navigateTo('SETUP_WIZARD', 'Setup Wizard'),
             onOpenCompany: () => navigateTo('COMPANY_FILE', 'Open Company', { mode: 'OPEN' }),
             onOpenPrevious: () => navigateTo('COMPANY_FILE', 'Open Previous', { mode: 'PREVIOUS' }),
             onCreateCopy: () => showAlert("Choose copy type: \n- Portable Company File\n- Accountant's Copy\n- Backup Copy\n\n(Feature available in Pro version)", "Create Copy"),
-            onExport: () => {
-              const exportData = {
-                metadata: { exportedAt: new Date().toISOString(), software: "qbXpress" },
-                data: windowData
-              };
-              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `qb_data_export_${new Date().toISOString().split('T')[0]}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-              showAlert("Data exported successfully to your downloads folder.", "Export Complete");
+            onExport: async () => {
+              try {
+                await api.exportCompanyData();
+                showAlert('All company data exported to your downloads folder.', 'Export Complete');
+              } catch (err: any) {
+                showAlert(err.message || 'Export failed. Please try again.', 'Export Error');
+              }
             },
             onPrintForms: () => navigateTo('GENERAL_LEDGER', 'Print Forms'), // Fallback to list for now
             onPrinterSetup: () => navigateTo('PRINTER_SETUP', 'Printer Setup'),
@@ -464,6 +482,15 @@ const App: React.FC = () => {
           </main>
         </div>
       </div>
+      <CondenseDataDialog
+        isOpen={condenseOpen}
+        onClose={() => setCondenseOpen(false)}
+        onCondense={async (cutoffDate: string) => {
+          const result = await api.condenseData(cutoffDate);
+          await refreshData();
+          showAlert(`Condense complete. ${result.deletedCount} transaction(s) removed before ${cutoffDate}.`, 'Condense Data');
+        }}
+      />
     </ErrorBoundary>
   );
 };

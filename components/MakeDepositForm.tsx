@@ -36,7 +36,7 @@ const MakeDepositForm: React.FC<Props> = ({ transactions, accounts, onSave, onCl
       id: Math.random().toString(),
       type: 'DEPOSIT',
       refNo: 'DEP-' + Date.now().toString().slice(-4),
-      date: new Date().toLocaleDateString(),
+      date: new Date().toISOString().split('T')[0],
       entityId: 'Internal',
       items: selectedTxIds.map(id => ({
         id,

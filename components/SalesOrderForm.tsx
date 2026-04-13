@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendEmail, fetchAvailableLots } from '../services/api';
+import { sendEmail, fetchAvailableLots, fetchWarehouses, fetchSerialNumbers, fetchItemByBarcode } from '../services/api';
+import BarcodeScanner from './BarcodeScanner';
 import { useData } from '../contexts/DataContext';
-import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, Term, PriceLevel } from '../types';
+import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, Term, PriceLevel, Warehouse } from '../types';
+import AddressSelector, { formatAddress } from './AddressSelector';
 import { generatePDF } from '../services/printService';
 
 interface Props {
@@ -32,6 +34,11 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
     const [shipDate, setShipDate] = useState(initialData?.shipDate || '');
     const [fob, setFob] = useState(initialData?.fob || '');
     const [selectedShipVia, setSelectedShipVia] = useState(initialData?.shipVia || '');
+    const [linkedPOId, setLinkedPOId] = useState(
+        initialData?.purchaseOrderId ||
+        initialData?.linkedDocumentIds?.find(id => transactions.find(t => t.id === id && t.type === 'PURCHASE_ORDER')) ||
+        ''
+    );
 
     const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
         initialData?.items?.map(i => ({ ...i, id: i.id || crypto.randomUUID() })) ||
@@ -44,8 +51,50 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
     const [shipAddr, setShipAddr] = useState<string>(initialData?.ShipAddr?.Line1 || '');
     const [email, setEmail] = useState(initialData?.email || '');
     const [availableLotsMap, setAvailableLotsMap] = useState<Record<string, any[]>>({});
+    const [availableSerialsMap, setAvailableSerialsMap] = useState<Record<string, any[]>>({});
+    const [oosSubstituteSuggestion, setOosSubstituteSuggestion] = useState<{ lineId: string; itemName: string; substitutes: { itemId: string; reason?: string }[] } | null>(null);
+    const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+    const [fulfillmentWarehouseId, setFulfillmentWarehouseId] = useState(initialData?.fulfillmentWarehouseId || '');
+
+    useEffect(() => {
+        fetchWarehouses()
+            .then((whs: Warehouse[]) => {
+                setWarehouses(whs);
+                if (!initialData?.fulfillmentWarehouseId) {
+                    const def = whs.find(w => w.isDefault);
+                    if (def) setFulfillmentWarehouseId(def.id);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const subtotal = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
+
+    const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+
+    const handleBarcodeDetected = async (barcode: string) => {
+        setShowBarcodeScanner(false);
+        try {
+            const found = await fetchItemByBarcode(barcode);
+            if (found) {
+                const newId = crypto.randomUUID();
+                setLineItems(prev => [...prev, {
+                    id: newId,
+                    itemId: found.id,
+                    description: found.description || found.name || '',
+                    quantity: 1,
+                    rate: found.salesPrice || found.cost || 0,
+                    amount: found.salesPrice || found.cost || 0,
+                    tax: true,
+                    classId: '',
+                }]);
+            } else {
+                alert(`No item found for barcode: ${barcode}`);
+            }
+        } catch {
+            alert(`No item found for barcode: ${barcode}`);
+        }
+    };
 
     const handleAddItem = () => {
         setLineItems([...lineItems, { id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, classId: '' }]);
@@ -70,10 +119,29 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
 
     const handleItemSelect = async (id: string, itemId: string) => {
         const item = availableItems.find(i => i.id === itemId);
+        const customer = customers.find(c => c.id === selectedCustomerId);
+        const priceLevel = priceLevels.find(pl => pl.id === (customer as any)?.priceLevelId);
         if (item) {
-            updateLineItem(id, { itemId: item.id, description: item.description || item.name, rate: item.salesPrice || 0, tax: item.taxCode === 'Tax' });
+            let rate = item.salesPrice || 0;
+            if (priceLevel) {
+                if (priceLevel.type === 'Fixed %') {
+                    rate = rate * (1 + ((priceLevel as any).percentage || 0) / 100);
+                } else if (priceLevel.type === 'Formula' && (priceLevel as any).formulaConfig) {
+                    const fc = (priceLevel as any).formulaConfig;
+                    const base = fc.baseOn === 'Cost' ? (item.cost || 0) : rate;
+                    const factor = fc.adjustmentType === 'Increase' ? 1 : -1;
+                    rate = base * (1 + (factor * fc.adjustmentAmount / 100));
+                } else if (priceLevel.type === 'Per Item') {
+                    const pl = priceLevel as any;
+                    const fromObj = pl.perItemPrices?.[item.id];
+                    const fromArr = (pl.itemPrices as { itemId: string; price: number }[] | undefined)?.find(ip => ip.itemId === item.id)?.price;
+                    rate = fromObj ?? fromArr ?? rate;
+                }
+            }
+            updateLineItem(id, { itemId: item.id, description: item.description || item.name, rate, tax: item.taxCode === 'Tax' });
 
-            if (item.type === 'Inventory Part' || item.type === 'Inventory Assembly') {
+            // QB Enterprise: only fetch/auto-suggest lots for items with lot tracking enabled
+            if ((item.type === 'Inventory Part' || item.type === 'Inventory Assembly') && item.trackLots) {
                 try {
                     const lots = await fetchAvailableLots(item.id);
                     setAvailableLotsMap(prev => ({ ...prev, [item.id]: lots }));
@@ -83,6 +151,24 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 } catch (err) {
                     console.error('Error fetching lots:', err);
                 }
+            } else {
+                updateLineItem(id, { lotNumber: '' });
+            }
+            // Fetch available in-stock serials for serial-tracked items
+            if ((item.type === 'Inventory Part' || item.type === 'Inventory Assembly') && item.trackSerialNumbers) {
+                fetchSerialNumbers(itemId, 'in-stock')
+                    .then((serials: any[]) => setAvailableSerialsMap(prev => ({ ...prev, [itemId]: serials })))
+                    .catch(() => {});
+            } else {
+                updateLineItem(id, { serialNumber: '' });
+            }
+            // QB Enterprise: if item is out of stock and has substitutes, suggest them
+            const subs = (item as any).substituteItems as { itemId: string; reason?: string }[] | undefined;
+            if ((item.onHand ?? 0) <= 0 && subs && subs.length > 0) {
+                setOosSubstituteSuggestion({ lineId: id, itemName: item.name, substitutes: subs });
+            } else {
+                // Only dismiss the suggestion if it was for this same line (not for a different line)
+                setOosSubstituteSuggestion(prev => prev?.lineId === id ? null : prev);
             }
         }
     };
@@ -91,10 +177,40 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
         if (!selectedCustomerId) { alert("Please select a customer."); return; }
         const validItems = lineItems.filter(i => (i.amount || 0) !== 0 || i.description);
         if (validItems.length === 0) { alert("Please add at least one line item."); return; }
+        // QB Enterprise: lot number is required for all lot-tracked items
+        const missingLot = validItems.find(li => {
+            const itm = availableItems.find(a => a.id === li.itemId);
+            return itm?.trackLots && !li.lotNumber;
+        });
+        if (missingLot) {
+            const itm = availableItems.find(a => a.id === missingLot.itemId);
+            alert(`Lot number is required for "${itm?.name || missingLot.itemId}". Please select or enter a lot number before saving.`);
+            return;
+        }
+        // Serial number required for serial-tracked items
+        const missingSerial = validItems.find(li => {
+            const itm = availableItems.find(a => a.id === li.itemId);
+            return itm?.trackSerialNumbers && !li.serialNumber;
+        });
+        if (missingSerial) {
+            const itm = availableItems.find(a => a.id === missingSerial.itemId);
+            alert(`Serial number is required for "${itm?.name || missingSerial.itemId}". Please select a serial number before saving.`);
+            return;
+        }
 
         try {
+            const soId = initialData?.id || crypto.randomUUID();
+
+            // Build linked document IDs for the SO
+            const existingLinkedIds: string[] = initialData?.linkedDocumentIds
+                ? [...initialData.linkedDocumentIds]
+                : [];
+            if (linkedPOId && !existingLinkedIds.includes(linkedPOId)) {
+                existingLinkedIds.push(linkedPOId);
+            }
+
             await onSave({
-                id: initialData?.id || crypto.randomUUID(),
+                id: soId,
                 type: 'SALES_ORDER',
                 refNo: soNo,
                 date: date,
@@ -108,6 +224,9 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 fob: fob,
                 terms: terms.find(t => t.id === selectedTermId)?.name,
                 email,
+                purchaseOrderId: linkedPOId || undefined,
+                fulfillmentWarehouseId: fulfillmentWarehouseId || undefined,
+                linkedDocumentIds: existingLinkedIds.length > 0 ? existingLinkedIds : undefined,
                 items: validItems.map(i => ({
                     id: i.id || crypto.randomUUID(),
                     itemId: i.itemId,
@@ -117,11 +236,21 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                     amount: i.amount || 0,
                     tax: !!i.tax,
                     classId: i.classId,
-                    lotNumber: i.lotNumber
+                    lotNumber: i.lotNumber,
+                    serialNumber: i.serialNumber,
                 })),
                 BillAddr: { Line1: billAddr },
                 ShipAddr: { Line1: shipAddr }
             } as any);
+
+            // Bidirectional: also update the linked PO to reference this SO
+            if (linkedPOId) {
+                const linkedPO = transactions.find(t => t.id === linkedPOId);
+                if (linkedPO && !linkedPO.linkedDocumentIds?.includes(soId)) {
+                    const updatedPOLinkedIds = [...(linkedPO.linkedDocumentIds || []), soId];
+                    await onSave({ ...linkedPO, linkedDocumentIds: updatedPOLinkedIds } as any);
+                }
+            }
 
             if (!stayOpen) onClose();
             else {
@@ -135,6 +264,12 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
 
     return (
         <div className="bg-[#f0f0f0] h-full flex flex-col font-sans">
+            {showBarcodeScanner && (
+                <BarcodeScanner
+                    onDetected={handleBarcodeDetected}
+                    onClose={() => setShowBarcodeScanner(false)}
+                />
+            )}
             <div className="bg-white border-b border-gray-300">
                 <div className="flex bg-gray-100 text-sm font-bold px-2 pt-1">
                     {['Main', 'Send/Ship'].map(tab => (
@@ -158,10 +293,37 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                                 setSelectedCustomerId(custId);
                                 const customer = customers.find(c => c.id === custId);
                                 if (customer) {
-                                    setBillAddr(customer.address || '');
-                                    setShipAddr(customer.address || '');
+                                    const bill = formatAddress(customer.BillAddr) || customer.address || '';
+                                    const ship = formatAddress(customer.ShipAddr) || bill;
+                                    setBillAddr(bill);
+                                    setShipAddr(ship);
                                     setEmail(customer.email || '');
+                                    // Reprice existing lines with the new customer's price level
+                                    const priceLevel = priceLevels.find(pl => pl.id === (customer as any).priceLevelId);
+                                    if (priceLevel) {
+                                        setLineItems(prev => prev.map(li => {
+                                            const itm = availableItems.find(a => a.id === li.itemId);
+                                            if (!itm) return li;
+                                            let rate = itm.salesPrice || 0;
+                                            if (priceLevel.type === 'Fixed %') {
+                                                rate = rate * (1 + ((priceLevel as any).percentage || 0) / 100);
+                                            } else if (priceLevel.type === 'Formula' && (priceLevel as any).formulaConfig) {
+                                                const fc = (priceLevel as any).formulaConfig;
+                                                const base = fc.baseOn === 'Cost' ? (itm.cost || 0) : rate;
+                                                const factor = fc.adjustmentType === 'Increase' ? 1 : -1;
+                                                rate = base * (1 + (factor * fc.adjustmentAmount / 100));
+                                            } else if (priceLevel.type === 'Per Item') {
+                                                const pl = priceLevel as any;
+                                                const fromObj = pl.perItemPrices?.[itm.id];
+                                                const fromArr = (pl.itemPrices as { itemId: string; price: number }[] | undefined)?.find(ip => ip.itemId === itm.id)?.price;
+                                                rate = fromObj ?? fromArr ?? rate;
+                                            }
+                                            const amount = (li.quantity || 0) * rate;
+                                            return { ...li, rate, amount };
+                                        }));
+                                    }
                                 }
+                                // OOS status is independent of customer — keep the suggestion visible
                             }}>
                                 <option value="">Select a Customer</option>
                                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -175,20 +337,20 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 </div>
 
                 <div className="flex gap-8 mb-8">
-                    <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-gray-600 uppercase italic">Bill To</label>
-                        <textarea
-                            className="border-2 border-gray-300 rounded p-3 text-sm w-72 h-32 outline-none focus:ring-2 ring-blue-500 italic bg-gray-50 font-bold focus:border-blue-500 shadow-inner"
+                    <div className="w-72">
+                        <AddressSelector
+                            entity={customers.find(c => c.id === selectedCustomerId) || null}
                             value={billAddr}
-                            onChange={e => setBillAddr(e.target.value)}
+                            onChange={setBillAddr}
+                            label="Bill To"
                         />
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-gray-600 uppercase italic">Ship To</label>
-                        <textarea
-                            className="border-2 border-gray-300 rounded p-3 text-sm w-72 h-32 outline-none focus:ring-2 ring-blue-500 italic bg-gray-50 font-bold focus:border-blue-500 shadow-inner"
+                    <div className="w-72">
+                        <AddressSelector
+                            entity={customers.find(c => c.id === selectedCustomerId) || null}
                             value={shipAddr}
-                            onChange={e => setShipAddr(e.target.value)}
+                            onChange={setShipAddr}
+                            label="Ship To"
                         />
                     </div>
                     <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4 text-right pl-10">
@@ -196,8 +358,75 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                         <input type="text" className="border-b-2 border-gray-300 px-2 py-1.5 text-sm text-right outline-none focus:border-blue-600 font-bold" value={date} onChange={e => setDate(e.target.value)} />
                         <div className="text-xs font-bold text-gray-600 uppercase self-center">Sales Order #</div>
                         <input type="text" className="border-b-2 border-gray-300 px-2 py-1.5 text-sm text-right outline-none focus:border-blue-600 font-mono font-bold" value={soNo} onChange={e => setSoNo(e.target.value)} />
+                        <div className="text-xs font-bold text-gray-600 uppercase self-center">Purchase Order</div>
+                        <select
+                            className="border-b-2 border-indigo-300 bg-indigo-50/40 px-2 py-1.5 text-sm text-right outline-none focus:border-indigo-600 font-bold appearance-none"
+                            value={linkedPOId}
+                            onChange={e => setLinkedPOId(e.target.value)}
+                        >
+                            <option value="">-- None --</option>
+                            {transactions
+                                .filter(t => t.type === 'PURCHASE_ORDER')
+                                .map(po => (
+                                    <option key={po.id} value={po.id}>
+                                        PO #{po.refNo}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                        <div className="text-xs font-bold text-emerald-700 uppercase self-center">Fulfillment Site</div>
+                        <select
+                            className="border-b-2 border-emerald-300 bg-emerald-50/40 px-2 py-1.5 text-sm text-right outline-none focus:border-emerald-600 font-bold appearance-none"
+                            value={fulfillmentWarehouseId}
+                            onChange={e => setFulfillmentWarehouseId(e.target.value)}
+                        >
+                            <option value="">-- No Warehouse --</option>
+                            {warehouses.map(w => (
+                                <option key={w.id} value={w.id}>
+                                    {w.name}{w.isDefault ? ' (Default)' : ''}{w.code ? ` [${w.code}]` : ''}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                 </div>
+
+                {/* OOS Substitute Item Suggestion Banner */}
+                {oosSubstituteSuggestion && (
+                    <div className="mb-3 bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-4 shadow-sm">
+                        <span className="text-2xl mt-0.5">⚠️</span>
+                        <div className="flex-1">
+                            <p className="text-xs font-black text-amber-800 uppercase tracking-wide mb-1">
+                                "{oosSubstituteSuggestion.itemName}" is out of stock — substitute items available
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {oosSubstituteSuggestion.substitutes.map(sub => {
+                                    const subItem = availableItems.find(i => i.id === sub.itemId);
+                                    if (!subItem) return null;
+                                    return (
+                                        <button
+                                            key={sub.itemId}
+                                            onClick={() => {
+                                                handleItemSelect(oosSubstituteSuggestion.lineId, sub.itemId);
+                                                updateLineItem(oosSubstituteSuggestion.lineId, { itemId: sub.itemId });
+                                                setOosSubstituteSuggestion(null);
+                                            }}
+                                            className="flex items-center gap-2 bg-white border-2 border-amber-300 hover:border-amber-500 hover:bg-amber-50 rounded-lg px-3 py-1.5 text-xs font-bold text-amber-900 transition-all"
+                                        >
+                                            <span className="font-black">{subItem.name}</span>
+                                            {subItem.onHand !== undefined && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${subItem.onHand > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                    {subItem.onHand} on hand
+                                                </span>
+                                            )}
+                                            {sub.reason && <span className="text-[10px] text-amber-500 italic">— {sub.reason}</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <button onClick={() => setOosSubstituteSuggestion(null)} className="text-amber-400 hover:text-amber-700 font-black text-lg leading-none">×</button>
+                    </div>
+                )}
 
                 <div className="border-2 border-gray-400 rounded-lg overflow-hidden bg-gray-50 shadow-md">
                     <table className="w-full text-sm">
@@ -207,6 +436,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                                 <th className="px-4 py-3 text-left w-64 border-r border-gray-600">Item</th>
                                 <th className="px-4 py-3 text-left border-r border-gray-600">Description</th>
                                 <th className="px-4 py-3 text-left w-32 border-r border-gray-600">Lot</th>
+                                <th className="px-4 py-3 text-left w-32 border-r border-gray-600 text-teal-300">Serial #</th>
                                 <th className="px-4 py-3 text-right w-32 border-r border-gray-600">Rate</th>
                                 <th className="px-4 py-3 text-right w-32 border-r border-gray-600">Amount</th>
                                 <th className="px-4 py-3 text-center w-10"></th>
@@ -219,25 +449,76 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                                     <td className="p-0 border-r-2 border-gray-200"><select className="w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-sm" value={item.itemId} onChange={e => handleItemSelect(item.id!, e.target.value)}><option value="">Select Item...</option>{availableItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></td>
                                     <td className="p-0 border-r-2 border-gray-200"><input className="w-full px-4 py-3 bg-transparent outline-none italic text-gray-700 font-medium text-sm" value={item.description || ''} onChange={e => updateLineItem(item.id!, { description: e.target.value })} /></td>
                                     <td className="p-0 border-r-2 border-gray-200">
-                                        <select
-                                            className="w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-xs"
-                                            value={item.lotNumber || ''}
-                                            onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
-                                        >
-                                            <option value="">--Lot--</option>
-                                            {availableLotsMap[item.itemId!]?.map(lot => (
-                                                <option key={lot.lotNumber} value={lot.lotNumber}>
-                                                    {lot.lotNumber} ({lot.quantityRemaining} left)
-                                                </option>
-                                            ))}
-                                        </select>
+                                        {(() => {
+                                            const lineItem = availableItems.find(a => a.id === item.itemId);
+                                            // QB Enterprise: lot cell is only active for items with lot tracking enabled
+                                            if (!lineItem?.trackLots) {
+                                                return <span className="px-4 py-3 block text-gray-300 text-xs select-none">—</span>;
+                                            }
+                                            const lots = availableLotsMap[item.itemId!] || [];
+                                            const selectedLot = lots.find((l: any) => l.lotNumber === item.lotNumber);
+                                            const now = new Date();
+                                            const isExpired = selectedLot?.expirationDate && new Date(selectedLot.expirationDate) <= now;
+                                            const expiringSoon = selectedLot?.expirationDate && !isExpired && (new Date(selectedLot.expirationDate).getTime() - now.getTime()) < 30 * 24 * 60 * 60 * 1000;
+                                            const missingRequired = !item.lotNumber;
+                                            return (
+                                                <div className="relative">
+                                                    <select
+                                                        className={`w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-xs
+                                                            ${isExpired ? 'text-red-700' : expiringSoon ? 'text-amber-700' : ''}
+                                                            ${missingRequired ? 'border-l-2 border-red-400' : ''}`}
+                                                        value={item.lotNumber || ''}
+                                                        onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
+                                                    >
+                                                        <option value="">-- Required * --</option>
+                                                        {lots.map((lot: any) => {
+                                                            const lotExpired = lot.expirationDate && new Date(lot.expirationDate) <= now;
+                                                            const lotExpiringSoon = lot.expirationDate && !lotExpired && (new Date(lot.expirationDate).getTime() - now.getTime()) < 30 * 24 * 60 * 60 * 1000;
+                                                            const expLabel = lot.expirationDate ? ` · exp ${new Date(lot.expirationDate).toLocaleDateString()}` : '';
+                                                            const flag = lotExpired ? ' ⚠ EXPIRED' : lotExpiringSoon ? ' ⚠ Exp Soon' : '';
+                                                            return (
+                                                                <option key={lot.lotNumber} value={lot.lotNumber}>
+                                                                    {lot.lotNumber} ({lot.quantityRemaining} left{expLabel}{flag})
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                    {isExpired && <div className="absolute bottom-0 left-0 right-0 text-[8px] font-black text-red-600 bg-red-50 text-center leading-3 pb-0.5">EXPIRED LOT</div>}
+                                                    {expiringSoon && !isExpired && <div className="absolute bottom-0 left-0 right-0 text-[8px] font-black text-amber-600 bg-amber-50 text-center leading-3 pb-0.5">EXPIRING SOON</div>}
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
+                                    <td className="p-0 border-r-2 border-gray-200">
+                                        {(() => {
+                                            const lineItem = availableItems.find(a => a.id === item.itemId);
+                                            if (!lineItem?.trackSerialNumbers) {
+                                                return <span className="px-4 py-3 block text-gray-300 text-xs select-none">—</span>;
+                                            }
+                                            const serials = availableSerialsMap[item.itemId!] || [];
+                                            const missing = !item.serialNumber;
+                                            return (
+                                                <select
+                                                    className={`w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-xs text-teal-800 ${missing ? 'border-l-2 border-red-400' : ''}`}
+                                                    value={item.serialNumber || ''}
+                                                    onChange={e => updateLineItem(item.id!, { serialNumber: e.target.value })}
+                                                >
+                                                    <option value="">-- Required * --</option>
+                                                    {serials.map((sn: any) => (
+                                                        <option key={sn.serialNumber} value={sn.serialNumber}>
+                                                            {sn.serialNumber}{sn.warehouseId && sn.warehouseId !== 'DEFAULT' ? ` · ${sn.warehouseId}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="p-0 border-r-2 border-gray-200"><input type="number" className="w-full px-4 py-3 bg-transparent outline-none text-right font-bold text-sm" value={item.rate || ''} onChange={e => updateLineItem(item.id!, { rate: parseFloat(e.target.value) || 0 })} /></td>
                                     <td className="px-4 py-3 border-r-2 border-gray-200 text-right font-black text-blue-900 text-sm">{(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     <td className="px-1 py-3 text-center"><button onClick={() => handleRemoveItem(item.id!)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-base">✕</button></td>
                                 </tr>
                             ))}
-                            <tr className="bg-gray-100/50 hover:bg-gray-100 transition-colors"><td colSpan={7} className="px-4 py-2"><button onClick={handleAddItem} className="text-xs font-black text-blue-700 hover:text-blue-900 uppercase tracking-wide cursor-pointer flex items-center gap-2"><span className="text-lg">+</span> Add Line Item</button></td></tr>
+                            <tr className="bg-gray-100/50 hover:bg-gray-100 transition-colors"><td colSpan={8} className="px-4 py-2 flex items-center gap-4"><button onClick={handleAddItem} className="text-xs font-black text-blue-700 hover:text-blue-900 uppercase tracking-wide cursor-pointer flex items-center gap-2"><span className="text-lg">+</span> Add Line Item</button><button type="button" onClick={() => setShowBarcodeScanner(true)} className="text-xs font-black text-orange-600 hover:text-orange-800 uppercase tracking-wide cursor-pointer flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7V5a2 2 0 012-2h2M3 17v2a2 2 0 002 2h2m10-18h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2" /></svg> Scan Barcode</button></td></tr>
                         </tbody>
                     </table>
                 </div>

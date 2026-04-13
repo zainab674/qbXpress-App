@@ -135,7 +135,7 @@ const SalesTaxCenter: React.FC<Props> = ({ transactions, items, onOpenPaySalesTa
                            <button onClick={() => setShowAdjustment(false)}>✕</button>
                         </div>
                         <div className="p-8 space-y-4">
-                           <p className="text-xs text-gray-600 italic">Enter an adjustment to your sales tax liability (Page 172).</p>
+                           <p className="text-xs text-gray-600 italic">Enter an adjustment to your sales tax liability.</p>
                            <div>
                               <label className="text-[10px] font-bold uppercase text-gray-400">Adjustment Date</label>
                               <input

@@ -1,6 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account } from '../types';
+import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account, Warehouse } from '../types';
+import AddressSelector, { formatAddress } from './AddressSelector';
+import { fetchWarehouses, fetchNextRefNo } from '../services/api';
+
 
 interface Props {
   vendors: Vendor[];
@@ -8,23 +11,49 @@ interface Props {
   customers: Customer[];
   classes: QBClass[];
   accounts: Account[];
+  transactions: Transaction[];
   onSave: (po: Transaction) => void;
   onClose: () => void;
   initialData?: any;
 }
 
-const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes, accounts, onSave, onClose, initialData }) => {
+const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes, accounts, transactions, onSave, onClose, initialData }) => {
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Items');
   const [vendorId, setVendorId] = useState(initialData?.entityId || '');
   const [poDate, setPoDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
   const [expectedDate, setExpectedDate] = useState(initialData?.expectedDate || new Date().toISOString().split('T')[0]);
-  const [refNo, setRefNo] = useState(initialData?.refNo || 'PO-' + Math.floor(Math.random() * 9000 + 1000));
+  const [refNo, setRefNo] = useState(initialData?.refNo || '');
   const [memo, setMemo] = useState(initialData?.memo || '');
   const [vendorMessage, setVendorMessage] = useState(initialData?.vendorMessage || '');
   const [shipToEntityId, setShipToEntityId] = useState(initialData?.customerId || '');
   const [attachments, setAttachments] = useState<Attachment[]>(initialData?.attachments || []);
   const [classId, setClassId] = useState(initialData?.classId || '');
   const [customerInvoiceNo, setCustomerInvoiceNo] = useState(initialData?.customerInvoiceNo || '');
+  const [shipToWarehouseId, setShipToWarehouseId] = useState(initialData?.shipToWarehouseId || '');
+  const [salesOrderId, setSalesOrderId] = useState(initialData?.salesOrderId || '');
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+
+  const salesOrders = transactions.filter(t => t.type === 'SALES_ORDER');
+
+  useEffect(() => {
+    fetchWarehouses()
+      .then((whs: Warehouse[]) => {
+        setWarehouses(whs);
+        if (!initialData?.shipToWarehouseId) {
+          const def = whs.find(w => w.isDefault);
+          if (def) setShipToWarehouseId(def.id);
+        }
+      })
+      .catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    if (!initialData?.refNo) {
+      fetchNextRefNo('PURCHASE_ORDER')
+        .then(({ refNo }) => setRefNo(refNo))
+        .catch(() => setRefNo('PO-' + String(Date.now()).slice(-5)));
+    }
+  }, []);
 
   const [expenseRows, setExpenseRows] = useState<any[]>(() => {
     if (initialData?.items?.some((i: any) => i.accountId)) {
@@ -109,6 +138,8 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
       total: calculateTotal(),
       customerInvoiceNo,
       status: initialData?.status || 'OPEN',
+      salesOrderId: salesOrderId || undefined,
+      shipToWarehouseId: shipToWarehouseId || undefined,
       attachments,
       ShipAddr: selectedShipTo
         ? { Line1: selectedShipTo.name, Line2: selectedShipTo.address }
@@ -191,31 +222,23 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
           {/* Info Grid */}
           <div className="grid grid-cols-12 gap-8">
             <div className="col-span-4 flex flex-col gap-1">
-              <label className="text-xs font-bold text-gray-600 uppercase italic">Billing Address</label>
-              <div className="p-4 border-2 border-gray-200 rounded-lg text-sm text-gray-600 leading-relaxed bg-gray-50/50 min-h-[100px] italic">
-                {selectedVendor ? (
-                  selectedVendor.address || 'No address registered'
-                ) : (
-                  <span className="opacity-50">Select a vendor to see billing details</span>
-                )}
-              </div>
+              <AddressSelector
+                entity={selectedVendor || null}
+                value={selectedVendor ? (formatAddress(selectedVendor.BillAddr) || selectedVendor.address || 'No address registered') : ''}
+                onChange={() => {}}
+                label="Billing Address"
+                placeholder="Select a vendor to see billing details"
+              />
             </div>
 
             <div className="col-span-4 flex flex-col gap-1">
-              <label className="text-xs font-bold text-gray-600 uppercase italic">Ship to (Customer)</label>
-              <div className="p-4 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-600 leading-relaxed bg-gray-50/50 min-h-[100px]">
-                {selectedShipTo ? (
-                  <div>
-                    <div className="font-bold text-gray-800 mb-1">{selectedShipTo.name}</div>
-                    <div className="italic">{selectedShipTo.address}</div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="font-bold text-gray-800">Omnificode LTD</div>
-                    <div className="opacity-70 italic">Jhang Sadar, Punjab</div>
-                  </div>
-                )}
-              </div>
+              <AddressSelector
+                entity={selectedShipTo || null}
+                value={selectedShipTo ? (formatAddress(selectedShipTo.BillAddr) || selectedShipTo.address || '') : ''}
+                onChange={() => {}}
+                label="Ship to (Customer / Site)"
+                placeholder="Select a customer for shipping"
+              />
               <select
                 className="mt-2 w-full border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-blue-500 bg-transparent"
                 value={shipToEntityId}
@@ -224,6 +247,28 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
                 <option value="">&lt;Change Shipping Destination&gt;</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {/* Warehouse / Site selector */}
+              <div className="mt-3">
+                <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1 block">Receiving Warehouse / Site</label>
+                <select
+                  className="w-full border-2 border-indigo-200 bg-indigo-50/40 px-3 py-2 text-xs font-bold text-indigo-900 outline-none focus:border-indigo-500 rounded-lg"
+                  value={shipToWarehouseId}
+                  onChange={e => setShipToWarehouseId(e.target.value)}
+                >
+                  <option value="">-- No Warehouse --</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.isDefault ? `${w.name} (Default)` : w.name}
+                      {w.code ? ` [${w.code}]` : ''}
+                    </option>
+                  ))}
+                </select>
+                {shipToWarehouseId && warehouses.find(w => w.id === shipToWarehouseId)?.address && (
+                  <p className="text-[10px] text-indigo-500 italic mt-1 pl-1">
+                    {warehouses.find(w => w.id === shipToWarehouseId)?.address}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="col-span-4 space-y-4">
@@ -241,6 +286,20 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
                     placeholder="INV-XXXX"
                   />
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-gray-600 uppercase">Linked S.O.</label>
+                <select
+                  className="border-b-2 border-gray-300 px-3 py-1.5 text-sm font-bold text-[#003366] w-full outline-none focus:border-blue-600 bg-transparent"
+                  value={salesOrderId}
+                  onChange={e => setSalesOrderId(e.target.value)}
+                >
+                  <option value="">-- None --</option>
+                  {salesOrders.map(so => (
+                    <option key={so.id} value={so.id}>{so.refNo}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -399,10 +458,7 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
                   <span className="bg-blue-600 text-white w-6 h-6 rounded-xl flex items-center justify-center text-sm group-hover:shadow-lg group-hover:shadow-blue-200 transition-all animate-bounce">＋</span>
                   Add a New Line
                 </button>
-                <div className="text-xs text-slate-400 font-bold uppercase tracking-widest flex gap-6">
-                  <span>Double-tap row to focus</span>
-                  <span>Values auto-save as drafts</span>
-                </div>
+
               </div>
             </div>
           </div>

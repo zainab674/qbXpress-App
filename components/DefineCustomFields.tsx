@@ -18,7 +18,7 @@ const DefineCustomFields: React.FC<Props> = ({ isOpen, onClose, fields, onSave }
     const newList = [...list];
     // Ensure the entry exists before updating
     if (!newList[idx]) {
-       newList[idx] = { id: Math.random().toString(), label: '', useForCust: false, useForVend: false, useForEmpl: false, useForItem: false };
+      newList[idx] = { id: Math.random().toString(), label: '', useForCust: false, useForVend: false, useForEmpl: false, useForItem: false };
     }
     newList[idx] = { ...newList[idx], [key]: val };
     setList(newList);
@@ -28,13 +28,13 @@ const DefineCustomFields: React.FC<Props> = ({ isOpen, onClose, fields, onSave }
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[500] p-4">
       <div className="bg-white w-[640px] h-[550px] rounded shadow-2xl border border-gray-500 flex flex-col">
         <div className="bg-[#003366] p-2 text-white font-bold text-sm flex justify-between items-center">
-          <span>Set up Custom Fields for Names and Items (Page 101)</span>
+          <span>Set up Custom Fields for Names and Items</span>
           <button onClick={onClose} className="hover:bg-red-600 px-2 font-serif">X</button>
         </div>
 
         <div className="p-6 flex-1 overflow-y-auto space-y-4">
           <p className="text-xs text-gray-600 font-bold mb-4 italic">Assign custom fields to your customers, vendors, employees, or items.</p>
-          
+
           <div className="border rounded overflow-hidden shadow-inner bg-gray-50">
             <table className="w-full text-[11px] text-left border-collapse">
               <thead className="bg-[#e8e8e8] border-b border-gray-300">
@@ -52,9 +52,9 @@ const DefineCustomFields: React.FC<Props> = ({ isOpen, onClose, fields, onSave }
                   return (
                     <tr key={i} className="border-b hover:bg-blue-50/50">
                       <td className="px-2 py-1 border-r">
-                        <input 
+                        <input
                           className="w-full bg-transparent outline-none focus:bg-white px-1 font-bold"
-                          placeholder={`Field ${i+1}`}
+                          placeholder={`Field ${i + 1}`}
                           value={f.label}
                           onChange={(e) => handleUpdate(i, 'label', e.target.value)}
                         />

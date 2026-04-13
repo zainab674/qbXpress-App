@@ -16,7 +16,12 @@ const CompanySchema = new mongoose.Schema({
     fiscalYearStart: { type: String, default: 'January' },
     taxForm: String,
     logo: String,
-    isActive: { type: Boolean, default: true }
+    isActive: { type: Boolean, default: true },
+    payrollSettings: {
+        wagesAccountId: String,
+        taxLiabilityAccountId: String,
+        payrollClearingAccountId: String
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Company', CompanySchema);

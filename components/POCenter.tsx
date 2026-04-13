@@ -8,10 +8,12 @@ interface POCenterProps {
     transactions: Transaction[];
     vendors: Vendor[];
     onOpenWindow: (type: ViewState, title: string, params?: any) => void;
+    onSaveTransaction: (tx: Transaction) => void;
+    onDeleteTransaction: (id: string) => void;
 }
 
-const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow }) => {
-    const [activeCategory, setActiveCategory] = useState<'All' | 'Open' | 'Overdue' | 'Received'>('All');
+const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow, onSaveTransaction, onDeleteTransaction }) => {
+    const [activeCategory, setActiveCategory] = useState<'All' | 'Open' | 'Overdue' | 'Received' | 'PendingApproval'>('All');
     const [searchTerm, setSearchTerm] = useState('');
 
     const allPOs = useMemo(() =>
@@ -22,22 +24,29 @@ const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow
         allPOs.filter(po => po.status === 'OPEN'),
         [allPOs]);
 
-    const receivedPOs = useMemo(() =>
-        allPOs.filter(po => po.status === 'RECEIVED'),
-        [allPOs]);
+    const receivedPOs = useMemo(() => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        return allPOs.filter(po => po.status === 'RECEIVED' && new Date(po.date) >= cutoff);
+    }, [allPOs]);
 
     const overduePOs = useMemo(() =>
         openPOs.filter(po => po.expectedDate && new Date(po.expectedDate) < new Date()),
         [openPOs]);
+
+    const pendingApprovalPOs = useMemo(() =>
+        allPOs.filter(po => (po as any).approvalStatus === 'PENDING_APPROVAL'),
+        [allPOs]);
 
     const filteredPOs = useMemo(() => {
         switch (activeCategory) {
             case 'Open': return openPOs;
             case 'Overdue': return overduePOs;
             case 'Received': return receivedPOs;
+            case 'PendingApproval': return pendingApprovalPOs;
             default: return allPOs;
         }
-    }, [activeCategory, allPOs, openPOs, overduePOs, receivedPOs]);
+    }, [activeCategory, allPOs, openPOs, overduePOs, receivedPOs, pendingApprovalPOs]);
 
     const metrics = [
         {
@@ -63,6 +72,14 @@ const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow
             count: overduePOs.length,
             data: [5, 12, 8, 15, 10, 20, 18],
             color: '#ef4444'
+        },
+        {
+            id: 'PendingApproval',
+            title: 'Pending Approval',
+            value: `$${pendingApprovalPOs.reduce((acc, p) => acc + p.total, 0).toLocaleString()}`,
+            count: pendingApprovalPOs.length,
+            data: [2, 4, 3, 6, 5, 8, 7],
+            color: '#f59e0b'
         }
     ];
 
@@ -116,7 +133,9 @@ const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow
             <div className="flex-1 flex flex-col overflow-hidden">
                 <header className="p-10 pb-6 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">{activeCategory} Purchase Orders</h2>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                            {activeCategory === 'PendingApproval' ? 'Pending Approval' : activeCategory} Purchase Orders
+                        </h2>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -150,6 +169,18 @@ const POCenter: React.FC<POCenterProps> = ({ transactions, vendors, onOpenWindow
                             const po = transactions.find(t => t.id === id);
                             if (po) onOpenWindow('BILL', 'Enter Bills', { initialData: po });
                         }}
+                        onMarkBackorder={(id: string, status: 'FULL' | 'PARTIAL' | 'NONE') => {
+                            const po = transactions.find(t => t.id === id);
+                            if (po) {
+                                const { _id, __v, ...clean } = po as any;
+                                onSaveTransaction({ ...clean, backorderStatus: status });
+                            }
+                        }}
+                        onEditPO={(id) => {
+                            const po = transactions.find(t => t.id === id);
+                            if (po) onOpenWindow('PURCHASE_ORDER', `Edit PO #${po.refNo}`, { initialData: po });
+                        }}
+                        onDeletePO={(id) => onDeleteTransaction(id)}
                     />
                 </div>
             </div>

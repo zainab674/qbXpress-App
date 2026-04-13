@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Customer, Vendor, Employee, EntityContact, CustomFieldDefinition, Note, Address, Item } from '../types';
+import { Customer, Vendor, Employee, EntityContact, CustomFieldDefinition, Note, Address, NamedAddress, Item } from '../types';
 import ContactForm from './ContactForm';
 import AddressDialog from './AddressDialog';
 
@@ -16,15 +16,20 @@ interface Props {
   customerTypes?: string[];
   vendorTypes?: string[];
   items?: Item[];
+  priceLevels?: { id: string; name: string }[];
+  terms?: { id: string; name: string }[];
+  paymentMethods?: string[];
 }
 
 const EntityForm: React.FC<Props> = ({
   isOpen, onClose, onSave, type, initialData, customFields, accounts,
-  customers = [], customerTypes = [], vendorTypes = [], items = []
+  customers = [], customerTypes = [], vendorTypes = [], items = [], priceLevels = [],
+  terms = [], paymentMethods = []
 }) => {
   const [activeTab, setActiveTab] = useState(type === 'EMPLOYEE' ? 'Personal' : 'Address Info');
   const [showContactForm, setShowContactForm] = useState(false);
   const [showAddressDialog, setShowAddressDialog] = useState(false);
+  const [editingAddressIndex, setEditingAddressIndex] = useState<number | null>(null); // null = BillAddr, -1 = ShipAddr, >=0 = addresses[]
   const [formData, setFormData] = useState<Partial<Customer & Vendor & Employee>>(() => {
     const defaults = {
       name: '',
@@ -47,8 +52,12 @@ const EntityForm: React.FC<Props> = ({
       customFieldValues: {},
       notes: [],
       type: 'Regular',
-      hiredDate: new Date().toLocaleDateString('en-US'),
-      OpenBalanceDate: new Date().toLocaleDateString('en-US'),
+      hiredDate: new Date().toISOString().split('T')[0],
+      dateOfBirth: '',
+      gender: '',
+      department: '',
+      emergencyContact: { name: '', phone: '', relationship: '' },
+      OpenBalanceDate: new Date().toISOString().split('T')[0],
       PrimaryPhone: { FreeFormNumber: '' },
       AlternatePhone: { FreeFormNumber: '' },
       Mobile: { FreeFormNumber: '' },
@@ -58,6 +67,7 @@ const EntityForm: React.FC<Props> = ({
       WebAddr: { URI: '' },
       BillAddr: { Line1: '', Line2: '', City: '', CountrySubDivisionCode: '', PostalCode: '', Country: '' },
       ShipAddr: { Line1: '', Line2: '', City: '', CountrySubDivisionCode: '', PostalCode: '', Country: '' },
+      addresses: [] as NamedAddress[],
       TermsRef: { value: '', name: '' },
       PreferredPaymentMethodRef: { value: '', name: '' },
       CurrencyRef: { value: 'USD', name: 'United States Dollar' },
@@ -227,6 +237,7 @@ const EntityForm: React.FC<Props> = ({
           <div className="flex-1 p-8 overflow-y-auto bg-white custom-scrollbar">
             {activeTab === 'Personal' && (
               <div className="space-y-6">
+                {/* Row 1: Job title + SSN */}
                 <div className="grid grid-cols-2 gap-8">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-gray-500 uppercase italic">Job Title</label>
@@ -235,6 +246,55 @@ const EntityForm: React.FC<Props> = ({
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-gray-500 uppercase italic">Social Security No.</label>
                     <input className="border-b-2 border-gray-100 p-1 text-xs outline-none w-48 font-mono focus:border-blue-400" placeholder="000-00-0000" value={formData.ssn || ''} onChange={e => setFormData({ ...formData, ssn: e.target.value })} />
+                  </div>
+                </div>
+
+                {/* Row 2: Department + Hire Date */}
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase italic">Department</label>
+                    <input className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400" placeholder="e.g. Engineering, Sales..." value={(formData as any).department || ''} onChange={e => setFormData({ ...formData, department: e.target.value } as any)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase italic">Hire Date</label>
+                    <input type="date" className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400 w-40" value={formData.hiredDate || ''} onChange={e => setFormData({ ...formData, hiredDate: e.target.value })} />
+                  </div>
+                </div>
+
+                {/* Row 3: Date of Birth + Gender */}
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase italic">Date of Birth</label>
+                    <input type="date" className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400 w-40" value={(formData as any).dateOfBirth || ''} onChange={e => setFormData({ ...formData, dateOfBirth: e.target.value } as any)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase italic">Gender</label>
+                    <select className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400 bg-white w-48" value={(formData as any).gender || ''} onChange={e => setFormData({ ...formData, gender: e.target.value } as any)}>
+                      <option value="">— Select —</option>
+                      <option>Male</option>
+                      <option>Female</option>
+                      <option>Non-binary</option>
+                      <option>Prefer not to say</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Emergency Contact */}
+                <div className="border-t border-gray-100 pt-5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">Emergency Contact</label>
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase italic">Full Name</label>
+                      <input className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400" value={(formData as any).emergencyContact?.name || ''} onChange={e => setFormData({ ...formData, emergencyContact: { ...(formData as any).emergencyContact, name: e.target.value } } as any)} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase italic">Phone</label>
+                      <input type="tel" className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400 font-mono" placeholder="(555) 000-0000" value={(formData as any).emergencyContact?.phone || ''} onChange={e => setFormData({ ...formData, emergencyContact: { ...(formData as any).emergencyContact, phone: e.target.value } } as any)} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase italic">Relationship</label>
+                      <input className="border-b-2 border-gray-100 p-1 text-xs outline-none focus:border-blue-400" placeholder="e.g. Spouse, Parent..." value={(formData as any).emergencyContact?.relationship || ''} onChange={e => setFormData({ ...formData, emergencyContact: { ...(formData as any).emergencyContact, relationship: e.target.value } } as any)} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -257,7 +317,7 @@ const EntityForm: React.FC<Props> = ({
                       <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic flex items-center justify-between">
                         <span>Address</span>
                         <button
-                          onClick={() => setShowAddressDialog(true)}
+                          onClick={() => { setEditingAddressIndex(null); setShowAddressDialog(true); }}
                           className="text-[8px] bg-gray-100 px-2 py-0.5 border rounded shadow-sm hover:bg-white text-gray-600 transition-colors uppercase"
                         >
                           Edit Details
@@ -330,7 +390,7 @@ const EntityForm: React.FC<Props> = ({
                               Same as billing
                             </label>
                             <button
-                              onClick={() => setShowAddressDialog(true)}
+                              onClick={() => { setEditingAddressIndex(-1); setShowAddressDialog(true); }}
                               className="text-[8px] bg-gray-100 px-2 py-0.5 border rounded shadow-sm hover:bg-white text-gray-600 transition-colors uppercase"
                             >
                               Edit Details
@@ -372,6 +432,87 @@ const EntityForm: React.FC<Props> = ({
                     </div>
                   </div>
                 )}
+
+                {/* ── Additional Addresses ─────────────────────────────── */}
+                <div className="pt-8 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic">Additional Addresses</p>
+                    <button
+                      onClick={() => {
+                        const newAddr: NamedAddress = {
+                          id: Math.random().toString(36).slice(2),
+                          label: 'Other',
+                          isDefault: false,
+                          Line1: '', Line2: '', City: '', CountrySubDivisionCode: '', PostalCode: '', Country: ''
+                        };
+                        const updated = [...(formData.addresses || []), newAddr];
+                        setFormData({ ...formData, addresses: updated });
+                      }}
+                      className="text-[8px] bg-[#003366] text-white px-3 py-1 rounded shadow hover:brightness-110 font-bold uppercase tracking-widest"
+                    >
+                      + Add Address
+                    </button>
+                  </div>
+
+                  {(formData.addresses || []).length === 0 && (
+                    <p className="text-[10px] text-gray-400 italic">No additional addresses. Click "+ Add Address" to add one.</p>
+                  )}
+
+                  <div className="space-y-4">
+                    {(formData.addresses || []).map((addr, idx) => (
+                      <div key={addr.id} className="border border-gray-200 rounded-sm bg-[#fafbfc] p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                          <select
+                            className="border-b border-blue-200 bg-transparent text-xs font-bold text-blue-900 outline-none pr-2"
+                            value={addr.label}
+                            onChange={e => {
+                              const updated = [...(formData.addresses || [])];
+                              updated[idx] = { ...updated[idx], label: e.target.value };
+                              setFormData({ ...formData, addresses: updated });
+                            }}
+                          >
+                            {['Billing', 'Shipping', 'Home', 'Work', 'Other'].map(l => (
+                              <option key={l} value={l}>{l}</option>
+                            ))}
+                          </select>
+                          <label className="flex items-center gap-1 text-[9px] text-gray-500 font-bold cursor-pointer ml-2">
+                            <input
+                              type="checkbox"
+                              checked={!!addr.isDefault}
+                              onChange={e => {
+                                const updated = (formData.addresses || []).map((a, i) => ({ ...a, isDefault: i === idx ? e.target.checked : false }));
+                                setFormData({ ...formData, addresses: updated });
+                              }}
+                            />
+                            Default
+                          </label>
+                          <div className="flex-1" />
+                          <button
+                            onClick={() => { setEditingAddressIndex(idx); setShowAddressDialog(true); }}
+                            className="text-[8px] bg-gray-100 px-2 py-0.5 border rounded shadow-sm hover:bg-white text-gray-600 transition-colors uppercase"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              const updated = (formData.addresses || []).filter((_, i) => i !== idx);
+                              setFormData({ ...formData, addresses: updated });
+                            }}
+                            className="text-[8px] text-red-500 hover:text-red-700 font-bold uppercase ml-1"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="text-[11px] font-mono whitespace-pre-line text-gray-600 bg-white p-2 border shadow-inner min-h-[48px]">
+                          {[addr.Line1, addr.Line2, addr.Line3, addr.Line4].filter(Boolean).join('\n') || '(No street address)'}
+                          {'\n'}
+                          {`${addr.City || ''}${addr.City && addr.CountrySubDivisionCode ? ', ' : ''}${addr.CountrySubDivisionCode || ''} ${addr.PostalCode || ''}`.trim() || '(City, State Zip)'}
+                          {addr.Country ? `\n${addr.Country}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -389,10 +530,17 @@ const EntityForm: React.FC<Props> = ({
                     onChange={e => setFormData({ ...formData, TermsRef: { value: e.target.value, name: e.target.options[e.target.selectedIndex].text } })}
                   >
                     <option value="">&lt;Choose Term&gt;</option>
-                    <option value="1">Net 15</option>
-                    <option value="2">Net 30</option>
-                    <option value="3">Net 60</option>
-                    <option value="4">Due on Receipt</option>
+                    {terms.length > 0
+                      ? terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                      : (
+                        <>
+                          <option value="1">Net 15</option>
+                          <option value="2">Net 30</option>
+                          <option value="3">Net 60</option>
+                          <option value="4">Due on Receipt</option>
+                        </>
+                      )
+                    }
                   </select>
                 </div>
                 <div className="grid grid-cols-2 items-center gap-4">
@@ -410,10 +558,9 @@ const EntityForm: React.FC<Props> = ({
                     onChange={e => setFormData({ ...formData, PreferredPaymentMethodRef: { value: e.target.value, name: e.target.options[e.target.selectedIndex].text } })}
                   >
                     <option value="">Select Method</option>
-                    <option>Check</option>
-                    <option>Cash</option>
-                    <option>Credit Card</option>
-                    <option>Bank Transfer</option>
+                    {(paymentMethods.length > 0 ? paymentMethods : ['Check', 'Cash', 'Credit Card', 'Bank Transfer', 'ACH', 'Wire Transfer'])
+                      .map(m => <option key={m} value={m}>{m}</option>)
+                    }
                   </select>
                 </div>
                 {type === 'CUSTOMER' && (
@@ -719,11 +866,41 @@ const EntityForm: React.FC<Props> = ({
                         ))}
                       </select>
                     </div>
+                    {type === 'CUSTOMER' && (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest italic">Price Level</label>
+                          <select
+                            className="border-b-2 border-blue-300 p-2 text-xs font-bold bg-blue-50 outline-none focus:border-blue-600"
+                            value={(formData as any).priceLevelId || ''}
+                            onChange={e => setFormData({ ...formData, priceLevelId: e.target.value })}
+                          >
+                            <option value="">&lt;None — Standard Price&gt;</option>
+                            {priceLevels.map(pl => (
+                              <option key={pl.id} value={pl.id}>{pl.name}</option>
+                            ))}
+                          </select>
+                          <p className="text-[9px] text-blue-400 italic pl-1">Auto-applied when creating invoices / sales orders for this customer.</p>
+                        </div>
+                        <div className="flex items-center gap-3 pt-1">
+                          <input
+                            type="checkbox"
+                            id="substituteAllowed"
+                            className="w-4 h-4 accent-blue-600 cursor-pointer"
+                            checked={(formData as any).substituteItemsAllowed !== false}
+                            onChange={e => setFormData({ ...formData, substituteItemsAllowed: e.target.checked })}
+                          />
+                          <label htmlFor="substituteAllowed" className="text-[10px] font-black text-gray-500 uppercase tracking-widest italic cursor-pointer select-none">
+                            Allow substitute / alternate items on orders
+                          </label>
+                        </div>
+                      </>
+                    )}
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] font-black text-red-700 uppercase tracking-widest italic">Opening Balance</label>
                       <div className="flex items-center border-b-2 border-red-50 px-2">
                         <span className="text-sm text-gray-400 mr-2 font-mono">$</span>
-                        <input type="number" className="flex-1 p-2 text-lg font-black text-blue-900 outline-none bg-transparent" value={formData.OpenBalance || ''} onChange={e => setFormData({ ...formData, OpenBalance: parseFloat(e.target.value) || 0, balance: parseFloat(e.target.value) || 0 })} />
+                        <input type="number" className="flex-1 p-2 text-lg font-black text-blue-900 outline-none bg-transparent" value={formData.OpenBalance || ''} onChange={e => setFormData({ ...formData, OpenBalance: parseFloat(e.target.value) || 0, openingBalance: parseFloat(e.target.value) || 0 })} />
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -872,10 +1049,29 @@ const EntityForm: React.FC<Props> = ({
 
       <AddressDialog
         isOpen={showAddressDialog}
-        onClose={() => setShowAddressDialog(false)}
-        title="Edit Address Information"
-        initialAddress={formData.BillAddr || {}}
-        onSave={(address) => setFormData({ ...formData, BillAddr: address, address: `${address.Line1 || ''} ${address.City || ''} ${address.CountrySubDivisionCode || ''} ${address.PostalCode || ''}`.trim() })}
+        onClose={() => { setShowAddressDialog(false); setEditingAddressIndex(null); }}
+        title={
+          editingAddressIndex === null ? 'Edit Billing Address' :
+          editingAddressIndex === -1 ? 'Edit Shipping Address' :
+          `Edit Address — ${(formData.addresses || [])[editingAddressIndex]?.label || 'Address'}`
+        }
+        initialAddress={
+          editingAddressIndex === null ? (formData.BillAddr || {}) :
+          editingAddressIndex === -1 ? (formData.ShipAddr || {}) :
+          ((formData.addresses || [])[editingAddressIndex] || {})
+        }
+        onSave={(address) => {
+          if (editingAddressIndex === null) {
+            setFormData({ ...formData, BillAddr: address, address: `${address.Line1 || ''} ${address.City || ''} ${address.CountrySubDivisionCode || ''} ${address.PostalCode || ''}`.trim() });
+          } else if (editingAddressIndex === -1) {
+            setFormData({ ...formData, ShipAddr: address });
+          } else {
+            const updated = [...(formData.addresses || [])];
+            updated[editingAddressIndex] = { ...updated[editingAddressIndex], ...address };
+            setFormData({ ...formData, addresses: updated });
+          }
+          setEditingAddressIndex(null);
+        }}
       />
     </div>
   );

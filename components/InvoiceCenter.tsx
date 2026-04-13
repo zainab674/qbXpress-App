@@ -10,6 +10,7 @@ interface Props {
     onOpenInvoice: (invoice: Transaction) => void;
     onOpenNewInvoice: () => void;
     onOpenWindow: (type: any, title: string, params?: any) => void;
+    onDeleteTransaction: (id: string) => void;
 }
 
 const InvoiceCenter: React.FC<Props> = ({
@@ -18,7 +19,8 @@ const InvoiceCenter: React.FC<Props> = ({
     terms,
     onOpenInvoice,
     onOpenNewInvoice,
-    onOpenWindow
+    onOpenWindow,
+    onDeleteTransaction
 }) => {
     const [activeCategory, setActiveCategory] = useState('All Invoices');
     const [searchQuery, setSearchQuery] = useState('');
@@ -97,7 +99,7 @@ const InvoiceCenter: React.FC<Props> = ({
             const q = searchQuery.toLowerCase();
             result = result.filter(inv => {
                 const custName = customers.find(c => c.id === inv.entityId)?.name || '';
-                return custName.toLowerCase().includes(q) || inv.refNo.toLowerCase().includes(q);
+                return custName.toLowerCase().includes(q) || (inv.refNo || '').toLowerCase().includes(q);
             });
         }
         return result;
@@ -179,6 +181,8 @@ const InvoiceCenter: React.FC<Props> = ({
                         customers={customers}
                         onOpenInvoice={onOpenInvoice}
                         onReceivePayment={handleReceivePayment}
+                        onEditInvoice={(inv) => onOpenWindow('INVOICE', `Edit Invoice #${inv.refNo}`, { initialData: inv })}
+                        onDeleteInvoice={(id) => onDeleteTransaction(id)}
                     />
                 </main>
             </div>

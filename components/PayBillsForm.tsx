@@ -15,7 +15,7 @@ interface Props {
 const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendorCreditCategories, onSavePayment, onClose, initialBillId }) => {
   const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
   const [payFromAccountId, setPayFromAccountId] = useState(accounts.find(a => a.type === 'Bank')?.id || '');
-  const [paymentDate, setPaymentDate] = useState(new Date().toLocaleDateString('en-US'));
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [showCredits, setShowCredits] = useState(false);
   const [appliedCredits, setAppliedCredits] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'Check' | 'Credit Card'>('Check');

@@ -1,6 +1,12 @@
 
-import React, { useState } from 'react';
-import { Item, Account } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Item, Account, Warehouse } from '../types';
+import { fetchWarehouses, fetchWarehouseInventorySnapshot, deleteItem } from '../services/api';
+
+interface WarehouseSnapshot {
+  itemId: string;
+  byWarehouse: Record<string, { qty: number; warehouseName: string }>;
+}
 
 interface Props {
   items: Item[];
@@ -15,26 +21,74 @@ interface Props {
 const ItemList: React.FC<Props> = ({ items, accounts, onUpdateItems, onOpenForm, onOpenReport, onOrderLowStock, showAlert }) => {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [snapshot, setSnapshot] = useState<WarehouseSnapshot[]>([]);
+  const [siteFilter, setSiteFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const displayedItems = items.filter(i => includeInactive || i.isActive);
+  useEffect(() => {
+    fetchWarehouses()
+      .then((whs: Warehouse[]) => setWarehouses(whs))
+      .catch(() => {/* no warehouses configured */});
+    fetchWarehouseInventorySnapshot()
+      .then((res: { warehouses: Warehouse[]; snapshot: WarehouseSnapshot[] }) => {
+        setSnapshot(res.snapshot || []);
+        if (res.warehouses?.length) setWarehouses(res.warehouses);
+      })
+      .catch(() => {/* ignore */});
+  }, []);
+
+  const displayedItems = items.filter(i => {
+    if (!includeInactive && !i.isActive) return false;
+    if (siteFilter !== 'ALL' && i.type === 'Inventory Part') {
+      const snap = snapshot.find(s => s.itemId === i.id);
+      if (snap) {
+        const qty = snap.byWarehouse[siteFilter]?.qty ?? 0;
+        if (qty === 0) return false;
+      }
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const matches =
+        i.name?.toLowerCase().includes(q) ||
+        i.sku?.toLowerCase().includes(q) ||
+        i.description?.toLowerCase().includes(q) ||
+        (i as any).manufacturer?.toLowerCase().includes(q) ||
+        (i as any).manufacturerPartNumber?.toLowerCase().includes(q) ||
+        (i as any).barcode?.toLowerCase().includes(q) ||
+        (i as any).vendorSKU?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    return true;
+  });
 
   const getAccountName = (id?: string) => accounts.find(a => a.id === id)?.name || '';
+
+  const getWarehouseQty = (item: Item, warehouseId: string): number => {
+    if (item.type !== 'Inventory Part') return 0;
+    const snap = snapshot.find(s => s.itemId === item.id);
+    return snap?.byWarehouse[warehouseId]?.qty ?? 0;
+  };
 
   const toggleActive = (id: string) => {
     onUpdateItems(items.map(i => i.id === id ? { ...i, isActive: !i.isActive } : i));
   };
 
-  const handleAdjustInventory = () => {
-    showAlert("The Inventory Adjustment module is used to sync physical counts. Please ensure all transactions are posted before proceeding.", "Inventory Management");
+  const handleDelete = async (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteItem(id);
+      onUpdateItems(items.filter(i => i.id !== id));
+      setSelectedItemId(null);
+    } catch (err: any) {
+      showAlert(err.message || 'Failed to delete item', 'Error');
+    }
   };
 
-  const handleInventoryReport = () => {
-    onOpenReport('PHYSICAL_INVENTORY', 'Physical Inventory Worksheet');
-  };
-
-  const handleValuationReport = () => {
-    onOpenReport('INV_VAL', 'Inventory Valuation Summary');
-  };
+  // Columns to show: all warehouses if ALL, or just the selected one
+  const warehouseCols = siteFilter === 'ALL' ? warehouses : warehouses.filter(w => w.id === siteFilter);
 
   return (
     <div className="flex flex-col h-full bg-[#f0f0f0] select-none">
@@ -47,7 +101,12 @@ const ItemList: React.FC<Props> = ({ items, accounts, onUpdateItems, onOpenForm,
               <th className="px-2 border-r border-gray-300 font-bold w-32 uppercase">Type</th>
               <th className="px-2 border-r border-gray-300 font-bold uppercase">Description</th>
               <th className="px-2 border-r border-gray-300 font-bold w-48 uppercase">Account</th>
-              <th className="px-2 border-r border-gray-300 font-bold w-16 text-right uppercase">On Hand</th>
+              <th className="px-2 border-r border-gray-300 font-bold w-16 text-right uppercase">Total On Hand</th>
+              {warehouseCols.map(w => (
+                <th key={w.id} className="px-2 border-r border-gray-300 font-bold w-20 text-right uppercase whitespace-nowrap" title={w.name}>
+                  {w.code || w.name.slice(0, 8)}
+                </th>
+              ))}
               <th className="px-2 font-bold w-24 text-right uppercase">Price</th>
             </tr>
           </thead>
@@ -72,6 +131,11 @@ const ItemList: React.FC<Props> = ({ items, accounts, onUpdateItems, onOpenForm,
                   <td className="px-2 border-r border-gray-200 truncate">{item.description}</td>
                   <td className="px-2 border-r border-gray-200 truncate">{getAccountName(item.incomeAccountId || item.cogsAccountId)}</td>
                   <td className="px-2 border-r border-gray-200 text-right">{item.onHand ?? ''}</td>
+                  {warehouseCols.map(w => (
+                    <td key={w.id} className="px-2 border-r border-gray-200 text-right font-mono">
+                      {item.type === 'Inventory Part' ? (getWarehouseQty(item, w.id) || '') : ''}
+                    </td>
+                  ))}
                   <td className="px-2 text-right font-mono">
                     {item.type === 'Sales Tax Item' ? `${item.taxRate}%` : (item.salesPrice || 0).toFixed(2)}
                   </td>
@@ -83,7 +147,7 @@ const ItemList: React.FC<Props> = ({ items, accounts, onUpdateItems, onOpenForm,
       </div>
 
       <div className="bg-[#f0f0f0] p-1 flex items-center justify-between border-t border-gray-300">
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
           <div className="relative group">
             <button className="bg-gray-100 hover:bg-white border border-gray-400 px-3 py-0.5 text-[11px] font-bold rounded flex items-center gap-2 shadow-sm">
               Item <span className="text-[8px]">▼</span>
@@ -92,12 +156,42 @@ const ItemList: React.FC<Props> = ({ items, accounts, onUpdateItems, onOpenForm,
               <button onClick={() => onOpenForm()} className="w-full text-left px-4 py-1.5 hover:bg-blue-600 hover:text-white text-xs">New</button>
               <button onClick={() => { const it = items.find(i => i.id === selectedItemId); if (it) onOpenForm(it); }} className="w-full text-left px-4 py-1.5 hover:bg-blue-600 hover:text-white text-xs">Edit Item</button>
               <button onClick={() => selectedItemId && toggleActive(selectedItemId)} className="w-full text-left px-4 py-1.5 hover:bg-blue-600 hover:text-white text-xs">Make Item Inactive</button>
+              <hr className="my-1 border-gray-200" />
+              <button onClick={() => selectedItemId && handleDelete(selectedItemId)} className="w-full text-left px-4 py-1.5 hover:bg-red-600 hover:text-white text-xs text-red-600">Delete Item</button>
             </div>
           </div>
-
+          {/* Search bar — name, SKU, description, mfr, barcode, vendor SKU */}
+          <div className="flex items-center border border-gray-400 bg-white rounded-sm shadow-sm overflow-hidden">
+            <span className="px-2 text-gray-400 text-[11px] select-none">🔍</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search name, SKU, barcode, mfr part#..."
+              className="text-[11px] px-1 py-0.5 outline-none bg-transparent w-52"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="px-2 text-gray-400 hover:text-red-500 text-[11px] font-bold">✕</button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 px-2">
+          {warehouses.length > 0 && (
+            <div className="flex items-center gap-1">
+              <label className="text-[11px] font-bold text-gray-700">Site:</label>
+              <select
+                value={siteFilter}
+                onChange={e => setSiteFilter(e.target.value)}
+                className="border border-gray-400 text-[11px] px-1 py-0.5 bg-white rounded-sm"
+              >
+                <option value="ALL">All Sites</option>
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <label className="flex items-center gap-2 text-[11px] font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={includeInactive} onChange={e => setIncludeInactive(e.target.checked)} />
             Include inactive

@@ -8,14 +8,15 @@ interface BillCenterProps {
     vendors: Vendor[];
     onOpenWindow: (type: ViewState, title: string, params?: any) => void;
     onPayBill: (billId: string) => void;
+    onDeleteTransaction: (id: string) => void;
 }
 
-const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWindow, onPayBill }) => {
+const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWindow, onPayBill, onDeleteTransaction }) => {
     const [activeCategory, setActiveCategory] = useState<'All' | 'Unpaid' | 'Paid' | 'Overdue' | 'Receipts'>('All');
     const [searchTerm, setSearchTerm] = useState('');
 
     const allBills = useMemo(() =>
-        transactions.filter(t => t.type?.toUpperCase() === 'BILL' || t.type?.toUpperCase() === 'RECEIVE_ITEM'),
+        transactions.filter(t => t.type?.toUpperCase() === 'BILL'),
         [transactions]);
 
     const unpaidBills = useMemo(() =>
@@ -26,9 +27,23 @@ const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWi
         allBills.filter(b => b.status?.toUpperCase() === 'PAID'),
         [allBills]);
 
-    const overdueBills = useMemo(() =>
-        unpaidBills.filter(b => b.dueDate && new Date(b.dueDate) < new Date()),
-        [unpaidBills]);
+    const overdueBills = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return unpaidBills.filter(b => {
+            if (b.dueDate) {
+                const due = new Date(b.dueDate);
+                due.setHours(0, 0, 0, 0);
+                return due < today;
+            }
+            // Fallback: assume Net 30 if no dueDate
+            const billDate = new Date(b.date);
+            if (isNaN(billDate.getTime())) return false;
+            billDate.setDate(billDate.getDate() + 30);
+            billDate.setHours(0, 0, 0, 0);
+            return billDate < today;
+        });
+    }, [unpaidBills]);
 
     const itemReceipts = useMemo(() =>
         transactions.filter(t => t.type?.toUpperCase() === 'RECEIVE_ITEM'),
@@ -47,7 +62,7 @@ const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWi
     const metrics = [
         {
             id: 'All',
-            title: 'Total Bills (30d)',
+            title: 'All Bills',
             value: `$${allBills.reduce((acc, b) => acc + b.total, 0).toLocaleString()}`,
             count: allBills.length,
             data: [30, 45, 35, 50, 40, 60, 55],
@@ -164,6 +179,11 @@ const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWi
                             const viewType = tx?.type === 'RECEIVE_ITEM' ? 'ITEM_RECEIPT_DISPLAY' : 'BILL_DISPLAY';
                             onOpenWindow(viewType, `${tx?.type === 'RECEIVE_ITEM' ? 'Item Receipt' : 'Bill'} #${tx?.refNo}`, { transactionId: id });
                         }}
+                        onEditBill={(id) => {
+                            const tx = transactions.find(t => t.id === id);
+                            if (tx) onOpenWindow('BILL', `Edit Bill #${tx.refNo}`, { initialData: tx });
+                        }}
+                        onDeleteBill={(id) => onDeleteTransaction(id)}
                         onPayBill={onPayBill}
                     />
                 </div>

@@ -1,6 +1,14 @@
 import React from 'react';
 import { Transaction, Customer, Item, QBClass } from '../types';
 
+interface Milestone {
+    id: string;
+    name: string;
+    amount: number;
+    dueDate?: string;
+    status: 'PENDING' | 'BILLED' | 'PAID';
+}
+
 interface EstimateDisplayProps {
     estimate: Transaction;
     customer: Customer | undefined;
@@ -8,10 +16,44 @@ interface EstimateDisplayProps {
     classes: QBClass[];
     onClose: () => void;
     onConvertToInvoice?: (estimate: Transaction) => void;
+    onConvertToSalesOrder?: (estimate: Transaction) => void;
+    onSave?: (estimate: Transaction) => void;
 }
 
-const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, items, classes, onClose, onConvertToInvoice }) => {
+const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, items, classes, onClose, onConvertToInvoice, onConvertToSalesOrder, onSave }) => {
     const totalAmount = estimate.total.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const [milestones, setMilestones] = React.useState<Milestone[]>(((estimate as any).milestones || []) as Milestone[]);
+    const [showAddMilestone, setShowAddMilestone] = React.useState(false);
+    const [newMilestone, setNewMilestone] = React.useState<{ name: string; amount: string; dueDate: string }>({ name: '', amount: '', dueDate: '' });
+
+    const saveMilestones = (updated: Milestone[]) => {
+        setMilestones(updated);
+        if (onSave) {
+            const { _id, __v, ...clean } = estimate as any;
+            onSave({ ...clean, milestones: updated });
+        }
+    };
+
+    const addMilestone = () => {
+        if (!newMilestone.name || !newMilestone.amount) return;
+        const m: Milestone = {
+            id: crypto.randomUUID(),
+            name: newMilestone.name,
+            amount: parseFloat(newMilestone.amount) || 0,
+            dueDate: newMilestone.dueDate || undefined,
+            status: 'PENDING',
+        };
+        saveMilestones([...milestones, m]);
+        setNewMilestone({ name: '', amount: '', dueDate: '' });
+        setShowAddMilestone(false);
+    };
+
+    const removeMilestone = (id: string) => {
+        saveMilestones(milestones.filter(m => m.id !== id));
+    };
+
+    const milestonesTotal = milestones.reduce((s, m) => s + (m.amount || 0), 0);
+    const estimateTotal = estimate.total || 0;
 
     const getStatusColor = (status: string | undefined) => {
         switch (status) {
@@ -46,6 +88,17 @@ const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, i
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
+                        {(estimate.status === 'Pending' || estimate.status === 'Accepted' || estimate.status === 'Complete' || !estimate.status) && onConvertToSalesOrder && (
+                            <button
+                                onClick={() => onConvertToSalesOrder(estimate)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-black text-[10px] uppercase tracking-widest shadow-sm transition-all active:scale-95 flex items-center gap-2 mr-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7l3 3 3-3" />
+                                </svg>
+                                Create Sales Order
+                            </button>
+                        )}
                         {(estimate.status === 'Pending' || estimate.status === 'Accepted' || estimate.status === 'Complete' || !estimate.status) && onConvertToInvoice && (
                             <button
                                 onClick={() => onConvertToInvoice(estimate)}
@@ -205,6 +258,99 @@ const EstimateDisplay: React.FC<EstimateDisplayProps> = ({ estimate, customer, i
                             )}
                         </div>
                     </div>
+                </div>
+
+                {/* Milestones Panel */}
+                <div className="border-t-2 border-slate-200 bg-slate-50 px-8 py-6 no-print">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black uppercase tracking-widest text-slate-600">Payment Milestones</span>
+                            <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full">{milestones.length}</span>
+                        </div>
+                        {onSave && (
+                            <button
+                                onClick={() => setShowAddMilestone(v => !v)}
+                                className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                                Add Milestone
+                            </button>
+                        )}
+                    </div>
+
+                    {showAddMilestone && (
+                        <div className="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                                <div>
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Name</label>
+                                    <input type="text" placeholder="e.g. Foundation Complete"
+                                        value={newMilestone.name}
+                                        onChange={e => setNewMilestone(p => ({ ...p, name: e.target.value }))}
+                                        className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Amount</label>
+                                    <input type="number" min={0} step="0.01" placeholder="0.00"
+                                        value={newMilestone.amount}
+                                        onChange={e => setNewMilestone(p => ({ ...p, amount: e.target.value }))}
+                                        className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Due Date</label>
+                                    <input type="date"
+                                        value={newMilestone.dueDate}
+                                        onChange={e => setNewMilestone(p => ({ ...p, dueDate: e.target.value }))}
+                                        className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                                </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                                <button onClick={() => setShowAddMilestone(false)} className="px-3 py-1 text-[10px] font-black uppercase tracking-widest border border-slate-300 rounded hover:bg-slate-50">Cancel</button>
+                                <button onClick={addMilestone} disabled={!newMilestone.name || !newMilestone.amount}
+                                    className="px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                                    Save Milestone
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {milestones.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No milestones defined. Add milestones to enable milestone-based progress invoicing.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {milestones.map(m => (
+                                <div key={m.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">{m.name}</p>
+                                        {m.dueDate && <p className="text-[10px] text-slate-400">Due: {m.dueDate}</p>}
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full
+                                            ${m.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                                              m.status === 'BILLED' ? 'bg-amber-100 text-amber-700' :
+                                              'bg-slate-100 text-slate-500'}`}>{m.status}</span>
+                                        <p className="text-sm font-black text-slate-900">${(m.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                        {onSave && m.status === 'PENDING' && (
+                                            <button onClick={() => removeMilestone(m.id)}
+                                                className="text-[9px] font-black uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors">
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestones Total</span>
+                                <div className="text-right">
+                                    <span className={`text-sm font-black ${Math.abs(milestonesTotal - estimateTotal) > 0.01 ? 'text-amber-600' : 'text-green-700'}`}>
+                                        ${milestonesTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                    {Math.abs(milestonesTotal - estimateTotal) > 0.01 && (
+                                        <p className="text-[9px] text-amber-500 italic">Estimate total: ${estimateTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}

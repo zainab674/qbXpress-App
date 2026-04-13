@@ -12,7 +12,7 @@ interface SalesOrderCenterProps {
 }
 
 const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, customers, onOpenWindow, onSaveTransaction }) => {
-    const [activeCategory, setActiveCategory] = useState<'All' | 'Open' | 'Converted' | 'Closed'>('All');
+    const [activeCategory, setActiveCategory] = useState<'All' | 'Open' | 'Converted' | 'Closed' | 'Backordered' | 'PendingFulfillment'>('All');
     const [searchTerm, setSearchTerm] = useState('');
 
     const allSOs = useMemo(() =>
@@ -20,15 +20,26 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
         [transactions]);
 
     const openSOs = useMemo(() =>
-        allSOs.filter(so => so.status === 'OPEN' || so.status === 'Open' || !so.status),
+        allSOs.filter(so => !so.status || so.status.toLowerCase() === 'open'),
         [allSOs]);
 
     const convertedSOs = useMemo(() =>
-        allSOs.filter(so => so.status === 'Converted'),
+        allSOs.filter(so => so.status?.toLowerCase() === 'converted'),
         [allSOs]);
 
     const closedSOs = useMemo(() =>
-        allSOs.filter(so => so.status === 'CLOSED'),
+        allSOs.filter(so => so.status?.toLowerCase() === 'closed'),
+        [allSOs]);
+
+    const backorderedSOs = useMemo(() =>
+        allSOs.filter(so => so.backorderStatus === 'FULL' || so.backorderStatus === 'PARTIAL'),
+        [allSOs]);
+
+    const pendingFulfillmentSOs = useMemo(() =>
+        allSOs.filter(so => {
+            const fs = (so as any).fulfillmentStatus;
+            return fs === 'UNFULFILLED' || fs === 'PARTIALLY_FULFILLED';
+        }),
         [allSOs]);
 
     const filteredSOs = useMemo(() => {
@@ -36,9 +47,11 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
             case 'Open': return openSOs;
             case 'Converted': return convertedSOs;
             case 'Closed': return closedSOs;
+            case 'Backordered': return backorderedSOs;
+            case 'PendingFulfillment': return pendingFulfillmentSOs;
             default: return allSOs;
         }
-    }, [activeCategory, allSOs, openSOs, convertedSOs, closedSOs]);
+    }, [activeCategory, allSOs, openSOs, convertedSOs, closedSOs, backorderedSOs, pendingFulfillmentSOs]);
 
     const metrics = [
         {
@@ -64,6 +77,14 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
             count: closedSOs.length,
             data: [5, 12, 8, 15, 10, 20, 18],
             color: '#6366f1'
+        },
+        {
+            id: 'PendingFulfillment',
+            title: 'Pending Fulfillment',
+            value: `$${pendingFulfillmentSOs.reduce((acc, s) => acc + s.total, 0).toLocaleString()}`,
+            count: pendingFulfillmentSOs.length,
+            data: [8, 14, 10, 18, 12, 22, 20],
+            color: '#7c3aed'
         }
     ];
 
@@ -88,7 +109,7 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
 
                 <div className="flex flex-col gap-4 mt-2">
                     <SummaryCard
-                        title="All Active SOs"
+                        title="All Sales Orders"
                         value={`$${allSOs.reduce((acc, s) => acc + s.total, 0).toLocaleString()}`}
                         count={allSOs.length}
                         data={[30, 45, 35, 50, 40, 60, 55]}
@@ -108,6 +129,15 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
                             onClick={() => setActiveCategory(metric.id as any)}
                         />
                     ))}
+                    <SummaryCard
+                        title="Backordered"
+                        value={`$${backorderedSOs.reduce((acc, s) => acc + s.total, 0).toLocaleString()}`}
+                        count={backorderedSOs.length}
+                        data={[8, 12, 10, 15, 11, 18, 14]}
+                        color="#ef4444"
+                        isActive={activeCategory === 'Backordered'}
+                        onClick={() => setActiveCategory('Backordered')}
+                    />
                 </div>
             </div>
 
@@ -115,7 +145,9 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
             <div className="flex-1 flex flex-col overflow-hidden">
                 <header className="p-10 pb-6 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">{activeCategory} Sales Orders</h2>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                            {activeCategory === 'PendingFulfillment' ? 'Pending Fulfillment' : activeCategory} Sales Orders
+                        </h2>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -140,6 +172,13 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
                         customers={customers}
                         searchTerm={searchTerm}
                         onOpenSO={(id) => onOpenWindow('SALES_ORDER_DISPLAY', `Sales Order #${transactions.find(t => t.id === id)?.refNo}`, { transactionId: id })}
+                        onMarkBackorder={(id: string, status: 'FULL' | 'PARTIAL' | 'NONE') => {
+                            const so = transactions.find(t => t.id === id);
+                            if (so) {
+                                const { _id, __v, ...clean } = so as any;
+                                onSaveTransaction({ ...clean, backorderStatus: status });
+                            }
+                        }}
                         onConvertToInvoice={(id) => {
                             const so = transactions.find(t => t.id === id);
                             if (so) {
@@ -147,8 +186,8 @@ const SalesOrderCenter: React.FC<SalesOrderCenterProps> = ({ transactions, custo
                                 const updatedSO = { ...cleanSO, status: 'Converted' };
                                 onSaveTransaction(updatedSO);
 
-                                const { id: _ignored, ...invoiceData } = updatedSO;
-                                onOpenWindow('INVOICE', 'Invoice', { initialData: invoiceData as any });
+                                const { id: soId, refNo: _refNo, ...invoiceData } = updatedSO;
+                                onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invoiceData, linkedDocumentIds: [soId] } as any });
                             }
                         }}
                     />

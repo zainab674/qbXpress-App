@@ -23,7 +23,7 @@ const PayrollConnect: React.FC = () => {
 
     const handleAllow = () => {
         const token = localStorage.getItem('authToken');
-        const company = companies.find(c => c.id === activeCompanyId);
+        const company = companies.find(c => (c._id || c.id) === activeCompanyId);
 
         if (!token) {
             setStatus('error');
@@ -37,7 +37,7 @@ const PayrollConnect: React.FC = () => {
         redirectUrl.searchParams.set('state', state!);
         if (company) {
             redirectUrl.searchParams.set('company_name', company.name);
-            redirectUrl.searchParams.set('company_id', company.id);
+            redirectUrl.searchParams.set('company_id', company._id || company.id);
         }
 
         setStatus('success');
@@ -51,7 +51,7 @@ const PayrollConnect: React.FC = () => {
         window.close();
     };
 
-    const company = companies.find(c => c.id === activeCompanyId);
+    const company = companies.find(c => (c._id || c.id) === activeCompanyId);
 
     return (
         <div className="min-h-screen bg-[#0f1117] text-white flex flex-col items-center justify-center p-6 font-sans">

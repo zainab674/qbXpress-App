@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendEmail, fetchAvailableLots } from '../services/api';
+import { sendEmail, fetchAvailableLots, fetchSerialNumbers } from '../services/api';
 import { useData } from '../contexts/DataContext';
 import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, TimeEntry, Term, PriceLevel, RecurringTemplate } from '../types';
+import AddressSelector, { formatAddress } from './AddressSelector';
 import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 import { generatePDF } from '../services/printService';
 
@@ -56,13 +57,19 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   );
 
   const [availableLotsMap, setAvailableLotsMap] = useState<Record<string, any[]>>({});
+  const [availableSerialsMap, setAvailableSerialsMap] = useState<Record<string, any[]>>({});
+
+  // OOS substitute item suggestion: { lineId, itemId, substitutes }
+  const [oosSubstituteSuggestion, setOosSubstituteSuggestion] = useState<{ lineId: string; itemName: string; substitutes: { itemId: string; reason?: string }[] } | null>(null);
 
   const [showBillableModal, setShowBillableModal] = useState(false);
   const [selectedBillableIds, setSelectedBillableIds] = useState<string[]>([]);
   const [showEstimateModal, setShowEstimateModal] = useState(false);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [showProgressModal, setShowProgressModal] = useState(false);
-  const [progressData, setProgressData] = useState<{ type: 'TOTAL' | 'PERCENT' | 'ITEMIZED', percent?: number }>({ type: 'TOTAL' });
+  const [progressData, setProgressData] = useState<{ type: 'TOTAL' | 'PERCENT' | 'ITEMIZED' | 'MILESTONE', percent?: number }>({ type: 'TOTAL' });
+  const [progressItemized, setProgressItemized] = useState<Record<string, { selected: boolean; qty: number }>>({});
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isEmailing, setIsEmailing] = useState(false);
@@ -108,7 +115,11 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
     return date;
   };
 
-  const openEstimates = transactions.filter(t => t.type === 'ESTIMATE' && t.entityId === selectedCustomerId && t.status === 'OPEN');
+  const openEstimates = transactions.filter(t =>
+    t.type === 'ESTIMATE' &&
+    t.entityId === selectedCustomerId &&
+    (t.status === 'OPEN' || t.status === 'Pending' || t.status === 'Accepted')
+  );
 
   useEffect(() => {
     if (selectedCustomerId && openEstimates.length > 0 && !initialData) {
@@ -122,6 +133,13 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
 
   const handleSelectEstimate = (est: Transaction) => {
     setSelectedEstimateId(est.id);
+    // Initialize per-item state for ITEMIZED mode
+    const init: Record<string, { selected: boolean; qty: number }> = {};
+    est.items.forEach(item => {
+      init[item.id] = { selected: true, qty: item.quantity };
+    });
+    setProgressItemized(init);
+    setProgressData({ type: 'TOTAL' });
     setShowEstimateModal(false);
     setShowProgressModal(true);
   };
@@ -129,29 +147,71 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const finalizeEstimateToInvoice = () => {
     const est = transactions.find(t => t.id === selectedEstimateId);
     if (!est) return;
-    let newItems = [];
+    let newItems: Partial<TransactionItem>[] = [];
+
     if (progressData.type === 'TOTAL') {
-      newItems = est.items.map(i => ({ ...i, id: crypto.randomUUID() }));
-    } else if (progressData.type === 'PERCENT') {
-      const p = (progressData.percent || 100) / 100;
       newItems = est.items.map(i => ({
         ...i,
         id: crypto.randomUUID(),
-        quantity: i.quantity * p,
-        amount: i.amount * p,
-        description: `${i.description} (${(p * 100).toFixed(0)}% of original)`
+        estimatedQty: i.quantity,
+        estimatedAmount: i.amount,
+        progressPercent: 100,
       }));
+    } else if (progressData.type === 'PERCENT') {
+      const p = Math.min(Math.max((progressData.percent || 100), 0), 100) / 100;
+      newItems = est.items.map(i => ({
+        ...i,
+        id: crypto.randomUUID(),
+        quantity: parseFloat((i.quantity * p).toFixed(4)),
+        amount: parseFloat((i.amount * p).toFixed(2)),
+        description: `${i.description} (${(p * 100).toFixed(0)}% of estimate)`,
+        estimatedQty: i.quantity,
+        estimatedAmount: i.amount,
+        progressPercent: p * 100,
+      }));
+    } else if (progressData.type === 'MILESTONE') {
+      // Bill the selected milestone as a single line item
+      const milestone = ((est as any).milestones || []).find((m: any) => m.id === selectedMilestoneId);
+      if (milestone) {
+        newItems = [{
+          id: crypto.randomUUID(),
+          description: `Milestone: ${milestone.name}`,
+          quantity: 1,
+          rate: milestone.amount,
+          amount: milestone.amount,
+          tax: false,
+          estimatedAmount: milestone.amount,
+          progressPercent: 100,
+        }];
+      }
     } else {
-      newItems = est.items.slice(0, 1).map(i => ({ ...i, id: crypto.randomUUID() }));
+      // ITEMIZED: include only selected items at the entered quantity
+      newItems = est.items
+        .filter(i => progressItemized[i.id]?.selected)
+        .map(i => {
+          const qty = progressItemized[i.id]?.qty ?? i.quantity;
+          const pct = i.quantity > 0 ? (qty / i.quantity) * 100 : 100;
+          return {
+            ...i,
+            id: crypto.randomUUID(),
+            quantity: qty,
+            amount: parseFloat((qty * i.rate).toFixed(2)),
+            estimatedQty: i.quantity,
+            estimatedAmount: i.amount,
+            progressPercent: parseFloat(pct.toFixed(2)),
+          };
+        });
     }
+
     setLineItems([...lineItems.filter(li => li.description || li.rate), ...newItems]);
     if (est.BillAddr) setBillAddr(est.BillAddr.Line1 || '');
     if (est.ShipAddr) setShipAddr(est.ShipAddr.Line1 || '');
     setShowProgressModal(false);
+    setSelectedMilestoneId(null);
   };
 
   const handleAddItem = () => {
-    setLineItems([...lineItems, { id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, classId: '', lotNumber: '' }]);
+    setLineItems([...lineItems, { id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, classId: '', lotNumber: '', serialNumber: '' }]);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -197,13 +257,34 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
           const base = priceLevel.formulaConfig.baseOn === 'Cost' ? (item.cost || 0) : rate;
           const factor = priceLevel.formulaConfig.adjustmentType === 'Increase' ? 1 : -1;
           rate = base * (1 + (factor * priceLevel.formulaConfig.adjustmentAmount / 100));
-        } else if (priceLevel.type === 'Per Item' && priceLevel.perItemPrices) {
-          rate = priceLevel.perItemPrices[item.id] || rate;
+        } else if (priceLevel.type === 'Per Item') {
+          const pl = priceLevel as any;
+          const fromObj = pl.perItemPrices?.[item.id];
+          const fromArr = (pl.itemPrices as { itemId: string; price: number }[] | undefined)?.find((ip: any) => ip.itemId === item.id)?.price;
+          rate = fromObj ?? fromArr ?? rate;
         }
       }
       updateLineItem(id, { description: item.description || item.name, rate: rate, tax: item.taxCode === 'Tax' });
-      if (item.type === 'Inventory Part' || item.type === 'Inventory Assembly') {
+      // QB Enterprise: only fetch/auto-suggest lots for items with lot tracking enabled
+      if ((item.type === 'Inventory Part' || item.type === 'Inventory Assembly') && item.trackLots) {
         fetchAndSuggestLot(id, itemId);
+      } else {
+        updateLineItem(id, { lotNumber: '' });
+      }
+      // Fetch available in-stock serials for serial-tracked items
+      if ((item.type === 'Inventory Part' || item.type === 'Inventory Assembly') && item.trackSerialNumbers) {
+        fetchSerialNumbers(itemId, 'in-stock')
+          .then((serials: any[]) => setAvailableSerialsMap(prev => ({ ...prev, [itemId]: serials })))
+          .catch(() => {});
+      } else {
+        updateLineItem(id, { serialNumber: '' });
+      }
+      // QB Enterprise: if item is out of stock and has substitutes, suggest them
+      const subs = (item as any).substituteItems as { itemId: string; reason?: string }[] | undefined;
+      if ((item.onHand ?? 0) <= 0 && subs && subs.length > 0) {
+        setOosSubstituteSuggestion({ lineId: id, itemName: item.name, substitutes: subs });
+      } else {
+        setOosSubstituteSuggestion(null);
       }
     }
   };
@@ -212,6 +293,26 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
     if (!selectedCustomerId) { alert("Please select a customer."); return; }
     const validItems = lineItems.filter(i => (i.amount || 0) !== 0 || i.description);
     if (validItems.length === 0) { alert("Please add at least one line item."); return; }
+    // QB Enterprise: lot number is required for all lot-tracked items
+    const missingLot = validItems.find(li => {
+      const itm = availableItems.find(a => a.id === li.itemId);
+      return itm?.trackLots && !li.lotNumber;
+    });
+    if (missingLot) {
+      const itm = availableItems.find(a => a.id === missingLot.itemId);
+      alert(`Lot number is required for "${itm?.name || missingLot.itemId}". Please select or enter a lot number before saving.`);
+      return;
+    }
+    // Serial number required for serial-tracked items (qty must be 1 each)
+    const missingSerial = validItems.find(li => {
+      const itm = availableItems.find(a => a.id === li.itemId);
+      return itm?.trackSerialNumbers && !li.serialNumber;
+    });
+    if (missingSerial) {
+      const itm = availableItems.find(a => a.id === missingSerial.itemId);
+      alert(`Serial number is required for "${itm?.name || missingSerial.itemId}". Please select a serial number before saving.`);
+      return;
+    }
 
     onSave({
       id: initialData?.id || crypto.randomUUID(),
@@ -259,15 +360,22 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
         customerId: i.customerId,
         isBillable: i.isBillable,
         classId: i.classId,
-        lotNumber: i.lotNumber
+        lotNumber: i.lotNumber,
+        serialNumber: i.serialNumber,
+        estimatedQty: i.estimatedQty,
+        estimatedAmount: i.estimatedAmount,
+        progressPercent: i.progressPercent,
       })),
       BillAddr: { Line1: billAddr },
-      ShipAddr: { Line1: shipAddr }
+      ShipAddr: { Line1: shipAddr },
+      estimateId: selectedEstimateId || undefined,
+      progressType: selectedEstimateId ? progressData.type : undefined,
+      progressPercent: selectedEstimateId && progressData.type === 'PERCENT' ? progressData.percent : undefined,
     } as any);
 
     if (!stayOpen) onClose();
     else {
-      setLineItems([{ id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, lotNumber: '' }]);
+      setLineItems([{ id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, lotNumber: '', serialNumber: '' }]);
       setInvoiceNo((parseInt(invoiceNo) + 1).toString());
     }
   };
@@ -467,11 +575,35 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
                 setSelectedCustomerId(custId);
                 const customer = customers.find(c => c.id === custId);
                 if (customer) {
-                  const addr = customer.address || '';
-                  setBillAddr(addr);
-                  setShipAddr(addr);
+                  const bill = formatAddress(customer.BillAddr) || customer.address || '';
+                  const ship = formatAddress(customer.ShipAddr) || bill;
+                  setBillAddr(bill);
+                  setShipAddr(ship);
                   setEmail(customer.email || customer.PrimaryEmailAddr?.Address || '');
+                  // Reprice existing lines with new customer's price level
+                  const priceLevel = priceLevels.find(pl => pl.id === customer.priceLevelId);
+                  if (priceLevel) {
+                    setLineItems(prev => prev.map(li => {
+                      const itm = availableItems.find(a => a.id === li.itemId);
+                      if (!itm) return li;
+                      let rate = itm.salesPrice || 0;
+                      if (priceLevel.type === 'Fixed %') {
+                        rate = rate * (1 + (priceLevel.percentage || 0) / 100);
+                      } else if (priceLevel.type === 'Formula' && priceLevel.formulaConfig) {
+                        const base = priceLevel.formulaConfig.baseOn === 'Cost' ? (itm.cost || 0) : rate;
+                        const factor = priceLevel.formulaConfig.adjustmentType === 'Increase' ? 1 : -1;
+                        rate = base * (1 + (factor * priceLevel.formulaConfig.adjustmentAmount / 100));
+                      } else if (priceLevel.type === 'Per Item') {
+                        const pl = priceLevel as any;
+                        const fromObj = pl.perItemPrices?.[itm.id];
+                        const fromArr = (pl.itemPrices as { itemId: string; price: number }[] | undefined)?.find((ip: any) => ip.itemId === itm.id)?.price;
+                        rate = fromObj ?? fromArr ?? rate;
+                      }
+                      return { ...li, rate, amount: (li.quantity || 0) * rate };
+                    }));
+                  }
                 }
+                setOosSubstituteSuggestion(null);
               }}>
                 <option value="">Select a Customer</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -499,20 +631,20 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
         </div>
 
         <div className="flex gap-8 mb-8">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-gray-600 uppercase italic">Bill To</label>
-            <textarea
-              className="border-2 border-gray-300 rounded p-3 text-sm w-72 h-32 outline-none focus:ring-2 ring-blue-500 italic bg-gray-50 font-bold focus:border-blue-500 shadow-inner"
+          <div className="w-72">
+            <AddressSelector
+              entity={customers.find(c => c.id === selectedCustomerId) || null}
               value={billAddr}
-              onChange={e => setBillAddr(e.target.value)}
+              onChange={setBillAddr}
+              label="Bill To"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-gray-600 uppercase italic">Ship To</label>
-            <textarea
-              className="border-2 border-gray-300 rounded p-3 text-sm w-72 h-32 outline-none focus:ring-2 ring-blue-500 italic bg-gray-50 font-bold focus:border-blue-500 shadow-inner"
+          <div className="w-72">
+            <AddressSelector
+              entity={customers.find(c => c.id === selectedCustomerId) || null}
               value={shipAddr}
-              onChange={e => setShipAddr(e.target.value)}
+              onChange={setShipAddr}
+              label="Ship To"
             />
           </div>
           <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4 text-right pl-10">
@@ -544,6 +676,44 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
           </div>
         </div>
 
+        {/* OOS Substitute Item Suggestion Banner */}
+        {oosSubstituteSuggestion && (
+          <div className="mb-3 bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-4 shadow-sm">
+            <span className="text-2xl mt-0.5">⚠️</span>
+            <div className="flex-1">
+              <p className="text-xs font-black text-amber-800 uppercase tracking-wide mb-1">
+                "{oosSubstituteSuggestion.itemName}" is out of stock — substitute items available
+              </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {oosSubstituteSuggestion.substitutes.map(sub => {
+                  const subItem = availableItems.find(i => i.id === sub.itemId);
+                  if (!subItem) return null;
+                  return (
+                    <button
+                      key={sub.itemId}
+                      onClick={() => {
+                        handleItemSelect(oosSubstituteSuggestion.lineId, sub.itemId);
+                        updateLineItem(oosSubstituteSuggestion.lineId, { itemId: sub.itemId });
+                        setOosSubstituteSuggestion(null);
+                      }}
+                      className="flex items-center gap-2 bg-white border-2 border-amber-300 hover:border-amber-500 hover:bg-amber-50 rounded-lg px-3 py-1.5 text-xs font-bold text-amber-900 transition-all"
+                    >
+                      <span className="font-black">{subItem.name}</span>
+                      {subItem.onHand !== undefined && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${subItem.onHand > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                          {subItem.onHand} on hand
+                        </span>
+                      )}
+                      {sub.reason && <span className="text-[10px] text-amber-500 italic">— {sub.reason}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <button onClick={() => setOosSubstituteSuggestion(null)} className="text-amber-400 hover:text-amber-700 font-black text-lg leading-none">×</button>
+          </div>
+        )}
+
         <div className="border-2 border-gray-400 rounded-lg overflow-hidden bg-gray-50 shadow-md">
           <table className="w-full text-sm">
             <thead className="bg-[#003366] border-b-2 border-gray-900 text-white font-bold">
@@ -552,6 +722,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
                 {isFieldVisible('item') && <th className="px-4 py-3 text-left w-64 border-r border-gray-600">Item</th>}
                 {isFieldVisible('description') && <th className="px-4 py-3 text-left border-r border-gray-600">Description</th>}
                 <th className="px-4 py-3 text-left w-32 border-r border-gray-600">Lot Number</th>
+                <th className="px-4 py-3 text-left w-36 border-r border-gray-600">Serial #</th>
                 {isFieldVisible('itemRate') && <th className="px-4 py-3 text-right w-32 border-r border-gray-600">Rate</th>}
                 <th className="px-4 py-3 text-center w-16 border-r border-gray-600">Tax</th>
                 {isFieldVisible('amount') && <th className="px-4 py-3 text-right w-32 border-r border-gray-600">Amount</th>}
@@ -565,18 +736,69 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
                   {isFieldVisible('item') && <td className="p-0 border-r-2 border-gray-200"><select className="w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-sm" value={item.itemId} onChange={e => { updateLineItem(item.id!, { itemId: e.target.value }); handleItemSelect(item.id!, e.target.value); }}><option value="">Select Item...</option>{availableItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></td>}
                   {isFieldVisible('description') && <td className="p-0 border-r-2 border-gray-200"><input className="w-full px-4 py-3 bg-transparent outline-none italic text-gray-700 font-medium text-sm" value={item.description || ''} onChange={e => updateLineItem(item.id!, { description: e.target.value })} /></td>}
                   <td className="p-0 border-r-2 border-gray-200">
-                    <select
-                      className="w-full px-4 py-3 bg-transparent outline-none font-bold text-xs"
-                      value={item.lotNumber || ''}
-                      onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
-                    >
-                      <option value="">--Select Lot--</option>
-                      {availableLotsMap[item.itemId!]?.map(lot => (
-                        <option key={lot.lotNumber} value={lot.lotNumber}>
-                          {lot.lotNumber} ({lot.quantityRemaining} left)
-                        </option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const lineItem = availableItems.find(a => a.id === item.itemId);
+                      // QB Enterprise: lot cell is only active for items with lot tracking enabled
+                      if (!lineItem?.trackLots) {
+                        return <span className="px-4 py-3 block text-gray-300 text-xs select-none">—</span>;
+                      }
+                      const lots = availableLotsMap[item.itemId!] || [];
+                      const selectedLot = lots.find((l: any) => l.lotNumber === item.lotNumber);
+                      const now = new Date();
+                      const isExpired = selectedLot?.expirationDate && new Date(selectedLot.expirationDate) <= now;
+                      const expiringSoon = selectedLot?.expirationDate && !isExpired && (new Date(selectedLot.expirationDate).getTime() - now.getTime()) < 30 * 24 * 60 * 60 * 1000;
+                      const missingRequired = !item.lotNumber;
+                      return (
+                        <div className="relative">
+                          <select
+                            className={`w-full px-4 py-3 bg-transparent outline-none font-bold text-xs
+                              ${isExpired ? 'text-red-700' : expiringSoon ? 'text-amber-700' : ''}
+                              ${missingRequired ? 'border-l-2 border-red-400' : ''}`}
+                            value={item.lotNumber || ''}
+                            onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
+                          >
+                            <option value="">-- Required * --</option>
+                            {lots.map((lot: any) => {
+                              const lotExpired = lot.expirationDate && new Date(lot.expirationDate) <= now;
+                              const lotExpiringSoon = lot.expirationDate && !lotExpired && (new Date(lot.expirationDate).getTime() - now.getTime()) < 30 * 24 * 60 * 60 * 1000;
+                              const expLabel = lot.expirationDate ? ` · exp ${new Date(lot.expirationDate).toLocaleDateString()}` : '';
+                              const flag = lotExpired ? ' ⚠ EXPIRED' : lotExpiringSoon ? ' ⚠ Exp Soon' : '';
+                              return (
+                                <option key={lot.lotNumber} value={lot.lotNumber}>
+                                  {lot.lotNumber} ({lot.quantityRemaining} left{expLabel}{flag})
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {isExpired && <div className="absolute bottom-0 left-0 right-0 text-[8px] font-black text-red-600 bg-red-50 text-center leading-3 pb-0.5">EXPIRED LOT</div>}
+                          {expiringSoon && !isExpired && <div className="absolute bottom-0 left-0 right-0 text-[8px] font-black text-amber-600 bg-amber-50 text-center leading-3 pb-0.5">EXPIRING SOON</div>}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="p-0 border-r-2 border-gray-200">
+                    {(() => {
+                      const lineItem = availableItems.find(a => a.id === item.itemId);
+                      if (!lineItem?.trackSerialNumbers) {
+                        return <span className="px-4 py-3 block text-gray-300 text-xs select-none">—</span>;
+                      }
+                      const serials = availableSerialsMap[item.itemId!] || [];
+                      const missing = !item.serialNumber;
+                      return (
+                        <select
+                          className={`w-full px-4 py-3 bg-transparent outline-none font-bold text-xs text-teal-800 ${missing ? 'border-l-2 border-red-400' : ''}`}
+                          value={item.serialNumber || ''}
+                          onChange={e => updateLineItem(item.id!, { serialNumber: e.target.value })}
+                        >
+                          <option value="">-- Required * --</option>
+                          {serials.map((sn: any) => (
+                            <option key={sn.serialNumber} value={sn.serialNumber}>
+                              {sn.serialNumber}{sn.warehouseId && sn.warehouseId !== 'DEFAULT' ? ` · ${sn.warehouseId}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </td>
                   {isFieldVisible('itemRate') && <td className="p-0 border-r-2 border-gray-200"><input type="number" className="w-full px-4 py-3 bg-transparent outline-none text-right font-bold text-sm" value={item.rate || ''} onChange={e => updateLineItem(item.id!, { rate: parseFloat(e.target.value) || 0 })} /></td>}
                   <td className="p-0 border-r-2 border-gray-200 text-center">
@@ -747,37 +969,273 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
             <div className="p-6">
               <p className="text-sm font-bold text-blue-900 mb-4 italic">There are open estimates for this customer. Do you want to create the invoice from an estimate?</p>
               <div className="space-y-2">
-                {openEstimates.map(est => (
-                  <button key={est.id} onClick={() => handleSelectEstimate(est)} className="w-full p-4 border rounded hover:bg-blue-50 flex justify-between items-center transition-colors">
-                    <div className="text-left">
-                      <div className="font-bold text-blue-900">Estimate #{est.refNo}</div>
-                      <div className="text-[10px] text-gray-500">{est.date}</div>
-                    </div>
-                    <div className="text-lg font-black text-blue-900">${est.total.toLocaleString()}</div>
-                  </button>
-                ))}
+                {openEstimates.map(est => {
+                  const invoicedSoFar = transactions
+                    .filter(t => t.type === 'INVOICE' && (t as any).estimateId === est.id)
+                    .reduce((sum, t) => sum + t.total, 0);
+                  const pctInvoiced = est.total > 0 ? (invoicedSoFar / est.total) * 100 : 0;
+                  return (
+                    <button key={est.id} onClick={() => handleSelectEstimate(est)} className="w-full p-4 border-2 rounded hover:border-blue-400 hover:bg-blue-50 flex justify-between items-center transition-colors">
+                      <div className="text-left flex-1">
+                        <div className="font-bold text-blue-900">Estimate #{est.refNo}</div>
+                        <div className="text-[10px] text-gray-500">{est.date}</div>
+                        {invoicedSoFar > 0 && (
+                          <div className="mt-1">
+                            <div className="w-full bg-gray-200 rounded-full h-1.5">
+                              <div className="bg-orange-400 h-1.5 rounded-full" style={{ width: `${Math.min(pctInvoiced, 100)}%` }} />
+                            </div>
+                            <div className="text-[10px] text-orange-700 font-bold mt-0.5">{pctInvoiced.toFixed(0)}% invoiced — ${invoicedSoFar.toLocaleString('en-US', { minimumFractionDigits: 2 })} of ${est.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-lg font-black text-blue-900 ml-4">${est.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {showProgressModal && (
-        <div className="fixed inset-0 bg-black/50 z-[1100] flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-[#003366] w-full max-w-md shadow-2xl">
-            <div className="bg-[#003366] p-3 text-white font-bold uppercase tracking-widest text-xs">Create Progress Invoice</div>
-            <div className="p-6 space-y-4 text-sm">
-              <label className="flex items-center gap-3"><input type="radio" name="progress" checked={progressData.type === 'TOTAL'} onChange={() => setProgressData({ type: 'TOTAL' })} /> Create invoice for the entire estimate</label>
-              <label className="flex items-center gap-3">
-                <input type="radio" name="progress" checked={progressData.type === 'PERCENT'} onChange={() => setProgressData({ type: 'PERCENT', percent: 50 })} />
-                Create invoice for a percentage
-                {progressData.type === 'PERCENT' && <input type="number" className="w-16 border rounded mx-2 px-1" value={progressData.percent} onChange={e => setProgressData({ ...progressData, percent: parseInt(e.target.value) })} />} %
-              </label>
-              <button onClick={finalizeEstimateToInvoice} className="w-full bg-blue-600 text-white font-bold py-2 mt-4 hover:bg-blue-700">OK</button>
+      {showProgressModal && (() => {
+        const est = transactions.find(t => t.id === selectedEstimateId);
+        if (!est) return null;
+        const alreadyInvoiced = transactions
+          .filter(t => t.type === 'INVOICE' && (t as any).estimateId === selectedEstimateId)
+          .reduce((sum, t) => sum + t.total, 0);
+        const estTotal = est.items.reduce((s, i) => s + i.amount, 0);
+        const remaining = estTotal - alreadyInvoiced;
+        const pct = Math.min(Math.max(progressData.percent || 0, 0), 100);
+        const percentPreview = progressData.type === 'PERCENT' ? parseFloat((estTotal * pct / 100).toFixed(2)) : 0;
+        const itemizedPreview = progressData.type === 'ITEMIZED'
+          ? est.items
+              .filter(i => progressItemized[i.id]?.selected)
+              .reduce((s, i) => s + (progressItemized[i.id]?.qty ?? i.quantity) * i.rate, 0)
+          : 0;
+        const invoicePreview = progressData.type === 'TOTAL' ? estTotal
+          : progressData.type === 'PERCENT' ? percentPreview
+          : itemizedPreview;
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-[1100] flex items-center justify-center p-4">
+            <div className="bg-white border-4 border-[#003366] w-full max-w-2xl shadow-2xl flex flex-col" style={{ maxHeight: '90vh' }}>
+              {/* Header */}
+              <div className="bg-[#003366] p-3 flex justify-between items-center text-white flex-shrink-0">
+                <span className="font-bold uppercase tracking-widest text-xs">Create Progress Invoice — Estimate #{est.refNo}</span>
+                <button onClick={() => setShowProgressModal(false)} className="hover:text-red-400 text-lg leading-none">✕</button>
+              </div>
+
+              {/* Estimate summary bar */}
+              <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 flex-shrink-0">
+                <div className="grid grid-cols-4 gap-4 text-center text-xs">
+                  <div>
+                    <div className="text-gray-500 font-bold uppercase">Estimate Total</div>
+                    <div className="text-blue-900 font-black text-base">${estTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500 font-bold uppercase">Previously Invoiced</div>
+                    <div className="text-orange-700 font-black text-base">${alreadyInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500 font-bold uppercase">Remaining</div>
+                    <div className={`font-black text-base ${remaining < 0 ? 'text-red-600' : 'text-green-700'}`}>${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500 font-bold uppercase">This Invoice</div>
+                    <div className="text-blue-600 font-black text-base">${invoicePreview.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="mt-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(((alreadyInvoiced + invoicePreview) / estTotal) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-500 text-right mt-0.5">
+                    {estTotal > 0 ? (((alreadyInvoiced + invoicePreview) / estTotal) * 100).toFixed(1) : '0.0'}% of estimate invoiced
+                  </div>
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <p className="text-xs font-bold text-gray-600 uppercase mb-4">How much of this estimate do you want to invoice?</p>
+
+                {/* TOTAL */}
+                <label className="flex items-start gap-3 p-3 rounded border-2 cursor-pointer mb-3 transition-colors hover:border-blue-400 hover:bg-blue-50"
+                  style={{ borderColor: progressData.type === 'TOTAL' ? '#3b82f6' : '#e5e7eb', background: progressData.type === 'TOTAL' ? '#eff6ff' : '' }}>
+                  <input type="radio" name="progress" className="mt-0.5" checked={progressData.type === 'TOTAL'} onChange={() => setProgressData({ type: 'TOTAL' })} />
+                  <div>
+                    <div className="font-bold text-sm text-gray-800">Entire Estimate</div>
+                    <div className="text-xs text-gray-500">Invoice all line items at full quantities</div>
+                  </div>
+                  <div className="ml-auto text-sm font-black text-blue-700">${estTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                </label>
+
+                {/* PERCENT */}
+                <label className="flex items-start gap-3 p-3 rounded border-2 cursor-pointer mb-3 transition-colors hover:border-blue-400 hover:bg-blue-50"
+                  style={{ borderColor: progressData.type === 'PERCENT' ? '#3b82f6' : '#e5e7eb', background: progressData.type === 'PERCENT' ? '#eff6ff' : '' }}>
+                  <input type="radio" name="progress" className="mt-0.5" checked={progressData.type === 'PERCENT'} onChange={() => setProgressData({ type: 'PERCENT', percent: 50 })} />
+                  <div className="flex-1">
+                    <div className="font-bold text-sm text-gray-800">Percentage of Estimate</div>
+                    <div className="text-xs text-gray-500 mb-2">Scale all line items by a percentage</div>
+                    {progressData.type === 'PERCENT' && (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range" min={1} max={100} value={pct}
+                          onChange={e => setProgressData({ ...progressData, percent: parseInt(e.target.value) })}
+                          className="flex-1 h-2 accent-blue-600"
+                        />
+                        <input
+                          type="number" min={1} max={100}
+                          className="w-16 border-2 border-blue-300 rounded px-2 py-1 text-sm font-bold text-center outline-none"
+                          value={progressData.percent ?? 50}
+                          onChange={e => setProgressData({ ...progressData, percent: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) })}
+                        />
+                        <span className="text-sm font-bold">%</span>
+                      </div>
+                    )}
+                  </div>
+                  {progressData.type === 'PERCENT' && (
+                    <div className="ml-2 text-sm font-black text-blue-700 whitespace-nowrap">${percentPreview.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  )}
+                </label>
+
+                {/* ITEMIZED */}
+                <label className="flex items-start gap-3 p-3 rounded border-2 cursor-pointer mb-3 transition-colors hover:border-blue-400 hover:bg-blue-50"
+                  style={{ borderColor: progressData.type === 'ITEMIZED' ? '#3b82f6' : '#e5e7eb', background: progressData.type === 'ITEMIZED' ? '#eff6ff' : '' }}>
+                  <input type="radio" name="progress" className="mt-0.5" checked={progressData.type === 'ITEMIZED'} onChange={() => setProgressData({ type: 'ITEMIZED' })} />
+                  <div className="flex-1">
+                    <div className="font-bold text-sm text-gray-800">Selected Line Items</div>
+                    <div className="text-xs text-gray-500 mb-2">Choose specific items and quantities</div>
+                    {progressData.type === 'ITEMIZED' && (
+                      <div className="border border-gray-200 rounded overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-100 border-b font-bold">
+                            <tr>
+                              <th className="w-8 px-2 py-2 text-center">
+                                <input type="checkbox"
+                                  checked={est.items.every(i => progressItemized[i.id]?.selected)}
+                                  onChange={e => {
+                                    const upd = { ...progressItemized };
+                                    est.items.forEach(i => { if (upd[i.id]) upd[i.id] = { ...upd[i.id], selected: e.target.checked }; });
+                                    setProgressItemized(upd);
+                                  }}
+                                />
+                              </th>
+                              <th className="px-3 py-2 text-left">Description</th>
+                              <th className="px-3 py-2 text-right">Est. Qty</th>
+                              <th className="px-3 py-2 text-right">Invoice Qty</th>
+                              <th className="px-3 py-2 text-right">Rate</th>
+                              <th className="px-3 py-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {est.items.map((item, idx) => {
+                              const rowState = progressItemized[item.id] || { selected: true, qty: item.quantity };
+                              const rowAmt = rowState.selected ? parseFloat((rowState.qty * item.rate).toFixed(2)) : 0;
+                              return (
+                                <tr key={item.id} className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${!rowState.selected ? 'opacity-40' : ''}`}>
+                                  <td className="px-2 py-2 text-center">
+                                    <input type="checkbox" checked={rowState.selected}
+                                      onChange={e => setProgressItemized(prev => ({ ...prev, [item.id]: { ...prev[item.id], selected: e.target.checked } }))}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-1.5 max-w-[180px] truncate" title={item.description}>{item.description || <span className="text-gray-400 italic">No description</span>}</td>
+                                  <td className="px-3 py-1.5 text-right text-gray-500">{item.quantity}</td>
+                                  <td className="px-3 py-1.5 text-right">
+                                    <input
+                                      type="number" min={0} max={item.quantity * 10} step="any"
+                                      disabled={!rowState.selected}
+                                      className="w-20 border border-blue-300 rounded px-1 py-0.5 text-right outline-none disabled:bg-gray-100"
+                                      value={rowState.qty}
+                                      onChange={e => setProgressItemized(prev => ({ ...prev, [item.id]: { ...prev[item.id], qty: parseFloat(e.target.value) || 0 } }))}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right">${item.rate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-3 py-1.5 text-right font-bold">${rowAmt.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-bold">
+                            <tr>
+                              <td colSpan={5} className="px-3 py-2 text-right text-xs uppercase text-gray-600">Invoice Total</td>
+                              <td className="px-3 py-2 text-right text-blue-700">${itemizedPreview.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </label>
+
+                {/* MILESTONE */}
+                {((est as any).milestones?.length > 0) && (
+                  <label className="flex items-start gap-3 p-3 rounded border-2 cursor-pointer mb-3 transition-colors hover:border-blue-400 hover:bg-blue-50"
+                    style={{ borderColor: progressData.type === 'MILESTONE' ? '#3b82f6' : '#e5e7eb', background: progressData.type === 'MILESTONE' ? '#eff6ff' : '' }}>
+                    <input type="radio" name="progress" className="mt-0.5" checked={progressData.type === 'MILESTONE'} onChange={() => setProgressData({ type: 'MILESTONE' })} />
+                    <div className="flex-1">
+                      <div className="font-bold text-sm text-gray-800">Bill a Milestone</div>
+                      <div className="text-xs text-gray-500 mb-2">Invoice one named milestone from the estimate</div>
+                      {progressData.type === 'MILESTONE' && (
+                        <div className="space-y-2 mt-2">
+                          {((est as any).milestones as any[]).map((m: any) => (
+                            <label key={m.id} className={`flex items-center justify-between p-2.5 rounded border cursor-pointer transition-colors
+                              ${m.status === 'BILLED' || m.status === 'PAID' ? 'opacity-40 cursor-not-allowed border-gray-200 bg-gray-50' :
+                                selectedMilestoneId === m.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}>
+                              <div className="flex items-center gap-2">
+                                <input type="radio" name="milestone" disabled={m.status === 'BILLED' || m.status === 'PAID'}
+                                  checked={selectedMilestoneId === m.id}
+                                  onChange={() => setSelectedMilestoneId(m.id)} />
+                                <div>
+                                  <p className="text-xs font-bold text-gray-800">{m.name}</p>
+                                  {m.dueDate && <p className="text-[10px] text-gray-400">Due: {m.dueDate}</p>}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-black text-blue-700">${(m.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                {(m.status === 'BILLED' || m.status === 'PAID') && (
+                                  <span className="text-[9px] font-black uppercase text-gray-400">{m.status}</span>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-gray-200 p-4 flex justify-between items-center bg-gray-50 flex-shrink-0">
+                <div className="text-xs text-gray-500">
+                  {invoicePreview > remaining + 0.01
+                    ? <span className="text-red-600 font-bold">⚠ Invoice amount exceeds remaining balance by ${(invoicePreview - remaining).toFixed(2)}</span>
+                    : <span className="text-green-700 font-bold">✓ Invoice amount within estimate balance</span>}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowProgressModal(false)} className="px-6 py-2 border-2 border-gray-300 text-xs font-bold rounded hover:bg-gray-100">Cancel</button>
+                  <button
+                    onClick={finalizeEstimateToInvoice}
+                    disabled={
+                      (progressData.type === 'ITEMIZED' && !est.items.some(i => progressItemized[i.id]?.selected)) ||
+                      (progressData.type === 'MILESTONE' && !selectedMilestoneId)
+                    }
+                    className="px-8 py-2 bg-[#0077c5] text-white text-xs font-bold rounded hover:bg-[#005fa0] disabled:opacity-50 disabled:cursor-not-allowed shadow"
+                  >
+                    Create Invoice
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showRecurringModal && (
         <RecurringInvoiceDialog

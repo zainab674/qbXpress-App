@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Vendor, Account, Item, Transaction, TransactionItem, Customer, Term, QBClass, RecurringTemplate } from '../types';
+import AddressSelector, { formatAddress } from './AddressSelector';
 import { useData } from '../contexts/DataContext';
 import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 
@@ -86,7 +87,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
       setShowReceiptDialog(false);
     }
     if (vendor && !initialData) {
-      setAddress(vendor.address || '');
+      setAddress(formatAddress(vendor.BillAddr) || vendor.address || '');
     }
   }, [selectedVendorId]);
 
@@ -207,12 +208,12 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
           <div className="flex flex-col gap-4">
             <h1 className="text-4xl font-serif italic text-[#003366] drop-shadow-sm">Enter Bills</h1>
             {selectedVendorId && (
-              <div className="flex flex-col gap-1 animate-in slide-in-from-left duration-300">
-                <label className="text-[10px] font-bold text-gray-400 uppercase italic">Vendor Address</label>
-                <textarea
-                  className="border border-gray-200 p-2 text-xs bg-gray-50/50 outline-none w-64 h-20 resize-none font-medium text-gray-600 focus:border-blue-300 rounded shadow-inner"
+              <div className="w-64 animate-in slide-in-from-left duration-300">
+                <AddressSelector
+                  entity={vendor || null}
                   value={address}
-                  onChange={e => setAddress(e.target.value)}
+                  onChange={setAddress}
+                  label="Vendor Address"
                   placeholder="Address..."
                 />
               </div>
@@ -497,7 +498,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
               <button onClick={() => setShowReceiptDialog(false)} className="text-white hover:text-red-400">✕</button>
             </div>
             <div className="p-6">
-              <p className="text-sm font-black text-blue-900 mb-4 italic">The vendor you selected has open item receipts. Do you want to receive a bill against one of these receipts? (Page 113)</p>
+              <p className="text-sm font-black text-blue-900 mb-4 italic">The vendor you selected has open item receipts. Do you want to receive a bill against one of these receipts? </p>
               <div className="border border-gray-300 rounded overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-100 border-b font-bold h-8">

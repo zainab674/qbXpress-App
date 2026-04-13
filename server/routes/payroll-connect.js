@@ -27,4 +27,10 @@ router.get('/overview', payrollConnectController.getOverview);
 // POST /api/payroll-connect/payroll-sync
 router.post('/payroll-sync', payrollConnectController.syncPayroll);
 
+// POST /api/payroll-connect/employees-sync
+router.post('/employees-sync', payrollConnectController.syncEmployees);
+
+// GET /api/payroll-connect/employees
+router.get('/employees', payrollConnectController.getEmployees);
+
 module.exports = router;

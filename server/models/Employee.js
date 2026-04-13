@@ -24,5 +24,9 @@ const EmployeeSchema = new mongoose.Schema({
     vacation: Object,
 }, { timestamps: true });
 
+// ── Indexes ──────────────────────────────────────────────────────────────────
+EmployeeSchema.index({ companyId: 1, userId: 1, isActive: 1 });
+EmployeeSchema.index({ companyId: 1, userId: 1, name: 1 });
+
 module.exports = mongoose.model('Employee', EmployeeSchema);
 

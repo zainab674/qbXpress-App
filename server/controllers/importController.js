@@ -253,15 +253,53 @@ const importController = {
     importVendors: async (req, res, next) => {
         try {
             const data = await parseFile(req);
+            const Vendor = require('../models/Vendor');
+
+            // Fetch existing vendor names in DB for duplicate detection
+            const existingVendors = await Vendor.find(
+                { userId: req.user.id, companyId: req.companyId },
+                { name: 1 }
+            ).lean();
+            const existingNames = new Set(existingVendors.map(v => v.name.toLowerCase()));
+
+            const parseMoney = (val) => {
+                if (!val && val !== 0) return 0;
+                if (typeof val === 'number') return val;
+                return parseFloat(String(val).replace(/[$,]/g, '')) || 0;
+            };
+
+            const parseBool = (val) => {
+                if (typeof val === 'boolean') return val;
+                if (typeof val === 'number') return val > 0;
+                if (typeof val === 'string') {
+                    const s = val.toLowerCase().trim();
+                    return s === 'true' || s === '1' || s === 'yes' || s === 'y';
+                }
+                return false;
+            };
 
             const seenNames = new Set();
+            const skipped = [];
             const vendorsToSave = data.map(row => {
                 let rawName = row.Vendor || row.vendor || row.name || row.Name || row['Vendor Name'] || '';
-                if (rawName.includes(':')) {
-                    rawName = rawName.split(':')[0].trim();
+                if (rawName.includes(':')) rawName = rawName.split(':')[0].trim();
+                return { rawName, row };
+            }).filter(({ rawName, row }) => {
+                if (!rawName) return false;
+                const key = rawName.toLowerCase();
+                if (seenNames.has(key)) return false; // duplicate in file
+                seenNames.add(key);
+                if (existingNames.has(key)) {
+                    skipped.push(rawName);
+                    return false; // already in DB — skip to avoid duplicates
                 }
+                return true;
+            }).map(({ rawName, row }) => {
+                const termsRaw = row['Payment Terms'] || row['Terms'] || row.terms || row['Net Terms'] || '';
+                const paymentMethodRaw = row['Payment Method'] || row['Preferred Payment Method'] || row.paymentMethod || '';
+                const creditLimitRaw = row['Credit Limit'] || row['Credit limit'] || row.creditLimit || 0;
 
-                const vendor = {
+                return {
                     id: crypto.randomUUID(),
                     userId: req.user.id,
                     companyId: req.companyId,
@@ -281,46 +319,34 @@ const importController = {
                         row.country || row.Country
                     ].filter(Boolean).join(', ').trim(),
                     vendorType: row['Vendor type'] || row.vendorType || '',
-                    balance: (() => {
-                        const val = row.balance || row.Balance || row['Open Balance'] || row['Open balance'] || row.openBalance || row.openbalance || 0;
-                        if (typeof val === 'number') return val;
-                        const cleaned = String(val).replace(/[$,]/g, '');
-                        return parseFloat(cleaned) || 0;
-                    })(),
-                    OpenBalance: (() => {
-                        const val = row['Open Balance'] || row['Open balance'] || row.openBalance || row.openbalance || 0;
-                        if (typeof val === 'number') return val;
-                        const cleaned = String(val).replace(/[$,]/g, '');
-                        return parseFloat(cleaned) || 0;
-                    })(),
-                    eligibleFor1099: (() => {
-                        const val = row['1099 Tracking'] || row['1099 tracking'] || row.eligibleFor1099 || false;
-                        if (typeof val === 'number') return val > 0;
-                        if (typeof val === 'string') {
-                            const s = val.toLowerCase().trim();
-                            return s === 'true' || s === '1' || s === 'yes' || s === 'y';
-                        }
-                        return !!val;
-                    })(),
+                    balance: parseMoney(row.balance || row.Balance || row['Open Balance'] || row['Open balance'] || row.openBalance || 0),
+                    OpenBalance: parseMoney(row['Open Balance'] || row['Open balance'] || row.openBalance || 0),
+                    openingBalance: parseMoney(row['Opening Balance'] || row['Open Balance'] || row.openBalance || 0),
+                    openingBalanceDate: row['As of Date'] || row['Opening Balance Date'] || row['Open Balance Date'] || '',
+                    eligibleFor1099: parseBool(row['1099 Tracking'] || row['1099 tracking'] || row.eligibleFor1099),
+                    Vendor1099: parseBool(row['1099 Tracking'] || row['1099 tracking'] || row.eligibleFor1099),
+                    TaxIdentifier: row['Tax ID'] || row['Tax Identifier'] || row.taxId || row.TaxIdentifier || '',
+                    CreditLimit: parseMoney(creditLimitRaw),
+                    TermsRef: termsRaw ? { value: termsRaw, name: termsRaw } : undefined,
+                    PreferredPaymentMethodRef: paymentMethodRaw ? { value: paymentMethodRaw, name: paymentMethodRaw } : undefined,
+                    vendorAccountNo: row['Account No'] || row['Account Number'] || row['Vendor Account No'] || row.vendorAccountNo || '',
                     isActive: true
                 };
-
-                return vendor;
-            }).filter(v => {
-                if (!v.name || seenNames.has(v.name.toLowerCase())) return false;
-                seenNames.add(v.name.toLowerCase());
-                return true;
             });
 
-            if (vendorsToSave.length === 0) {
+            if (vendorsToSave.length === 0 && skipped.length === 0) {
                 return res.status(400).json({ message: 'No valid vendor records found in the file. Ensure you have a "Name" column.' });
             }
 
-            await VendorService.bulkUpdate(vendorsToSave, req.user.id, req.companyId, req.user.role);
+            if (vendorsToSave.length > 0) {
+                await VendorService.bulkUpdate(vendorsToSave, req.user.id, req.companyId, req.user.role);
+            }
 
             res.json({
-                message: `Successfully imported ${vendorsToSave.length} vendors.`,
-                count: vendorsToSave.length
+                message: `Successfully imported ${vendorsToSave.length} vendor${vendorsToSave.length !== 1 ? 's' : ''}.${skipped.length > 0 ? ` Skipped ${skipped.length} duplicate${skipped.length !== 1 ? 's' : ''}: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '...' : ''}.` : ''}`,
+                count: vendorsToSave.length,
+                skipped: skipped.length,
+                skippedNames: skipped
             });
 
         } catch (err) {

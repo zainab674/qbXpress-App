@@ -120,6 +120,7 @@ export type ViewState =
   | 'CHECK'
   | 'CALENDAR'
   | 'VENDOR_CREDIT_CATEGORY_LIST'
+  | 'ITEM_CATEGORY_LIST'
   | 'ESTIMATE_DISPLAY'
   | 'INVOICES_RECEIVED'
   | 'AGING_DETAIL'
@@ -140,7 +141,21 @@ export type ViewState =
   | 'OPEN_PO_LIST'
   | 'OPEN_PO_DETAIL'
   | 'IMPORT_CENTER'
-  | 'TERMS_LIST_REPORT';
+  | 'TERMS_LIST_REPORT'
+  | 'LANDED_COST'
+  | 'WAREHOUSE_CENTER'
+  | 'PICK_PACK_SHIP'
+  | 'LOT_TRACEABILITY'
+  | 'LOT_QC_WORKFLOW'
+  | 'WORK_ORDER'
+  | 'WORK_ORDER_CENTER'
+  | 'SERIAL_HISTORY'
+  | 'ASSEMBLY_SHORTAGE'
+  | 'INVENTORY_REORDER'
+  | 'MRP_RECEPTION_REPORT'
+  | 'ALLOCATION_STATUS'
+  | 'PRODUCT_ALLOCATION'
+  | 'USER_MANAGEMENT';
 
 export interface BankTransaction {
   id: string;
@@ -191,6 +206,12 @@ export interface Address {
   CountrySubDivisionCode?: string;
   PostalCode?: string;
   Country?: string;
+}
+
+export interface NamedAddress extends Address {
+  id: string;
+  label: string; // e.g. 'Billing', 'Shipping', 'Home', 'Work', 'Other'
+  isDefault?: boolean;
 }
 
 export interface PhoneInfo {
@@ -381,7 +402,17 @@ export type ItemType =
   | 'Discount'
   | 'Payment'
   | 'Sales Tax Item'
-  | 'Sales Tax Group';
+  | 'Sales Tax Group'
+  | 'Fixed Asset';
+
+export interface ItemVendor {
+  vendorId: string;
+  vendorSKU?: string;
+  price?: number;          // vendor's purchase price for this item
+  leadTimeDays?: number;
+  minimumOrderQty?: number;
+  isPreferred?: boolean;
+}
 
 export interface Item {
   id: string;
@@ -392,41 +423,144 @@ export interface Item {
   purchaseDescription?: string;
   salesPrice?: number;
   cost?: number;
+  // Average cost — maintained automatically on each receipt (QB default)
+  averageCost?: number;
+  // Total inventory asset value = averageCost * onHand
+  totalValue?: number;
+  // Valuation method: Average (QB default), FIFO, Standard
+  valuationMethod?: 'Average' | 'FIFO' | 'Standard';
+  standardCost?: number;
+
   incomeAccountId?: string;
   cogsAccountId?: string;
   assetAccountId?: string;
+  expenseAccountId?: string;
+
   onHand?: number;
+  onPurchaseOrder?: number;
+  onSalesOrder?: number;
   reorderPoint?: number;
+  reorderQty?: number;   // preferred reorder quantity
+  maxStock?: number;     // maximum stock level
+
+  // QB Enterprise: default warehouse for this item's sales-order picking / receiving
+  preferredWarehouseId?: string;
+
+  // QB Enterprise: per-warehouse on-hand (denormalized from lot records)
+  warehouseQuantities?: { warehouseId: string; onHand: number; value: number }[];
+  // QB Enterprise: per-site reorder thresholds (override global reorderPoint)
+  warehouseReorderPoints?: {
+    warehouseId: string;
+    reorderPoint: number;
+    reorderQty: number;
+    maxStock: number;
+  }[];
+
+  // Lot / Serial tracking
+  trackLots?: boolean;
+  trackSerialNumbers?: boolean;
+
   taxCode?: 'Tax' | 'Non';
+  isTaxable?: boolean;
   asOfDate?: string;
-  // Added optional fields for custom fields and inventory management
+
   customFieldValues?: Record<string, any>;
+  isSubItem?: boolean;
   parentId?: string;
   taxRate?: number;
   unitOfMeasure?: string;
+  // UOM Set (QB Enterprise)
+  uomSetId?: string;            // references UOMSet.id
+  defaultPurchaseUOM?: string;  // unit name from the set for purchasing
+  defaultSalesUOM?: string;     // unit name from the set for sales
+  // Legacy simple UOM fields
+  purchaseUOM?: string;
+  salesUOM?: string;
+  uomConversionFactor?: number;
   taxGroupItems?: any[];
   printItemsInGroup?: boolean;
-  // Procurement Fields
-  discountRate?: number; // For Discount Items
-  taxAgency?: string;   // For Sales Tax Items
-  taxRateValue?: number; // For Sales Tax Items
-  preferredVendorId?: string; // For Inventory
-  vendorId?: string;           // For Sales Tax Items
+  groupItems?: any[];
+
+  // Discount item fields (QB: Discount type)
+  discountType?: 'Percent' | 'Fixed';
+  discountRate?: number;     // percent off (when discountType === 'Percent')
+  discountAmount?: number;   // fixed dollar off (when discountType === 'Fixed')
+
+  taxAgency?: string;
+  taxRateValue?: number;
+  preferredVendorId?: string;
+  vendorId?: string;
+  vendorSKU?: string;
+  vendorLeadTimeDays?: number;
+  minimumOrderQty?: number;
+
+  // QB Enterprise: multiple vendor entries per item
+  vendors?: ItemVendor[];
+
   sku?: string;
+  barcode?: string;
   category?: string;
+  subcategory?: string;
+  manufacturer?: string;
+  manufacturerPartNumber?: string;
   imageUrl?: string;
+
   isSalesItem?: boolean;
   isPurchaseItem?: boolean;
+  isDropShip?: boolean;
+
   weight?: number;
+  weightUnit?: string;
   dimensions?: {
     length: number;
     width: number;
     height: number;
     unit: string;
   };
+
+  // Price level overrides
+  priceLevelPrices?: { priceLevelId: string; price: number }[];
+
+  // Substitute / alternate items (QB Enterprise)
+  substituteItems?: { itemId: string; reason?: string }[];
+
   // Assemblies
-  assemblyItems?: { itemId: string, quantity: number }[];
+  assemblyItems?: {
+    itemId: string;
+    quantity: number;
+    description?: string;
+    unitCost?: number;
+    /** Extra material expected to be scrapped during manufacturing (0-100%) */
+    scrapPercent?: number;
+    /** % of input that becomes usable output (1-100%, default 100) */
+    yieldPercent?: number;
+  }[];
   buildPoint?: number;
+
+  // Standard cost variance tracking
+  /** Cumulative variance from assembly builds: actual cost - standard cost */
+  standardCostVariance?: number;
+  /** Last computed actual cost per unit from most recent build */
+  lastActualCost?: number;
+
+  // Substitute / alternate items (shown when this item is out of stock)
+  substituteItemIds?: string[]; // legacy flat list
+  substituteItems?: { itemId: string; reason?: string }[];
+
+  notes?: string;
+
+  // Fixed Asset fields (QB Enterprise: Fixed Asset Manager parity)
+  purchaseDate?: string;
+  purchaseCost?: number;
+  assetDescription?: string;
+  assetTag?: string;
+  serialNumber?: string;
+  depreciationMethod?: 'Straight-Line' | 'MACRS' | 'Double-Declining' | 'Sum-of-Years-Digits' | 'Units-of-Production' | 'None';
+  usefulLifeYears?: number;
+  salvageValue?: number;
+  accumulatedDepreciation?: number;
+  disposalDate?: string;
+  disposalAmount?: number;
 }
 
 export interface PriceLevel {
@@ -462,6 +596,39 @@ export interface QBClass {
 export interface VendorCreditCategory {
   id: string;
   name: string;
+  isActive: boolean;
+}
+
+export interface ItemCategory {
+  id: string;
+  name: string;
+  subcategories: string[];
+  isActive: boolean;
+}
+
+// QB Enterprise: Unit of Measure Sets
+// A set defines one base unit and zero-or-more larger related units.
+// Example "Count by Box and Each":
+//   baseUnit: { name: 'Each', abbreviation: 'Ea' }
+//   relatedUnits: [
+//     { name: 'Six-pack', abbreviation: '6pk', conversionFactor: 6 },
+//     { name: 'Box',      abbreviation: 'BX',  conversionFactor: 12 },
+//     { name: 'Case',     abbreviation: 'CS',  conversionFactor: 24 },
+//   ]
+// conversionFactor = number of base units contained in 1 of this related unit.
+export interface UOMUnit {
+  name: string;
+  abbreviation?: string;
+  conversionFactor: number; // always 1 for the base unit
+}
+
+export interface UOMSet {
+  id: string;
+  name: string;                    // display name, e.g. "Count by Box and Each"
+  baseUnit: { name: string; abbreviation?: string }; // the smallest unit
+  relatedUnits: UOMUnit[];         // larger units with their factors
+  defaultPurchaseUnit?: string;    // unit name selected by default when purchasing
+  defaultSalesUnit?: string;       // unit name selected by default on sales docs
   isActive: boolean;
 }
 
@@ -503,6 +670,8 @@ export interface Customer {
   customFieldValues?: Record<string, any>;
   customerType?: string;
   taxItemId?: string; // Sales Tax Item
+  priceLevelId?: string; // QB Enterprise: default price level for this customer
+  substituteItemsAllowed?: boolean;
 
   // Detailed fields matching QB 2016 / QBO
   Title?: string;
@@ -523,6 +692,7 @@ export interface Customer {
 
   BillAddr?: Address;
   ShipAddr?: Address;
+  addresses?: NamedAddress[];
 
   parentId?: string;
 
@@ -577,6 +747,7 @@ export interface Vendor {
 
   BillAddr?: Address;
   ShipAddr?: Address;
+  addresses?: NamedAddress[];
 
   TaxIdentifier?: string;
   Vendor1099?: boolean; // Maps to eligibleFor1099
@@ -626,6 +797,15 @@ export interface Employee {
   // Added fields for employee center and payroll
   type: 'Regular' | 'Officer' | 'Statutory' | 'Owner' | string;
   notes: Note[];
+  // Personal / HR fields
+  dateOfBirth?: string;
+  gender?: 'Male' | 'Female' | 'Non-binary' | 'Prefer not to say' | string;
+  department?: string;
+  emergencyContact?: {
+    name: string;
+    phone: string;
+    relationship?: string;
+  };
   // Payroll Setup
   payPeriod?: 'Weekly' | 'Bi-Weekly' | 'Semi-Monthly' | 'Monthly';
   salary?: number; // Annual salary if salaried
@@ -724,14 +904,24 @@ export interface TransactionItem {
   accountId?: string;    // Expense Account
   creditCategoryId?: string; // Vendor Credit Category
   lotNumber?: string;    // Lot Number Tracking
+  serialNumber?: string; // Serial Number Tracking
   isOneTime?: boolean;   // Recurring Template: Only includes in first generation
   receivedQuantity?: number; // PO Tracking
   isClosed?: boolean;        // PO Tracking
+  warehouseId?: string;  // Per-line warehouse (multi-warehouse receiving / shipment)
+  binId?: string;        // Per-line bin
+  reasonCode?: string;   // Inventory adjustment reason (Damaged, Theft, Shrinkage, etc.)
+  newCost?: number;      // Inventory adjustment: new unit cost (for Total Value adjustments)
+  pickedQty?: number;    // Pick/Pack/Ship: picked quantity
+  packedQty?: number;    // Pick/Pack/Ship: packed quantity
+  estimatedQty?: number;     // Progress Invoicing: original estimate quantity
+  estimatedAmount?: number;  // Progress Invoicing: original estimate line amount
+  progressPercent?: number;  // Progress Invoicing: % of this line item invoiced
 }
 
 export interface Transaction {
   id: string;
-  type: 'INVOICE' | 'ESTIMATE' | 'SALES_ORDER' | 'BILL' | 'CHECK' | 'DEPOSIT' | 'PURCHASE_ORDER' | 'SALES_RECEIPT' | 'CREDIT_MEMO' | 'PAYMENT' | 'VENDOR_CREDIT' | 'BILL_PAYMENT' | 'RECEIVE_ITEM' | 'INVENTORY_ADJ' | 'ASSEMBLY_BUILD' | 'TRANSFER' | 'CC_CHARGE' | 'PAYCHECK' | 'TAX_PAYMENT' | 'TAX_ADJUSTMENT' | 'JOURNAL_ENTRY';
+  type: 'INVOICE' | 'ESTIMATE' | 'SALES_ORDER' | 'BILL' | 'CHECK' | 'DEPOSIT' | 'PURCHASE_ORDER' | 'SALES_RECEIPT' | 'CREDIT_MEMO' | 'PAYMENT' | 'VENDOR_CREDIT' | 'BILL_PAYMENT' | 'RECEIVE_ITEM' | 'INVENTORY_ADJ' | 'ASSEMBLY_BUILD' | 'WORK_ORDER' | 'TRANSFER' | 'CC_CHARGE' | 'PAYCHECK' | 'TAX_PAYMENT' | 'TAX_ADJUSTMENT' | 'JOURNAL_ENTRY';
   refNo: string;
   date: string;
   dueDate?: string;
@@ -761,6 +951,14 @@ export interface Transaction {
   fob?: string;         // FOB
   memo?: string;
   lotNumber?: string;   // Lot Number Tracking
+  warehouseId?: string;       // Destination warehouse when receiving inventory / finished good deposit for ASSEMBLY_BUILD
+  binId?: string;             // Destination bin when receiving inventory
+  sourceWarehouseId?: string; // ASSEMBLY_BUILD: pull components from this warehouse
+  shipToWarehouseId?: string; // PO: which warehouse/site receives the shipment
+  fulfillmentWarehouseId?: string;  // SO: which warehouse fulfills the order
+  fulfillmentBinId?: string;        // SO: specific bin for fulfillment
+  carrier?: string;                 // SHIPMENT: carrier name (UPS, FedEx, etc.)
+  shippedLines?: any[];             // SHIPMENT: per-line pick/pack/ship detail
   exchangeRate?: number; // Multi-currency
   homeAmount?: number;
   isChangeOrder?: boolean;
@@ -793,6 +991,26 @@ export interface Transaction {
   internalNotes?: string;
   location?: string;
   taxRate?: number;
+  salesOrderId?: string;         // Linked Sales Order
+  estimateId?: string;           // Progress Invoicing: source estimate
+  progressType?: 'TOTAL' | 'PERCENT' | 'ITEMIZED'; // Progress Invoicing: billing method
+  progressPercent?: number;      // Progress Invoicing: percentage (when PERCENT mode)
+  // Bidirectional document links — all related transaction IDs
+  linkedDocumentIds?: string[];
+  // Backorder status for POs and SOs
+  backorderStatus?: 'NONE' | 'PARTIAL' | 'FULL';
+  // Standard cost variance GL posting (ASSEMBLY_BUILD with Standard valuation)
+  varianceAmount?: number;       // actual - standard (positive = unfavorable, negative = favorable)
+  varianceAccountId?: string;    // ID of the variance account that absorbed the difference
+  // ── Work Order (QB Enterprise manufacturing) ─────────────────────────────
+  workOrderStatus?: 'OPEN' | 'IN_PROGRESS' | 'PARTIAL_COMPLETE' | 'COMPLETE' | 'CANCELLED';
+  quantityPlanned?: number;      // WO: total units planned to build
+  quantityCompleted?: number;    // WO: cumulative units built against this WO
+  // Output lot / serial assignment for ASSEMBLY_BUILD and WO
+  outputLotNumber?: string;      // Lot number assigned to finished assembly
+  outputLotExpirationDate?: string;
+  outputLotManufacturingDate?: string;
+  linkedWorkOrderId?: string;    // ASSEMBLY_BUILD: which WO this build fulfills
 }
 
 export interface Term {
@@ -849,6 +1067,7 @@ export interface AppStore {
   items: Item[];
   priceLevels: PriceLevel[];
   uoms: any[];
+  uomSets: UOMSet[];
   salesTaxCodes: SalesTaxCode[];
   paymentMethods: string[];
   customerMessages: string[];
@@ -928,4 +1147,34 @@ export interface ChangeOrder {
   date: string;
   description: string;
   amountChange: number;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  isDefault: boolean;
+  companyId: string;
+  userId: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Bin {
+  id: string;
+  name: string;
+  code?: string;
+  warehouseId: string;
+  zone?: string;
+  aisle?: string;
+  shelf?: string;
+  position?: string;
+  capacity?: number;
+  isActive: boolean;
+  notes?: string;
+  companyId: string;
+  userId: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

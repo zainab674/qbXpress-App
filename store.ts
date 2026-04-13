@@ -58,6 +58,7 @@ export const INITIAL_DATA: AppStore = {
     whatDoYouSell: 'Both'
   },
   uoms: [],
+  uomSets: [],
   vehicles: [],
   vendorCreditCategories: [
     { id: 'cat-1', name: 'Defective Item', isActive: true },

@@ -12,7 +12,7 @@ interface Props {
 
 const SingleTimeEntry: React.FC<Props> = ({ employees, customers, items, onSave, onClose }) => {
    const [formData, setFormData] = useState<Partial<TimeEntry>>({
-      date: new Date().toLocaleDateString(),
+      date: new Date().toISOString().split('T')[0],
       employeeId: employees[0]?.id || '',
       customerId: '',
       itemId: '',

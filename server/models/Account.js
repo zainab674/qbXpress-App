@@ -19,5 +19,10 @@ const AccountSchema = new mongoose.Schema({
     openingBalanceDate: String,
 }, { timestamps: true });
 
+// ── Indexes ──────────────────────────────────────────────────────────────────
+AccountSchema.index({ companyId: 1, userId: 1, isActive: 1 });
+AccountSchema.index({ companyId: 1, userId: 1, type: 1 });
+AccountSchema.index({ companyId: 1, userId: 1, number: 1 }, { sparse: true });
+
 module.exports = mongoose.model('Account', AccountSchema);
 

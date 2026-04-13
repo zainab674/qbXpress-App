@@ -1,6 +1,10 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
+const VALID_ROLES = ['Admin', 'Manager', 'Standard', 'View-Only'];
+// Normalise legacy/invalid roles so a stale DB value doesn't silently lock users out
+const normaliseRole = (role) => VALID_ROLES.includes(role) ? role : 'View-Only';
+
 const authController = {
     signup: async (req, res) => {
         try {
@@ -14,8 +18,9 @@ const authController = {
             user = new User({ username, email, password });
             await user.save();
 
-            const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1d' });
-            res.json({ token, user: { id: user._id, username, email, role: user.role } });
+            const role = normaliseRole(user.role);
+            const token = jwt.sign({ id: user._id, role, companyId: user.companyId || null }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1d' });
+            res.json({ token, user: { id: user._id, username, email, role, companyId: user.companyId || null } });
         } catch (err) {
             console.error('Signup Error:', err);
             res.status(500).json({ message: 'Internal Server Error', error: err.message });
@@ -31,8 +36,9 @@ const authController = {
             const isMatch = await user.comparePassword(password);
             if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
-            const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1d' });
-            res.json({ token, user: { id: user._id, username: user.username, email, role: user.role } });
+            const role = normaliseRole(user.role);
+            const token = jwt.sign({ id: user._id, role, companyId: user.companyId || null }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1d' });
+            res.json({ token, user: { id: user._id, username: user.username, email, role, companyId: user.companyId || null } });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

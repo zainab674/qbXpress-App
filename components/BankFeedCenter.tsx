@@ -151,6 +151,13 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
    ];
 
    const fileInputRef = React.useRef<HTMLInputElement>(null);
+   const [showConfig, setShowConfig] = React.useState(false);
+   const [configMatchDays, setConfigMatchDays] = React.useState(10);
+   const [configAutoMatch, setConfigAutoMatch] = React.useState(true);
+   const [configRules, setConfigRules] = React.useState<{ keyword: string; category: string }[]>([]);
+   const [newRuleKeyword, setNewRuleKeyword] = React.useState('');
+   const [newRuleCategory, setNewRuleCategory] = React.useState('');
+
    const [uploadingForId, setUploadingForId] = React.useState<string | null>(null);
    const [viewingAttachmentsId, setViewingAttachmentsId] = React.useState<string | null>(null);
 
@@ -298,7 +305,7 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
                         <div className="flex items-center gap-3 border-l pl-4 border-slate-300">
                            <button onClick={handlePrint} className="text-xl opacity-60 hover:opacity-100 transition-opacity" title="Print table">🖨️</button>
                            <button onClick={handleExportCSV} className="text-xl opacity-60 hover:opacity-100 transition-opacity" title="Export to CSV">📤</button>
-                           <button className="text-xl opacity-60">⚙️</button>
+                           <button onClick={() => setShowConfig(true)} className="text-xl opacity-60 hover:opacity-100 transition-opacity" title="Bank Feed Settings">⚙️</button>
                         </div>
                      </div>
                   </div>
@@ -479,6 +486,134 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
                   await refreshData();
                }}
             />
+         )}
+
+         {showConfig && (
+            <div className="fixed inset-0 bg-black/40 z-[2000] flex items-center justify-center">
+               <div className="bg-white rounded-xl shadow-2xl w-[520px] flex flex-col overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center">
+                     <div>
+                        <h3 className="font-bold text-sm">Bank Feed Settings</h3>
+                        <p className="text-[10px] opacity-60 mt-0.5">{activeAccount?.name || 'No account selected'}</p>
+                     </div>
+                     <button onClick={() => setShowConfig(false)} className="hover:bg-white/20 px-2 py-1 rounded text-xs">✕</button>
+                  </div>
+
+                  <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+                     {/* Connection Info */}
+                     <section>
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Connection</h4>
+                        <div className="bg-slate-50 rounded-lg p-4 space-y-3 text-xs">
+                           <div className="flex justify-between">
+                              <span className="text-slate-500 font-medium">Account</span>
+                              <span className="font-bold text-slate-800">{activeAccount?.name || '—'}</span>
+                           </div>
+                           <div className="flex justify-between">
+                              <span className="text-slate-500 font-medium">Account #</span>
+                              <span className="font-mono text-slate-600">**** **** {activeAccount?.number?.slice(-4) || '0000'}</span>
+                           </div>
+                           <div className="flex justify-between">
+                              <span className="text-slate-500 font-medium">Import Method</span>
+                              <span className="font-bold text-blue-700">Manual (CSV / OFX)</span>
+                           </div>
+                        </div>
+                     </section>
+
+                     {/* Auto-match settings */}
+                     <section>
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Auto-Match</h4>
+                        <div className="space-y-4">
+                           <label className="flex items-center justify-between gap-4">
+                              <span className="text-xs font-bold text-slate-700">Enable automatic transaction matching</span>
+                              <input
+                                 type="checkbox"
+                                 className="w-4 h-4 accent-blue-600"
+                                 checked={configAutoMatch}
+                                 onChange={e => setConfigAutoMatch(e.target.checked)}
+                              />
+                           </label>
+                           <div className="flex items-center justify-between gap-4">
+                              <span className="text-xs font-bold text-slate-700">Match window (±days)</span>
+                              <input
+                                 type="number"
+                                 min={1} max={30}
+                                 className="border border-slate-300 rounded px-2 py-1 text-xs w-20 text-center outline-none focus:border-blue-400"
+                                 value={configMatchDays}
+                                 onChange={e => setConfigMatchDays(parseInt(e.target.value) || 10)}
+                                 disabled={!configAutoMatch}
+                              />
+                           </div>
+                        </div>
+                     </section>
+
+                     {/* Auto-categorization rules */}
+                     <section>
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Auto-Categorization Rules</h4>
+                        <div className="space-y-2 mb-3">
+                           {configRules.length === 0 && (
+                              <p className="text-xs text-slate-400 italic">No rules yet. Add a rule below to auto-categorize transactions.</p>
+                           )}
+                           {configRules.map((rule, idx) => (
+                              <div key={idx} className="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg text-xs">
+                                 <span className="flex-1 font-mono text-slate-600 truncate">"{rule.keyword}"</span>
+                                 <span className="text-slate-400">→</span>
+                                 <span className="font-bold text-blue-700 truncate">{accounts.find(a => a.id === rule.category)?.name || rule.category}</span>
+                                 <button onClick={() => setConfigRules(r => r.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1">✕</button>
+                              </div>
+                           ))}
+                        </div>
+                        <div className="flex gap-2 items-end">
+                           <div className="flex flex-col gap-1 flex-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">If description contains</label>
+                              <input
+                                 type="text"
+                                 placeholder="e.g. AMAZON, PAYROLL..."
+                                 className="border border-slate-300 rounded px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+                                 value={newRuleKeyword}
+                                 onChange={e => setNewRuleKeyword(e.target.value)}
+                              />
+                           </div>
+                           <div className="flex flex-col gap-1 flex-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Then categorize as</label>
+                              <select
+                                 className="border border-slate-300 rounded px-2 py-1.5 text-xs bg-white outline-none focus:border-blue-400"
+                                 value={newRuleCategory}
+                                 onChange={e => setNewRuleCategory(e.target.value)}
+                              >
+                                 <option value="">Select account...</option>
+                                 {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                           </div>
+                           <button
+                              onClick={() => {
+                                 if (!newRuleKeyword.trim() || !newRuleCategory) return;
+                                 setConfigRules(r => [...r, { keyword: newRuleKeyword.trim(), category: newRuleCategory }]);
+                                 setNewRuleKeyword('');
+                                 setNewRuleCategory('');
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+                           >
+                              + Add
+                           </button>
+                        </div>
+                     </section>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="border-t px-6 py-4 flex justify-end gap-3">
+                     <button onClick={() => setShowConfig(false)} className="px-4 py-2 border border-slate-300 text-slate-600 rounded text-xs font-bold hover:bg-slate-50">
+                        Cancel
+                     </button>
+                     <button
+                        onClick={() => setShowConfig(false)}
+                        className="px-5 py-2 bg-[#003366] text-white rounded text-xs font-bold hover:bg-blue-900"
+                     >
+                        Save Settings
+                     </button>
+                  </div>
+               </div>
+            </div>
          )}
       </div>
    );

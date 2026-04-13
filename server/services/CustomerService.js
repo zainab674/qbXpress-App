@@ -118,6 +118,76 @@ const CustomerService = {
             }
         }
         return results;
+    },
+
+    // Toggle isActive
+    setStatus: async (id, isActive, userId, companyId, userRole) => {
+        const customer = await Customer.findOneAndUpdate(
+            { id, userId, companyId },
+            { isActive },
+            { new: true }
+        );
+        if (customer) {
+            await new AuditLogEntry({
+                id: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+                userId: userRole || 'Admin',
+                actualUserId: userId, companyId,
+                action: 'MODIFY',
+                transactionType: 'CUSTOMER',
+                transactionId: id,
+                refNo: customer.name,
+                newContent: JSON.stringify({ isActive })
+            }).save();
+        }
+        return customer;
+    },
+
+    // Append a note to a customer's notes array
+    addNote: async (id, noteData, userId, companyId) => {
+        const note = {
+            id: crypto.randomUUID(),
+            text: noteData.text,
+            author: noteData.author,
+            date: new Date().toISOString().slice(0, 10),
+            isPinned: false
+        };
+        return await Customer.findOneAndUpdate(
+            { id, userId, companyId },
+            { $push: { notes: note } },
+            { new: true }
+        );
+    },
+
+    // Build a statement object (open invoices + balance summary)
+    buildStatement: async (id, userId, companyId) => {
+        const customer = await Customer.findOne({ id, userId, companyId });
+        if (!customer) return null;
+
+        const openTransactions = await Transaction.find({
+            $or: [{ customerId: id }, { entityId: id }],
+            userId, companyId,
+            type: 'INVOICE',
+            status: { $in: ['OPEN', 'OVERDUE'] }
+        }).sort({ date: 1 });
+
+        const now = new Date();
+        const buckets = { current: 0, days31_60: 0, days61_90: 0, over90: 0 };
+        openTransactions.forEach(tx => {
+            const ageDays = Math.floor((now - new Date(tx.date)) / 86400000);
+            if (ageDays <= 30)       buckets.current   += tx.total;
+            else if (ageDays <= 60)  buckets.days31_60 += tx.total;
+            else if (ageDays <= 90)  buckets.days61_90 += tx.total;
+            else                     buckets.over90    += tx.total;
+        });
+
+        return {
+            customer: { id: customer.id, name: customer.name, email: customer.email, address: customer.address },
+            statementDate: now.toISOString().slice(0, 10),
+            openTransactions,
+            agingBuckets: buckets,
+            totalDue: openTransactions.reduce((s, t) => s + t.total, 0)
+        };
     }
 };
 

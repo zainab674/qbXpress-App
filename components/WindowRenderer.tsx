@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, BankTransaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory } from '../types';
+import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, BankTransaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory, ItemCategory, UOMSet } from '../types';
 import EntityForm from './EntityForm';
 import ItemForm from './ItemForm';
 import PreferencesDialog from './PreferencesDialog';
@@ -58,7 +58,10 @@ import JobProfitabilityReport from './JobProfitabilityReport';
 import InventoryAdjustmentForm from './InventoryAdjustmentForm';
 import PurchaseOrderForm from './PurchaseOrderForm';
 import BuildAssemblyForm from './BuildAssemblyForm';
+import WorkOrderForm from './WorkOrderForm';
+import WorkOrderCenter from './WorkOrderCenter';
 import ReceiveInventoryForm from './ReceiveInventoryForm';
+import LandedCostForm from './LandedCostForm';
 import SalesTaxCodeList from './SalesTaxCodeList';
 import TermsList from './TermsList';
 import PaymentMethodList from './PaymentMethodList';
@@ -94,7 +97,14 @@ import UOMList from './UOMList';
 import VehicleList from './VehicleList';
 import VendorCreditCategoryList from './VendorCreditCategoryList';
 import CustomerCreditCategoryList from './CustomerCreditCategoryList';
+import ItemCategoryList from './ItemCategoryList';
 import ImportCenter from './ImportCenter';
+import WarehouseCenter from './WarehouseCenter';
+import PickPackShipForm from './PickPackShipForm';
+import LotTraceabilityView from './LotTraceabilityView';
+import LotQCWorkflow from './LotQCWorkflow';
+import SerialHistoryView from './SerialHistoryView';
+import UserManagement from './UserManagement';
 
 interface WindowRendererProps {
     win: AppWindow;
@@ -137,6 +147,8 @@ interface WindowRendererProps {
         vendorTypes: string[];
         vendorCreditCategories: VendorCreditCategory[];
         customerCreditCategories: CustomerCreditCategory[];
+        itemCategories: ItemCategory[];
+        uomSets: UOMSet[];
         bankFeeds: BankTransaction[];
     };
     handlers: {
@@ -163,12 +175,15 @@ interface WindowRendererProps {
         onUpdateReps: (reps: SalesRep[]) => void;
         onUpdateShipVia: (sv: string[]) => void;
         onUpdateUOMs: (u: any[]) => void;
+        onSaveUOMSet: (s: UOMSet) => Promise<void>;
+        onDeleteUOMSet: (id: string) => Promise<void>;
         onUpdateVehicle: (v: Vehicle) => void;
         onDeleteVehicle: (id: string) => void;
         onUpdateMileage: (e: any) => void;
         onDeleteReport: (id: string) => Promise<void>;
         onUpdateVendorCreditCategories: (c: VendorCreditCategory[]) => void;
         onUpdateCustomerCreditCategories: (c: CustomerCreditCategory[]) => void;
+        onUpdateItemCategories: (c: ItemCategory[]) => void;
         onUpdateRates: (r: ExchangeRate[]) => void;
         onReportDrillDown: (id: string, context: string, params?: any) => void;
         setEntityModal: (m: any) => void;
@@ -195,6 +210,7 @@ interface WindowRendererProps {
         handleSaveEmployee: (e: Employee) => Promise<void>;
         handleSaveItem: (i: Item) => Promise<void>;
         switchCompany: (id: string) => Promise<void>;
+        handleCreateNewCompany: (config: any) => Promise<void>;
         companies: any[];
         refreshData: () => Promise<void>;
         setShortcuts: (s: any) => void;
@@ -205,7 +221,7 @@ interface WindowRendererProps {
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handlers }) => {
     const { type, id: winId, params } = win;
-    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onDeleteReport, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert, refreshData } = handlers;
+    const { onOpenWindow, onCloseWindow, onSaveTransaction, onDeleteTransaction, onSaveInventoryAdjustment, onReconcileFinish, onSaveBudget, onUpdateCustomers, onUpdateVendors, onUpdateEmployees, onUpdateItems, onUpdateAccounts, onUpdateLeads, onUpdateClasses, onUpdatePriceLevels, onUpdateTerms, onUpdateSalesTaxCodes, onUpdatePaymentMethods, onUpdateCustomerMessages, onUpdateReps, onUpdateShipVia, onUpdateUOMs, onSaveUOMSet, onDeleteUOMSet, onUpdateVehicle, onDeleteVehicle, onUpdateMileage, onDeleteReport, onUpdateVendorCreditCategories, onUpdateCustomerCreditCategories, onUpdateItemCategories, onUpdateRates, onUpdateFixedAssets, onReportDrillDown, onOpenForm, onOpenItemForm, onShowReorderDialog, handleSaveCustomer, handleSaveVendor, handleSaveEmployee, handleSaveItem, onSaveSalesTaxAdjustment, onConvertToCustomer, setCompanyConfig, handleCreateNewCompany, setUiPrefs, setAccPrefs, setHomePrefs, setBillPrefs, setCheckingPrefs, setUserRole, setClosingDate, setTimeEntries, setMemorizedReports, showAlert, refreshData } = handlers;
 
     const businessName = data.companyConfig?.businessName || 'My Company';
 
@@ -220,14 +236,39 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
     };
 
     switch (type) {
-        case 'HOME': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} />;
+        case 'HOME': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} prefs={data.homePrefs} />;
         case 'INVOICE': return <InvoiceForm customers={data.customers} items={data.items} classes={data.classes} salesReps={data.salesReps} shipVia={data.shipVia} terms={data.terms} transactions={data.transactions} timeEntries={data.timeEntries} mileageEntries={data.mileageEntries} priceLevels={data.priceLevels} onSave={onSaveTransaction} onDelete={onDeleteTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'SALES_ORDER': return <SalesOrderForm customers={data.customers} items={data.items} classes={data.classes} salesReps={data.salesReps} shipVia={data.shipVia} terms={data.terms} transactions={data.transactions} priceLevels={data.priceLevels} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'BILL': return <BillForm vendors={data.vendors} accounts={data.accounts} items={data.items} customers={data.customers} terms={data.terms} transactions={data.transactions} classes={data.classes} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
-        case 'PURCHASE_ORDER': return <PurchaseOrderForm vendors={data.vendors} items={data.items} customers={data.customers} classes={data.classes} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
-        case 'RECEIVE_INVENTORY': return <ReceiveInventoryForm vendors={data.vendors} transactions={data.transactions} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
+        case 'PURCHASE_ORDER': return <PurchaseOrderForm vendors={data.vendors} items={data.items} customers={data.customers} classes={data.classes} accounts={data.accounts} transactions={data.transactions} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
+        case 'RECEIVE_INVENTORY': return <ReceiveInventoryForm vendors={data.vendors} transactions={data.transactions} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialVendorId={params?.initialVendorId} initialPoId={params?.initialPoId} />;
         case 'INVENTORY_ADJUSTMENT': return <InventoryAdjustmentForm items={data.items} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
-        case 'BUILD_ASSEMBLY': return <BuildAssemblyForm items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
+        case 'BUILD_ASSEMBLY': return <BuildAssemblyForm
+            items={data.items}
+            onSave={onSaveTransaction}
+            onClose={() => onCloseWindow(winId)}
+            linkedWorkOrderId={params?.linkedWorkOrderId}
+            linkedWorkOrderRefNo={params?.linkedWorkOrderRefNo}
+            workOrderPlannedQty={params?.workOrderPlannedQty}
+            workOrderRemainingQty={params?.workOrderRemainingQty}
+            preselectedAssemblyId={params?.preselectedAssemblyId}
+        />;
+        case 'WORK_ORDER': return <WorkOrderForm
+            items={data.items}
+            transactions={data.transactions}
+            onSave={onSaveTransaction}
+            onClose={() => onCloseWindow(winId)}
+            initialData={params?.initialData}
+            onOpenBuild={(buildParams) => onOpenWindow('BUILD_ASSEMBLY', 'Build Assembly', buildParams)}
+        />;
+        case 'WORK_ORDER_CENTER': return <WorkOrderCenter
+            transactions={data.transactions}
+            items={data.items}
+            onOpenWorkOrder={(wo) => onOpenWindow('WORK_ORDER', `Work Order ${wo.refNo}`, { initialData: wo })}
+            onNewWorkOrder={() => onOpenWindow('WORK_ORDER', 'New Work Order')}
+            onClose={() => onCloseWindow(winId)}
+        />;
+        case 'LANDED_COST': return <LandedCostForm transactions={data.transactions} items={data.items} vendors={data.vendors} onClose={() => onCloseWindow(winId)} params={params} />;
         case 'JOB_PROFITABILITY': return <JobProfitabilityReport transactions={data.transactions} customers={data.customers} companyName={businessName} selectedJobId={params?.jobId} />;
         case 'PROFIT_AND_LOSS': return <ReportView type="P&L" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL')} params={params} />;
         case 'GENERAL_LEDGER': return <ReportView type="GL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} params={params} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'GL')} />;
@@ -239,9 +280,30 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'CASH_FLOW': return <ReportView type="CASH_FLOW" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'CASH_FLOW')} params={params} />;
         case 'TAX_LIABILITY': return <ReportView type="TAX_LIABILITY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'TAX_LIABILITY')} params={params} />;
         case 'PHYSICAL_INVENTORY': return <ReportView type="PHYSICAL_INVENTORY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PHYSICAL_INVENTORY')} params={params} />;
+        case 'PHYSICAL_INVENTORY_WORKSHEET': return <ReportView type="PHYSICAL_INVENTORY_WORKSHEET" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PHYSICAL_INVENTORY_WORKSHEET')} params={params} />;
         case 'BALANCE_SHEET': return <ReportView type="BS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS')} params={params} />;
+        // ── QB Enterprise Financial Reports ─────────────────────────────────────
+        case 'PL_DETAIL':    return <ReportView type="PL_DETAIL"    transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL_DETAIL')}    params={params} />;
+        case 'PL_BY_MONTH':  return <ReportView type="PL_BY_MONTH"  transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL_BY_MONTH')}  params={params} />;
+        case 'PL_YTD':       return <ReportView type="PL_YTD"       transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL_YTD')}       params={params} />;
+        case 'PL_PREV_YEAR': return <ReportView type="PL_PREV_YEAR" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PL_PREV_YEAR')} params={params} />;
+        case 'BS_DETAIL':    return <ReportView type="BS_DETAIL"    transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS_DETAIL')}    params={params} />;
+        case 'BS_SUMMARY':   return <ReportView type="BS_SUMMARY"   transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS_SUMMARY')}   params={params} />;
+        case 'BS_PREV_YEAR': return <ReportView type="BS_PREV_YEAR" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BS_PREV_YEAR')} params={params} />;
+        case 'INCOME_TAX':   return <ReportView type="INCOME_TAX"   transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'INCOME_TAX')}   params={params} />;
+        case 'MISSING_CHECKS': return <ReportView type="MISSING_CHECKS" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'MISSING_CHECKS')} params={params} />;
+        // QB Enterprise Vendors / Purchases Reports
+        case 'AP_AGING_DETAIL':            return <ReportView type="AP_AGING_DETAIL"            transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'AP_AGING_DETAIL')}            params={params} />;
+        case 'VENDOR_BALANCE_DETAIL':      return <ReportView type="VENDOR_BALANCE_DETAIL"      transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'VENDOR_BALANCE_DETAIL')}      params={params} />;
+        case 'UNPAID_BILLS_DETAIL':        return <ReportView type="UNPAID_BILLS_DETAIL"        transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'UNPAID_BILLS_DETAIL')}        params={params} />;
+        case 'BILLS_AND_PAYMENTS':         return <ReportView type="BILLS_AND_PAYMENTS"         transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'BILLS_AND_PAYMENTS')}         params={params} />;
+        case 'PURCHASES_BY_VENDOR_DETAIL': return <ReportView type="PURCHASES_BY_VENDOR_DETAIL" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PURCHASES_BY_VENDOR_DETAIL')} params={params} />;
+        case 'PURCHASES_BY_ITEM_DETAIL':   return <ReportView type="PURCHASES_BY_ITEM_DETAIL"   transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'PURCHASES_BY_ITEM_DETAIL')}   params={params} />;
+        case 'VENDOR_CONTACT_LIST':        return <ReportView type="VENDOR_CONTACT_LIST"        transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, 'VENDOR_CONTACT_LIST')}        params={params} />;
+        case '1099_SUMMARY':               return <ReportView type="REPORT_1099_SUMMARY"          transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, '1099_SUMMARY')}          params={params} />;
+        case '1099_DETAIL':                return <ReportView type="REPORT_1099_DETAIL"           transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(r) => handleReportMemorized(r, '1099_DETAIL')}           params={params} />;
         case 'CUSTOMER_CENTER': return <CustomerCenter customers={data.customers} transactions={data.transactions} onUpdateCustomers={onUpdateCustomers} onOpenWindow={onOpenWindow} onOpenForm={(type, entity) => onOpenForm('CUSTOMER', entity)} onOpenInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenPayment={() => onOpenWindow('RECEIVE_PAYMENT', 'Receive Payment')} onOpenReceipt={() => onOpenWindow('SALES_RECEIPT', 'Sales Receipt')} onOpenEstimate={() => onOpenWindow('ESTIMATE', 'Estimate')} onOpenSalesOrder={() => onOpenWindow('SALES_ORDER', 'Sales Order')} onOpenCredit={() => onOpenWindow('CREDIT_MEMO', 'Credit Memo')} onOpenDelayedCharge={() => onOpenWindow('DELAYED_CHARGE', 'Delayed Charge')} onOpenDelayedCredit={() => onOpenWindow('DELAYED_CREDIT', 'Delayed Credit')} refreshData={handlers.refreshData} />;
-        case 'INVOICE_CENTER': return <InvoiceCenter transactions={data.transactions} customers={data.customers} terms={data.terms} onOpenInvoice={(inv) => onOpenWindow('INVOICE_DISPLAY', `Invoice #${inv.refNo}`, { transactionId: inv.id })} onOpenNewInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenWindow={onOpenWindow} />;
+        case 'INVOICE_CENTER': return <InvoiceCenter transactions={data.transactions} customers={data.customers} terms={data.terms} onOpenInvoice={(inv) => onOpenWindow('INVOICE_DISPLAY', `Invoice #${inv.refNo}`, { transactionId: inv.id })} onOpenNewInvoice={() => onOpenWindow('INVOICE', 'Invoice')} onOpenWindow={onOpenWindow} onDeleteTransaction={onDeleteTransaction} />;
         case 'INVOICE_DISPLAY': {
             const invoice = data.transactions.find(t => t.id === params?.transactionId);
             const customer = data.customers.find(c => c.id === invoice?.entityId);
@@ -264,9 +326,27 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
                         const updatedEst = { ...cleanEst, status: 'Converted' };
                         onSaveTransaction(updatedEst);
 
-                        // Create invoice data: same content but NEW logical ID
-                        const { id, ...invoiceData } = updatedEst;
-                        onOpenWindow('INVOICE', 'Invoice', { initialData: invoiceData as any });
+                        // Create invoice data: same content but NEW logical ID; carry estimate link
+                        const { id: estId, ...invoiceData } = updatedEst;
+                        onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invoiceData, linkedDocumentIds: [estId] } as any });
+                    }}
+                    onSave={(est) => onSaveTransaction(est)}
+                    onConvertToSalesOrder={(est) => {
+                        const { _id, __v, ...cleanEst } = est as any;
+                        // Mark estimate Accepted (not fully Converted — SO is not a final billing step)
+                        const updatedEst = { ...cleanEst, status: 'Accepted' };
+                        onSaveTransaction(updatedEst);
+
+                        // Open Sales Order pre-filled with estimate line items
+                        const { id: estId, refNo: _refNo, ...soData } = updatedEst;
+                        onOpenWindow('SALES_ORDER', 'Sales Order', {
+                            initialData: {
+                                ...soData,
+                                type: 'SALES_ORDER',
+                                status: 'OPEN',
+                                linkedDocumentIds: [estId],
+                            } as any
+                        });
                     }}
                 />
             );
@@ -275,26 +355,70 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
             const so = data.transactions.find(t => t.id === params?.transactionId);
             const customer = data.customers.find(c => c.id === so?.entityId);
             if (!so) return <div className="p-10 font-bold uppercase italic text-slate-400">Sales Order not found</div>;
+            const navigateSO = (id: string, type: string) => {
+                const viewType =
+                    type === 'PURCHASE_ORDER' ? 'PURCHASE_ORDER_DISPLAY' :
+                    type === 'SALES_ORDER' ? 'SALES_ORDER_DISPLAY' :
+                    type === 'BILL' ? 'BILL_DISPLAY' :
+                    type === 'RECEIVE_ITEM' ? 'ITEM_RECEIPT_DISPLAY' :
+                    type === 'INVOICE' ? 'INVOICE_DISPLAY' :
+                    type === 'ESTIMATE' ? 'ESTIMATE_DISPLAY' :
+                    type === 'BILL_PAYMENT' ? 'BILL_PAYMENT_DISPLAY' :
+                    type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any;
+                const tx = data.transactions.find(t => t.id === id);
+                onOpenWindow(viewType, `${type.replace(/_/g, ' ')} #${tx?.refNo || id.slice(0, 8)}`, { transactionId: id });
+            };
             return (
                 <SalesOrderDisplay
                     salesOrder={so}
                     customer={customer}
                     items={data.items}
                     classes={data.classes}
+                    transactions={data.transactions}
                     onClose={() => onCloseWindow(winId)}
+                    onNavigateToTransaction={navigateSO}
+                    onSave={(s) => onSaveTransaction(s as any)}
+                    onPickPackShip={(s) => onOpenWindow('PICK_PACK_SHIP', `Pick/Pack/Ship – SO #${s.refNo}`, { salesOrder: s })}
                     onConvertToInvoice={(s) => {
                         const { _id, __v, ...cleanSO } = s as any;
                         const updatedSO = { ...cleanSO, status: 'Converted' };
                         onSaveTransaction(updatedSO);
 
-                        const { id, ...invoiceData } = updatedSO;
-                        onOpenWindow('INVOICE', 'Invoice', { initialData: invoiceData as any });
+                        // Pass SO id as linked document so DataContext can confirm Converted status
+                        const { id: soId, refNo: _refNo, ...invoiceData } = updatedSO;
+                        onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invoiceData, linkedDocumentIds: [soId] } as any });
+                    }}
+                    onCreatePO={(s) => {
+                        const { _id, __v, ...cleanSO } = s as any;
+                        // Map SO items to PO items — use item.cost as the purchase rate
+                        const poItems = (cleanSO.items || []).map((lineItem: any) => {
+                            const catalogItem = data.items.find(i => i.id === lineItem.itemId);
+                            const purchaseRate = catalogItem?.cost ?? lineItem.rate;
+                            return {
+                                ...lineItem,
+                                id: crypto.randomUUID(),
+                                rate: purchaseRate,
+                                amount: purchaseRate * (lineItem.quantity || 0),
+                            };
+                        });
+                        onOpenWindow('PURCHASE_ORDER', 'Purchase Order', {
+                            initialData: {
+                                ...cleanSO,
+                                type: 'PURCHASE_ORDER',
+                                entityId: '',        // vendor must be chosen in PO form
+                                items: poItems,
+                                status: 'OPEN',
+                                linkedDocumentIds: [cleanSO.id],
+                                refNo: undefined,    // PO form will auto-generate
+                                memo: cleanSO.memo || `From SO #${cleanSO.refNo}`,
+                            } as any
+                        });
                     }}
                 />
             );
         }
-        case 'BILL_CENTER': return <BillCenter transactions={data.transactions} vendors={data.vendors} onOpenWindow={onOpenWindow} onPayBill={(id) => onOpenWindow('PAY_BILLS', 'Pay Bills', { billId: id })} />;
-        case 'PURCHASE_ORDER_CENTER': return <POCenter transactions={data.transactions} vendors={data.vendors} onOpenWindow={onOpenWindow} />;
+        case 'BILL_CENTER': return <BillCenter transactions={data.transactions} vendors={data.vendors} onOpenWindow={onOpenWindow} onPayBill={(id) => onOpenWindow('PAY_BILLS', 'Pay Bills', { billId: id })} onDeleteTransaction={onDeleteTransaction} />;
+        case 'PURCHASE_ORDER_CENTER': return <POCenter transactions={data.transactions} vendors={data.vendors} onOpenWindow={onOpenWindow} onSaveTransaction={onSaveTransaction} onDeleteTransaction={onDeleteTransaction} />;
         case 'SALES_ORDER_CENTER': return <SalesOrderCenter transactions={data.transactions} customers={data.customers} onOpenWindow={onOpenWindow} onSaveTransaction={onSaveTransaction} />;
         case 'BILL_DISPLAY': {
             const bill = data.transactions.find(t => t.id === params?.transactionId);
@@ -332,7 +456,21 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
             const po = data.transactions.find(t => t.id === params?.transactionId);
             const vendor = data.vendors.find(v => v.id === po?.entityId);
             if (!po) return <div className="p-10 font-bold uppercase italic text-slate-400">Purchase Order not found</div>;
-            return <PODisplay po={po} vendor={vendor} items={data.items} accounts={data.accounts} classes={data.classes} onClose={() => onCloseWindow(winId)} onConvertToBill={(p) => onOpenWindow('BILL', 'Enter Bills', { initialData: p })} />;
+            const poReceipts = data.transactions.filter(t => (t.type === 'BILL' || t.type === 'RECEIVE_ITEM') && t.purchaseOrderId === po.id);
+            const navigateTx = (id: string, type: string) => {
+                const viewType =
+                    type === 'PURCHASE_ORDER' ? 'PURCHASE_ORDER_DISPLAY' :
+                    type === 'SALES_ORDER' ? 'SALES_ORDER_DISPLAY' :
+                    type === 'BILL' ? 'BILL_DISPLAY' :
+                    type === 'RECEIVE_ITEM' ? 'ITEM_RECEIPT_DISPLAY' :
+                    type === 'INVOICE' ? 'INVOICE_DISPLAY' :
+                    type === 'ESTIMATE' ? 'ESTIMATE_DISPLAY' :
+                    type === 'BILL_PAYMENT' ? 'BILL_PAYMENT_DISPLAY' :
+                    type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any;
+                const tx = data.transactions.find(t => t.id === id);
+                onOpenWindow(viewType, `${type.replace(/_/g, ' ')} #${tx?.refNo || id.slice(0, 8)}`, { transactionId: id });
+            };
+            return <PODisplay po={po} vendor={vendor} items={data.items} accounts={data.accounts} classes={data.classes} transactions={data.transactions} onClose={() => onCloseWindow(winId)} onConvertToBill={(p) => onOpenWindow('BILL', 'Enter Bills', { initialData: p })} onReceiveMore={(p) => onOpenWindow('RECEIVE_INVENTORY', 'Receive Inventory', { initialVendorId: p.entityId, initialPoId: p.id })} onNavigateToTransaction={navigateTx} receipts={poReceipts} onSave={(p) => onSaveTransaction(p as any)} />;
         }
         case 'LEAD_CENTER': return <LeadCenter leads={data.leads} onUpdateLeads={onUpdateLeads} onConvertToCustomer={onConvertToCustomer} />;
         case 'REPORTS_CENTER': return <ReportsCenter transactions={data.transactions} vendors={data.vendors} items={data.items} budgets={data.budgets} memorized={data.memorizedReports} onMemorize={(r) => setMemorizedReports([...data.memorizedReports, r])} onOpenReport={(t, title, params) => onOpenWindow(t as any, title, params)} onDeleteReport={onDeleteReport} />;
@@ -341,7 +479,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'VENDOR_CENTER': return <VendorCenter vendors={data.vendors} transactions={data.transactions} onUpdateVendors={onUpdateVendors} onOpenForm={(v) => onOpenForm('VENDOR', v)} onOpenWindow={onOpenWindow} onOpenBill={() => onOpenWindow('BILL', 'Enter Bills')} onOpenPay={() => onOpenWindow('PAY_BILLS', 'Pay Bills')} onOpenPO={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} onOpenReceive={() => onOpenWindow('RECEIVE_INVENTORY', 'Receive Items')} refreshData={handlers.refreshData} />;
         case 'PAY_BILLS': return <PayBillsForm transactions={data.transactions} vendors={data.vendors} accounts={data.accounts} vendorCreditCategories={data.vendorCreditCategories} onSavePayment={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialBillId={params?.billId} />;
         case 'EMPLOYEE_CENTER': return <EmployeeCenter employees={data.employees} transactions={data.transactions} onUpdateEmployees={onUpdateEmployees} onOpenWindow={onOpenWindow} onOpenForm={(e) => onOpenForm('EMPLOYEE', e)} refreshData={handlers.refreshData} />;
-        case 'PAYROLL_CENTER': return <PayrollCenter employees={data.employees} liabilities={data.liabilities} onOpenPayEmployees={() => onOpenWindow('PAY_EMPLOYEES', 'Pay Employees')} onOpenPayLiabilities={() => onOpenWindow('PAY_LIABILITIES', 'Pay Liabilities')} onOpenReport={onOpenWindow} />;
+        case 'PAYROLL_CENTER': return <PayrollCenter transactions={data.transactions} onOpenReport={onOpenWindow} onOpenTransaction={onOpenWindow} />;
         case 'PAY_EMPLOYEES': return <PayEmployeesForm employees={data.employees} timeEntries={data.timeEntries} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'PAY_LIABILITIES': return <PayLiabilitiesForm liabilities={data.liabilities} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'PAYROLL_SUMMARY': return <ReportView type="PAYROLL_SUMMARY" transactions={data.transactions} accounts={data.accounts} customers={data.customers} vendors={data.vendors} items={data.items} budgets={data.budgets} classes={data.classes} companyName={businessName} onDrillDown={onReportDrillDown} onMemorize={(name) => setMemorizedReports([...data.memorizedReports, { id: Math.random().toString(), name, baseType: 'PAYROLL_SUMMARY', dateCreated: new Date().toLocaleDateString() }])} />;
@@ -387,7 +525,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'DEPOSIT': return <DepositForm accounts={data.accounts} vendors={data.vendors} customers={data.customers} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'CREDIT_CARD_CHARGE': return <CreditCardChargeForm accounts={data.accounts} vendors={data.vendors} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'MY_COMPANY': return <MyCompany config={data.companyConfig} onUpdate={setCompanyConfig} />;
-        case 'ESTIMATE': return <EstimateForm customers={data.customers} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} onConvertToInvoice={(est) => { onSaveTransaction(est); onOpenWindow('INVOICE', 'Invoice', { initialData: est }); }} initialData={params?.initialData} />;
+        case 'ESTIMATE': return <EstimateForm customers={data.customers} items={data.items} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} onConvertToInvoice={(est) => { const { _id, __v, ...cleanEst } = est as any; onSaveTransaction(cleanEst); const { id: estId, refNo: _r, ...invData } = cleanEst; onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invData, linkedDocumentIds: [estId] } }); }} onConvertToSalesOrder={(est) => { const { _id, __v, ...cleanEst } = est as any; onSaveTransaction(cleanEst); const { id: estId, refNo: _r, ...soData } = cleanEst; onOpenWindow('SALES_ORDER', 'Sales Order', { initialData: { ...soData, type: 'SALES_ORDER', status: 'OPEN', linkedDocumentIds: [estId] } }); }} initialData={params?.initialData} />;
         case 'SALES_RECEIPT': return <SalesReceiptForm customers={data.customers} items={data.items} accounts={data.accounts} paymentMethods={data.paymentMethods} onSave={onSaveTransaction} onDelete={onDeleteTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData || data.transactions.find(t => t.id === params?.transactionId)} onMakeRecurring={(data) => onOpenWindow('RECURRING_DIALOG', 'Memorize Transaction', { baseTransaction: data })} />;
         case 'RECEIVE_PAYMENT': return <ReceivePaymentForm customers={data.customers} transactions={data.transactions} accounts={data.accounts} paymentMethods={data.paymentMethods} customerCreditCategories={data.customerCreditCategories} initialData={params} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'CREDIT_MEMO': return <CreditMemoForm customers={data.customers} items={data.items} customerCreditCategories={data.customerCreditCategories} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} onRefund={(data) => onOpenWindow('REFUND_RECEIPT', 'Refund Receipt', { initialData: data })} onMakeRecurring={(data) => onOpenWindow('RECURRING_DIALOG', 'Memorize Transaction', { baseTransaction: data })} />;
@@ -398,6 +536,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'VENDOR_CREDIT': return <VendorCreditForm vendors={data.vendors} items={data.items} accounts={data.accounts} vendorCreditCategories={data.vendorCreditCategories} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'VENDOR_CREDIT_CATEGORY_LIST': return <VendorCreditCategoryList categories={data.vendorCreditCategories} onUpdateCategories={onUpdateVendorCreditCategories} />;
         case 'CUSTOMER_CREDIT_CATEGORY_LIST': return <CustomerCreditCategoryList categories={data.customerCreditCategories} onUpdateCategories={onUpdateCustomerCreditCategories} onClose={() => onCloseWindow(winId)} />;
+        case 'ITEM_CATEGORY_LIST': return <ItemCategoryList categories={data.itemCategories} onUpdateCategories={onUpdateItemCategories} />;
         case 'PAY_SALES_TAX': return <PaySalesTaxForm accounts={data.accounts} transactions={data.transactions} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'SALES_TAX_CODE_LIST': return <SalesTaxCodeList codes={data.salesTaxCodes} onUpdate={onUpdateSalesTaxCodes} />;
         case 'TERMS_LIST': return <TermsList terms={data.terms} onUpdate={onUpdateTerms} />;
@@ -432,25 +571,84 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         }
         case 'INSIGHTS': return <InsightsTab isAdmin={true} transactions={data.transactions} accounts={data.accounts} />;
         case 'IMPORT_CENTER': return <ImportCenter refreshData={handlers.refreshData} />;
-        case 'MODERN_DASHBOARD': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} />;
+        case 'MODERN_DASHBOARD': return <HomePage transactions={data.transactions} accounts={data.accounts} onOpenWindow={onOpenWindow} prefs={data.homePrefs} />;
         case 'CALENDAR': return <FinancialCalendar transactions={data.transactions} companyName={businessName} />;
         case 'STATEMENTS': return <StatementForm customers={data.customers} transactions={data.transactions} onClose={() => onCloseWindow(winId)} />;
         case 'TRACK_MILEAGE': return <MileageTrackerForm customers={data.customers} items={data.items} onSave={onUpdateMileage} onClose={() => onCloseWindow(winId)} />;
+        case 'JOURNAL':
         case 'JOURNAL_ENTRY': return <JournalEntryForm accounts={data.accounts} classes={data.classes} customers={data.customers} vendors={data.vendors} employees={data.employees} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'CLASS_LIST': return <ClassList classes={data.classes} onUpdateClasses={onUpdateClasses} />;
         case 'SALES_REP_LIST': return <SalesRepList salesReps={data.salesReps} employees={data.employees} vendors={data.vendors} onUpdateReps={onUpdateReps} />;
         case 'SHIP_VIA_LIST': return <ShipViaList shipVia={data.shipVia} onUpdateShipVia={onUpdateShipVia} />;
         case 'INVENTORY_CENTER': return <InventoryCenter items={data.items} transactions={data.transactions} onUpdateItems={onUpdateItems} onOpenForm={(item) => onOpenItemForm(item)} onOpenAdjustment={() => onOpenWindow('INVENTORY_ADJUSTMENT', 'Adjust Quantity/Value on Hand')} onOpenBuild={() => onOpenWindow('BUILD_ASSEMBLY', 'Build Assemblies')} onOpenPO={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} onOpenReceive={() => onOpenWindow('RECEIVE_INVENTORY', 'Receive Items')} onOpenWindow={onOpenWindow} />;
-        case 'UNIT_OF_MEASURE_LIST': return <UOMList uoms={data.uoms} onUpdateUOMs={onUpdateUOMs} />;
+        case 'WAREHOUSE_CENTER': return <WarehouseCenter items={data.items} showAlert={showAlert} />;
+        case 'LOT_TRACEABILITY': return <LotTraceabilityView onClose={() => onCloseWindow(winId)} initialLotNumber={params?.lotNumber} />;
+        case 'SERIAL_HISTORY': return <SerialHistoryView onClose={() => onCloseWindow(winId)} initialSerialNumber={params?.serialNumber} />;
+        case 'LOT_QC_WORKFLOW': return <LotQCWorkflow items={data.items} onClose={() => onCloseWindow(winId)} />;
+        case 'USER_MANAGEMENT': return <UserManagement />;
+        case 'PICK_PACK_SHIP': {
+            const pickSO = params?.salesOrder as any;
+            if (!pickSO) return <div className="p-10 font-bold uppercase italic text-slate-400">Sales Order not found</div>;
+            return (
+                <PickPackShipForm
+                    salesOrder={pickSO}
+                    items={data.items}
+                    onClose={() => onCloseWindow(winId)}
+                    onShip={async (shipment) => {
+                        const shipmentTx: any = {
+                            id: crypto.randomUUID(),
+                            type: 'SHIPMENT',
+                            refNo: `SHIP-${Date.now().toString().slice(-5)}`,
+                            date: shipment.shippedDate,
+                            entityId: pickSO.entityId,
+                            total: shipment.freightCost || 0,
+                            status: 'SHIPPED',
+                            fulfillmentWarehouseId: shipment.warehouseId,
+                            fulfillmentBinId: shipment.binId || undefined,
+                            carrier: shipment.carrier,
+                            trackingNo: shipment.trackingNo || undefined,
+                            memo: shipment.notes || undefined,
+                            freightCost: shipment.freightCost || undefined,
+                            shippedLines: shipment.lines,
+                            packages: shipment.packages,       // weight, dimensions, line assignments
+                            linkedDocumentIds: [pickSO.id],
+                            items: shipment.lines.map((l: any) => ({
+                                id: crypto.randomUUID(),
+                                itemId: l.itemId,
+                                description: l.itemName,
+                                quantity: l.packedQty,
+                                rate: 0,
+                                amount: 0,
+                                tax: false,
+                                warehouseId: l.warehouseId || shipment.warehouseId,
+                                binId: l.binId || shipment.binId || undefined,
+                                lotNumber: l.lotNumber || undefined,
+                                serialNumber: l.serialNumber || undefined,
+                                pickedQty: l.pickedQty,
+                                packedQty: l.packedQty,
+                            })),
+                        };
+                        try {
+                            await onSaveTransaction(shipmentTx);
+                            showAlert(`Shipment confirmed for SO #${shipment.soRefNo} via ${shipment.carrier}${shipment.trackingNo ? ` — Tracking: ${shipment.trackingNo}` : ''}`);
+                            onCloseWindow(winId);
+                        } catch (err: any) {
+                            showAlert(`Failed to save shipment: ${err.message || 'Unknown error'}`);
+                        }
+                    }}
+                />
+            );
+        }
+        case 'UNIT_OF_MEASURE_LIST': return <UOMList uomSets={data.uomSets} onSaveUOMSet={onSaveUOMSet} onDeleteUOMSet={onDeleteUOMSet} uoms={(data as any).uoms} onUpdateUOMs={onUpdateUOMs} />;
         case 'VEHICLE_LIST': return <VehicleList vehicles={data.vehicles} onUpdate={onUpdateVehicle} onDelete={onDeleteVehicle} />;
-        case 'ENTITY_FORM': return <EntityForm isOpen={true} type={params.type} initialData={params.initialData} accounts={data.accounts} customFields={data.customFields} customers={data.customers} customerTypes={data.customerTypes} vendorTypes={data.vendorTypes} items={data.items} onSave={params.type === 'VENDOR' ? handleSaveVendor : (params.type === 'CUSTOMER' ? handleSaveCustomer : handleSaveEmployee)} onClose={() => onCloseWindow(winId)} />;
-        case 'ITEM_FORM': return <ItemForm isOpen={true} accounts={data.accounts} items={data.items} vendors={data.vendors} customFields={data.customFields} initialData={params.initialData} onSave={handleSaveItem} onClose={() => onCloseWindow(winId)} />;
+        case 'ENTITY_FORM': return <EntityForm isOpen={true} type={params.type} initialData={params.initialData} accounts={data.accounts} customFields={data.customFields} customers={data.customers} customerTypes={data.customerTypes} vendorTypes={data.vendorTypes} items={data.items} priceLevels={data.priceLevels} terms={data.terms} paymentMethods={data.paymentMethods} onSave={params.type === 'VENDOR' ? handleSaveVendor : (params.type === 'CUSTOMER' ? handleSaveCustomer : handleSaveEmployee)} onClose={() => onCloseWindow(winId)} />;
+        case 'ITEM_FORM': return <ItemForm isOpen={true} accounts={data.accounts} items={data.items} vendors={data.vendors} customFields={data.customFields} itemCategories={data.itemCategories} onUpdateItemCategories={onUpdateItemCategories} uomSets={data.uomSets} priceLevels={data.priceLevels} initialData={params.initialData} onSave={handleSaveItem} onClose={() => onCloseWindow(winId)} />;
         case 'PREFERENCES': return <PreferencesDialog isOpen={true} accounts={data.accounts} uiPrefs={data.uiPrefs} setUiPrefs={setUiPrefs} accPrefs={data.accPrefs} setAccPrefs={setAccPrefs} homePrefs={data.homePrefs} setHomePrefs={setHomePrefs} billPrefs={data.billPrefs} setBillPrefs={setBillPrefs} checkingPrefs={data.checkingPrefs} setCheckingPrefs={setCheckingPrefs} userRole={data.userRole} setUserRole={setUserRole} closingDate={data.closingDate} setClosingDate={setClosingDate} onClose={() => onCloseWindow(winId)} />;
         case 'REORDER_ITEMS': return <ReorderItemsDialog isOpen={true} items={data.items} vendors={data.vendors} onOrder={(pos) => { pos.forEach(onSaveTransaction); onCloseWindow(winId); }} onClose={() => onCloseWindow(winId)} />;
         case 'PRINTER_SETUP': return <PrinterSetupDialog isOpen={true} onClose={() => onCloseWindow(winId)} />;
         case 'COMPANY_FILE': return <CompanyFileDialog isOpen={true} mode={params.mode} companies={handlers.companies} onSelect={async (id) => { await handlers.switchCompany(id); onCloseWindow(winId); }} onClose={() => onCloseWindow(winId)} />;
         case 'SHORTCUT_MODAL': return <ShortcutModal isOpen={true} existingGroups={handlers.existingGroups} onSave={(s, g) => { if (g) handlers.setShortcutGroups((prev: any) => [...prev, { id: crypto.randomUUID(), name: g, isExpanded: true }]); handlers.setShortcuts((prev: any) => [...prev, s]); onCloseWindow(winId); }} onClose={() => onCloseWindow(winId)} />;
-        case 'SETUP_WIZARD': return <SetupWizard isAdvanced={false} onComplete={async (config) => { await handlers.setCompanyConfig(config); await handlers.refreshData(); onCloseWindow(winId); }} onCancel={() => onCloseWindow(winId)} />;
+        case 'SETUP_WIZARD': return <SetupWizard isAdvanced={false} onComplete={async (config) => { await handleCreateNewCompany(config); onCloseWindow(winId); }} onCancel={() => onCloseWindow(winId)} />;
         case 'VENDOR_DETAIL': return <VendorDetailView vendorId={params.vendorId} vendors={data.vendors} transactions={data.transactions} accounts={data.accounts} onOpenTransaction={(id, type) => {
             const viewType = type === 'PURCHASE_ORDER' ? 'PURCHASE_ORDER_DISPLAY' :
                 (type === 'BILL' ? 'BILL_DISPLAY' :
@@ -459,7 +657,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
                             (type === 'BILL_PAYMENT' ? 'BILL_PAYMENT_DISPLAY' :
                                 (type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any)))));
             onOpenWindow(viewType, `${(type === 'BILL_PAYMENT' ? 'Check' : type.replace('_', ' '))} #${id}`, { transactionId: id });
-        }} />;
+        }} onEditVendor={(vendor) => onOpenWindow('ENTITY_FORM', `Edit Vendor: ${vendor.name}`, { type: 'VENDOR', initialData: vendor })} onMergeVendor={async (sourceId, targetId) => { try { const { mergeVendors } = await import('../services/api'); await mergeVendors(sourceId, targetId); handlers.refreshData?.(); onCloseWindow(winId); } catch (err: any) { alert(err.message || 'Merge failed'); } }} />;
         case 'CUSTOMER_DETAIL': return <CustomerDetailView customerId={params.customerId} customers={data.customers} transactions={data.transactions} accounts={data.accounts} onOpenTransaction={(id, type) => {
             const viewType = type === 'INVOICE' ? 'INVOICE_DISPLAY' :
                 (type === 'ESTIMATE' ? 'ESTIMATE_DISPLAY' :
@@ -469,7 +667,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
                                 (type === 'BILL_PAYMENT' ? 'BILL_PAYMENT_DISPLAY' :
                                     (type === 'PAYMENT' ? 'PAYMENT_DISPLAY' : type as any))))));
             onOpenWindow(viewType, `${(type === 'BILL_PAYMENT' ? 'Check' : type.replace('_', ' '))} #${id}`, { transactionId: id });
-        }} />;
+        }} onEditCustomer={(customer: Customer) => onOpenWindow('ENTITY_FORM', `Edit Customer: ${customer.name}`, { type: 'CUSTOMER', initialData: customer })} onSaveCustomer={async (customer: Customer) => { const { saveCustomer } = await import('../services/api'); await saveCustomer(customer); handlers.refreshData?.(); }} refreshData={handlers.refreshData} />;
         case 'EMPLOYEE_DETAIL': return <EmployeeDetailView employeeId={params.employeeId} employees={data.employees} transactions={data.transactions} accounts={data.accounts} onOpenTransaction={(id, type) => {
             const viewType = type === 'BILL' ? 'BILL_DISPLAY' :
                 (type === 'INVOICE' ? 'INVOICE_DISPLAY' :
