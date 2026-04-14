@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HomePagePreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, Account } from '../types';
+import { HomePagePreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, UIPreferences, FontSizePreferences, Account } from '../types';
 import { API_BASE_URL } from '../services/api';
 
 interface Props {
@@ -18,11 +18,26 @@ interface Props {
   userRole: 'Admin' | 'Standard';
   setUserRole: (r: 'Admin' | 'Standard') => void;
   accounts: Account[];
-  uiPrefs: any;
-  setUiPrefs: (p: any) => void;
+  uiPrefs: UIPreferences;
+  setUiPrefs: (p: UIPreferences) => void;
 }
 
-const PreferencesDialog: React.FC<Props> = ({ isOpen, onClose, homePrefs, setHomePrefs, accPrefs, setAccPrefs, billPrefs, setBillPrefs, checkingPrefs, setCheckingPrefs, closingDate, setClosingDate, userRole, setUserRole, accounts }) => {
+const DEFAULT_FONT_SIZES: FontSizePreferences = { heading: 16, subheading: 13, body: 12, label: 11, data: 12, small: 10 };
+const DEFAULT_BODY = 12;
+
+function scaledFontSizes(body: number): FontSizePreferences {
+  const s = body / DEFAULT_BODY;
+  return {
+    body,
+    heading: Math.round(DEFAULT_FONT_SIZES.heading * s),
+    subheading: Math.round(DEFAULT_FONT_SIZES.subheading * s),
+    label: Math.round(DEFAULT_FONT_SIZES.label * s),
+    data: Math.round(DEFAULT_FONT_SIZES.data * s),
+    small: Math.round(DEFAULT_FONT_SIZES.small * s),
+  };
+}
+
+const PreferencesDialog: React.FC<Props> = ({ isOpen, onClose, homePrefs, setHomePrefs, accPrefs, setAccPrefs, billPrefs, setBillPrefs, checkingPrefs, setCheckingPrefs, closingDate, setClosingDate, userRole, setUserRole, accounts, uiPrefs, setUiPrefs }) => {
   const [activeCategory, setActiveCategory] = useState('Desktop View');
   const [smtpSettings, setSmtpSettings] = useState({ host: '', port: 587, user: '', pass: '', from: '' });
   const [loadingEmail, setLoadingEmail] = useState(false);
@@ -84,7 +99,7 @@ const PreferencesDialog: React.FC<Props> = ({ isOpen, onClose, homePrefs, setHom
           {/* Left Sidebar Categories */}
           <div className="w-44 bg-gray-100 border-r border-gray-300 text-[11px] overflow-y-auto">
             {[
-              'Accounting', 'Bills', 'Checking', 'Desktop View', 'Email'
+              'Accounting', 'Bills', 'Checking', 'Desktop View', 'Email', 'Font & Display'
             ].map(cat => (
               <div
                 key={cat}
@@ -266,6 +281,42 @@ const PreferencesDialog: React.FC<Props> = ({ isOpen, onClose, homePrefs, setHom
                   </label>
                 </div>
               )}
+
+              {activeCategory === 'Font & Display' && (() => {
+                const body = uiPrefs?.fontSizes?.body ?? DEFAULT_BODY;
+                const pct = Math.round((body / DEFAULT_BODY) * 100);
+                return (
+                  <div className="space-y-6">
+                    <div className="bg-blue-50 p-3 border border-blue-100 rounded-sm">
+                      <p className="text-[10px] text-blue-800 font-bold italic mb-1">Interface Font Size</p>
+                      <p className="text-[9px] text-blue-600">Scales all text across the entire application. Changes apply immediately.</p>
+                    </div>
+                    <div className="flex items-center gap-4 px-1">
+                      <span className="text-[10px] text-gray-500 w-10 text-right">Small</span>
+                      <input
+                        type="range" min={8} max={20} step={1}
+                        value={body}
+                        onChange={e => setUiPrefs({ ...uiPrefs, fontSizes: scaledFontSizes(Number(e.target.value)) })}
+                        className="flex-1 h-1.5 accent-blue-600"
+                      />
+                      <span className="text-[10px] text-gray-500 w-10">Large</span>
+                      <span className="font-mono text-blue-700 font-bold text-[11px] w-12 text-right">{pct}%</span>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-1">
+                      <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-2">Preview</p>
+                      <p style={{ fontSize: body * (16 / DEFAULT_BODY) }} className="font-bold text-gray-800">Section Heading</p>
+                      <p style={{ fontSize: body }} className="text-gray-700">Regular body text — invoice line items, descriptions.</p>
+                      <p style={{ fontSize: body * (10 / DEFAULT_BODY) }} className="text-gray-400">Small caption text — hints, footnotes.</p>
+                    </div>
+                    <button
+                      onClick={() => setUiPrefs({ ...uiPrefs, fontSizes: DEFAULT_FONT_SIZES })}
+                      className="px-4 py-1 text-[11px] border border-gray-400 rounded bg-white hover:bg-gray-50"
+                    >
+                      Reset to Default
+                    </button>
+                  </div>
+                );
+              })()}
 
               {activeCategory === 'Checking' && (
                 <div className="space-y-4">

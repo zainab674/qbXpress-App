@@ -27,6 +27,7 @@ const TransactionItemSchema = new mongoose.Schema({
     pickedQty: Number,
     packedQty: Number,
     fulfilledQty: { type: Number, default: 0 },  // qty actually shipped/fulfilled
+    isShippingLine: Boolean,                       // Shipping module: auto-injected carrier charge line
 });
 
 const TransactionSchema = new mongoose.Schema({
@@ -119,6 +120,13 @@ const TransactionSchema = new mongoose.Schema({
     outputLotExpirationDate: String,  // Expiry date for output lot
     outputLotManufacturingDate: String, // Manufacturing/production date for output lot
     linkedWorkOrderId: String,        // ASSEMBLY_BUILD: WO this build fulfills
+    // ── Shipping Module ───────────────────────────────────────────────────────
+    shipViaId: String,                    // ShipViaEntry.id
+    shippingCost: Number,                 // inbound: carrier charge; outbound: amount charged to customer
+    shippingBillId: String,               // ID of auto-generated carrier BILL (inbound)
+    shippingInvoiceLineId: String,        // ID of injected shipping line item (outbound invoice/SO)
+    outboundCarrierCost: Number,          // outbound: what we pay the carrier for delivery
+    outboundShippingBillId: String,       // ID of auto-generated carrier BILL (outbound)
     // ── SO Fulfillment Status ────────────────────────────────────────────────
     fulfillmentStatus: { type: String, enum: ['UNFULFILLED', 'PARTIALLY_FULFILLED', 'FULFILLED'], default: 'UNFULFILLED' },
     // ── Progress Invoicing Milestones ─────────────────────────────────────────
@@ -174,5 +182,7 @@ TransactionSchema.index({ companyId: 1, userId: 1, bankAccountId: 1, date: -1 })
 TransactionSchema.index({ companyId: 1, userId: 1, date: -1 });
 // refNo lookups (search by reference number)
 TransactionSchema.index({ companyId: 1, userId: 1, refNo: 1 }, { sparse: true });
+// Shipping module: find source transactions that have a shipping bill
+TransactionSchema.index({ companyId: 1, userId: 1, shippingBillId: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);

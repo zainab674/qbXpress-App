@@ -13,6 +13,8 @@ router.use(auth);
 
 router.get('/', requirePermission('transactions', 'read'), transactionController.getAll);
 router.get('/next-ref-no', requirePermission('transactions', 'read'), transactionController.nextRefNo);
+// Must be before /:id to avoid being swallowed as a param
+router.get('/shipping-summary', requirePermission('transactions', 'read'), transactionController.shippingSummary);
 router.get('/:id', requirePermission('transactions', 'read'), transactionController.getOne);
 router.post('/', requirePermission('transactions', 'write'), validate(transactionSchema), transactionController.save);
 router.delete('/:id', requirePermission('transactions', 'delete'), transactionController.delete);

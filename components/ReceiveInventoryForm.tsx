@@ -1,13 +1,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Vendor, Transaction, Item, Warehouse, Bin } from '../types';
+import { Vendor, Transaction, Item, Warehouse, Bin, ShipViaEntry } from '../types';
 import { fetchWarehouses, fetchBins, fetchAvailableLots, createSerialNumbers } from '../services/api';
+import { createShippingBill } from '../services/shippingService';
 
 interface Props {
   vendors: Vendor[];
   transactions: Transaction[];
   items: Item[];
-  onSave: (receipt: Transaction) => void;
+  shipVia?: ShipViaEntry[];
+  onSave: (receipt: Transaction) => Promise<void> | void;
   onClose: () => void;
   initialVendorId?: string;
   initialPoId?: string;
@@ -28,7 +30,7 @@ interface DirectLine {
   serials: string[];
 }
 
-const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, onSave, onClose, initialVendorId = '', initialPoId = '' }) => {
+const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, shipVia = [], onSave, onClose, initialVendorId = '', initialPoId = '' }) => {
   const [vendorId, setVendorId] = useState(initialVendorId);
   const [selectedPoId, setSelectedPoId] = useState(initialPoId);
   const [receiveWithBill, setReceiveWithBill] = useState(true);
@@ -51,6 +53,9 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
     { id: Date.now().toString(36) + Math.random().toString(36).slice(2), itemId: '', description: '', qty: 1, rate: 0, warehouseId: '', binId: '', lotNumber: '', lotExpiry: '', lotVendorLot: '', lotMfgDate: '', serials: [] }
   ]);
   const [isSaving, setIsSaving] = useState(false);
+  // ── Shipping module state ──────────────────────────────────────────────────
+  const [selectedShipViaId, setSelectedShipViaId] = useState(shipVia.find(sv => sv.isDefault)?.id || '');
+  const [shippingCost, setShippingCost] = useState(0);
   // ── Warehouse + Bin selection ──────────────────────────────────────────────
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [allBins, setAllBins] = useState<Bin[]>([]);
@@ -166,6 +171,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
       }
 
       const directTotal = validLines.reduce((s, l) => s + l.qty * l.rate, 0);
+      const selectedShipViaEntry = shipVia.find(sv => sv.id === selectedShipViaId);
       const receipt: Transaction = {
         id: Math.random().toString(),
         type: receiveWithBill ? 'BILL' : 'RECEIVE_ITEM',
@@ -191,8 +197,14 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
         warehouseId: warehouseId || undefined,
         binId: binId || undefined,
         memo: memoText || undefined,
+        shipVia: selectedShipViaEntry?.name,
+        shipViaId: selectedShipViaId || undefined,
+        shippingCost: shippingCost > 0 ? shippingCost : undefined,
       };
-      onSave(receipt);
+      await onSave(receipt);
+      if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
+        await createShippingBill(receipt, selectedShipViaEntry, shippingCost, onSave as any);
+      }
 
       for (const l of validLines) {
         const itemDef = items.find((i: Item) => i.id === l.itemId);
@@ -262,6 +274,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
         binId: lineBins[l.lineId] || binId || undefined,
       }));
 
+    const selectedShipViaEntry2 = shipVia.find(sv => sv.id === selectedShipViaId);
     const receipt: Transaction = {
       id: Math.random().toString(),
       type: receiveWithBill ? 'BILL' : 'RECEIVE_ITEM',
@@ -275,9 +288,15 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
       warehouseId: warehouseId || undefined,
       binId: binId || undefined,
       memo: memoText || undefined,
+      shipVia: selectedShipViaEntry2?.name,
+      shipViaId: selectedShipViaId || undefined,
+      shippingCost: shippingCost > 0 ? shippingCost : undefined,
     };
 
-    onSave(receipt);
+    await onSave(receipt);
+    if (selectedShipViaEntry2?.vendorId && shippingCost > 0) {
+      await createShippingBill(receipt, selectedShipViaEntry2, shippingCost, onSave as any);
+    }
 
     // Batch-create serial number records for serial-tracked lines
     for (const l of lineData) {
@@ -1118,6 +1137,51 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, o
               </div>
             )}
           </div>
+
+          {/* Shipping */}
+          {(selectedPo || directReceiptMode) && shipVia.length > 0 && (
+            <div className="bg-blue-50/40 border-2 border-blue-100 rounded shadow-lg p-5 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Inbound Shipping</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Carrier (Ship Via)</label>
+                  <select
+                    className="border border-gray-300 rounded px-2 py-1.5 text-xs bg-white outline-none focus:border-blue-500 font-bold"
+                    value={selectedShipViaId}
+                    onChange={e => setSelectedShipViaId(e.target.value)}
+                  >
+                    <option value="">-- Select --</option>
+                    {shipVia.filter(sv => sv.isActive).map(sv => (
+                      <option key={sv.id} value={sv.id}>{sv.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="border border-gray-300 rounded pl-5 pr-2 py-1.5 text-xs w-full outline-none focus:border-blue-500 font-bold"
+                      value={shippingCost || ''}
+                      onChange={e => setShippingCost(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+              {selectedShipViaId && (
+                <p className="text-[9px]">
+                  {shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
+                    ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated on save</span>
+                    : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created</span>
+                  }
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Memo */}
           {(selectedPo || directReceiptMode) && (

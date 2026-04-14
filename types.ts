@@ -88,6 +88,7 @@ export type ViewState =
   | 'CLASS_LIST'
   | 'SALES_REP_LIST'
   | 'SHIP_VIA_LIST'
+  | 'SHIPPING_MODULE'
   | 'INVENTORY_CENTER'
   | 'VEHICLE_LIST'
   | 'ENTITY_FORM'
@@ -342,11 +343,21 @@ export interface AccountingPreferences {
   showLowestSubaccountOnly: boolean;
 }
 
+export interface FontSizePreferences {
+  heading: number;    // h1/h2/section titles (px)
+  subheading: number; // h3/h4/group labels (px)
+  body: number;       // paragraphs, general text (px)
+  label: number;      // form labels, table headers (px)
+  data: number;       // numbers, amounts, table cells (px)
+  small: number;      // captions, footnotes (px)
+}
+
 export interface UIPreferences {
   showIconBar: boolean;
   showOpenWindowList: boolean;
   openWindowListPosition: 'TOP' | 'SIDEBAR';
   favoriteReports: string[];
+  fontSizes: FontSizePreferences;
 }
 
 export interface FormLayoutField {
@@ -905,6 +916,7 @@ export interface TransactionItem {
   creditCategoryId?: string; // Vendor Credit Category
   lotNumber?: string;    // Lot Number Tracking
   serialNumber?: string; // Serial Number Tracking
+  isShippingLine?: boolean; // Shipping module: injected carrier charge line (excluded from line item table)
   isOneTime?: boolean;   // Recurring Template: Only includes in first generation
   receivedQuantity?: number; // PO Tracking
   isClosed?: boolean;        // PO Tracking
@@ -1011,6 +1023,13 @@ export interface Transaction {
   outputLotExpirationDate?: string;
   outputLotManufacturingDate?: string;
   linkedWorkOrderId?: string;    // ASSEMBLY_BUILD: which WO this build fulfills
+  // ── Shipping Module ───────────────────────────────────────────────────────
+  shipViaId?: string;                 // ShipViaEntry.id (shipVia stores the name for display compat)
+  shippingCost?: number;              // inbound: carrier charge paid; outbound: amount charged to customer
+  shippingBillId?: string;            // ID of auto-generated carrier BILL (inbound PO/receipt/bill)
+  shippingInvoiceLineId?: string;     // ID of injected shipping line item (invoice/SO)
+  outboundCarrierCost?: number;       // outbound: what we pay the carrier to deliver to customer
+  outboundShippingBillId?: string;    // ID of auto-generated carrier BILL for outbound shipment
 }
 
 export interface Term {
@@ -1069,6 +1088,32 @@ export interface ShipViaEntry {
   estimatedDays?: number;
   notes?: string;
   isActive: boolean;
+  isDefault?: boolean;   // Pre-selected carrier on new PO / Receipt / Bill forms
+  // Shipping module: link to the carrier's Vendor record for auto-bill creation
+  vendorId?: string;
+  // Default GL expense account for inbound shipping costs (e.g. Freight Expense)
+  defaultShippingAccountId?: string;
+}
+
+// Derived view-model used by ShippingModule — computed from Transaction records
+export interface ShipmentRecord {
+  id: string;                // source transaction id
+  direction: 'INBOUND' | 'OUTBOUND';
+  sourceType: Transaction['type'];
+  sourceRefNo: string;
+  date: string;
+  entityId: string;
+  entityName: string;
+  shipViaName: string;
+  carrierName?: string;
+  shippingCost: number;
+  trackingNo?: string;
+  status: string;
+  // Links
+  linkedBillId?: string;     // auto-generated carrier bill (inbound)
+  linkedInvoiceId?: string;  // invoice that carries the shipping line (outbound)
+  linkedSOId?: string;       // source SO (outbound)
+  linkedPOId?: string;       // source PO (inbound)
 }
 
 export interface AppStore {

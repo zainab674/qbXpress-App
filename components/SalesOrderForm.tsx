@@ -55,6 +55,8 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
     const [oosSubstituteSuggestion, setOosSubstituteSuggestion] = useState<{ lineId: string; itemName: string; substitutes: { itemId: string; reason?: string }[] } | null>(null);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [fulfillmentWarehouseId, setFulfillmentWarehouseId] = useState(initialData?.fulfillmentWarehouseId || '');
+    // Shipping module: charge to pass to customer on invoicing
+    const [shippingCharge, setShippingCharge] = useState<number>(initialData?.shippingCost || 0);
 
     useEffect(() => {
         fetchWarehouses()
@@ -215,7 +217,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 refNo: soNo,
                 date: date,
                 entityId: selectedCustomerId,
-                total: subtotal,
+                total: subtotal + shippingCharge,
                 status: 'OPEN',
                 shipVia: selectedShipVia || undefined,
                 memo: memo,
@@ -227,6 +229,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 purchaseOrderId: linkedPOId || undefined,
                 fulfillmentWarehouseId: fulfillmentWarehouseId || undefined,
                 linkedDocumentIds: existingLinkedIds.length > 0 ? existingLinkedIds : undefined,
+                shippingCost: shippingCharge > 0 ? shippingCharge : undefined,
                 items: validItems.map(i => ({
                     id: i.id || crypto.randomUUID(),
                     itemId: i.itemId,
@@ -330,9 +333,26 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                             </select>
                         </div>
                     </div>
+                    {/* Shipping charge */}
+                    <div className="flex flex-col gap-1 justify-center">
+                        <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Charge to Customer</label>
+                        <div className="relative">
+                            <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
+                            <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                className="border-2 border-gray-300 rounded pl-5 pr-2 py-1.5 text-sm font-bold w-32 outline-none focus:border-blue-500"
+                                value={shippingCharge || ''}
+                                onChange={e => setShippingCharge(parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                            />
+                        </div>
+                        {selectedShipVia && <span className="text-[9px] text-gray-400">via {selectedShipVia}</span>}
+                    </div>
                     <div className="text-right">
                         <div className="text-xs font-bold text-gray-600 uppercase mb-1">Order total</div>
-                        <div className="text-4xl font-black text-blue-900 drop-shadow-sm">PRs{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                        <div className="text-4xl font-black text-blue-900 drop-shadow-sm">PRs{(subtotal + shippingCharge).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                     </div>
                 </div>
 

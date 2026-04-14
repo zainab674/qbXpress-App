@@ -8,7 +8,44 @@
     --qb-sidebar-bg: #2d3e50;
     --qb-sidebar-hover: #3e5266;
     --qb-font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+    /* Font scale — 1 = 100% (default). Set by JS via uiPrefs. */
+    --fs-scale: 1;
 }
+
+/* ─── Font Scale ──────────────────────────────────────────────────────────────
+   Every Tailwind text-size class is overridden to multiply its original pixel
+   value by --fs-scale. At 1.0 the UI looks identical to before; raising the
+   slider to e.g. 1.5 makes everything 50% larger with no zoom side-effects.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Arbitrary pixel classes used throughout the app */
+.text-\[7px\]  { font-size: calc(7px  * var(--fs-scale)) !important; }
+.text-\[8px\]  { font-size: calc(8px  * var(--fs-scale)) !important; }
+.text-\[9px\]  { font-size: calc(9px  * var(--fs-scale)) !important; }
+.text-\[10px\] { font-size: calc(10px * var(--fs-scale)) !important; }
+.text-\[11px\] { font-size: calc(11px * var(--fs-scale)) !important; }
+.text-\[12px\] { font-size: calc(12px * var(--fs-scale)) !important; }
+.text-\[13px\] { font-size: calc(13px * var(--fs-scale)) !important; }
+.text-\[14px\] { font-size: calc(14px * var(--fs-scale)) !important; }
+.text-\[15px\] { font-size: calc(15px * var(--fs-scale)) !important; }
+.text-\[16px\] { font-size: calc(16px * var(--fs-scale)) !important; }
+.text-\[17px\] { font-size: calc(17px * var(--fs-scale)) !important; }
+.text-\[18px\] { font-size: calc(18px * var(--fs-scale)) !important; }
+.text-\[20px\] { font-size: calc(20px * var(--fs-scale)) !important; }
+.text-\[22px\] { font-size: calc(22px * var(--fs-scale)) !important; }
+.text-\[24px\] { font-size: calc(24px * var(--fs-scale)) !important; }
+
+/* Standard Tailwind text-size utilities */
+.text-xs   { font-size: calc(12px * var(--fs-scale)) !important; }
+.text-sm   { font-size: calc(14px * var(--fs-scale)) !important; }
+.text-base { font-size: calc(16px * var(--fs-scale)) !important; }
+.text-lg   { font-size: calc(18px * var(--fs-scale)) !important; }
+.text-xl   { font-size: calc(20px * var(--fs-scale)) !important; }
+.text-2xl  { font-size: calc(24px * var(--fs-scale)) !important; }
+.text-3xl  { font-size: calc(30px * var(--fs-scale)) !important; }
+.text-4xl  { font-size: calc(36px * var(--fs-scale)) !important; }
+.text-5xl  { font-size: calc(48px * var(--fs-scale)) !important; }
 
 body {
     background-color: var(--qb-blue-mid);

@@ -159,6 +159,7 @@ export const AppMenu: React.FC<MenuProps> = ({ handlers, companies = [], activeC
                 {canWriteTransactions && <DropItem label="Enter Bills" onClick={() => onOpenWindow('BILL', 'Enter Bills')} />}
                 {canWriteTransactions && <DropItem label="Enter Vendor Credits" onClick={() => onOpenWindow('VENDOR_CREDIT', 'Vendor Credit')} />}
                 {canWriteTransactions && <DropItem label="Pay Bills" onClick={() => onOpenWindow('PAY_BILLS', 'Pay Bills')} />}
+                <DropItem label="Shipping Manager" border onClick={() => onOpenWindow('SHIPPING_MODULE', 'Shipping Manager')} />
                 <DropItem label="Inventory Center" border onClick={() => onOpenWindow('INVENTORY_CENTER', 'Inventory Center')} />
                 <div className="pl-4">
                     {canWriteTransactions && <DropItem label="Create Purchase Orders" onClick={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} />}

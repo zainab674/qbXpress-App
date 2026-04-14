@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Vendor, Account, Item, Transaction, TransactionItem, Customer, Term, QBClass, RecurringTemplate } from '../types';
+import { Vendor, Account, Item, Transaction, TransactionItem, Customer, Term, QBClass, RecurringTemplate, ShipViaEntry } from '../types';
 import AddressSelector, { formatAddress } from './AddressSelector';
 import { useData } from '../contexts/DataContext';
 import RecurringInvoiceDialog from './RecurringInvoiceDialog';
+import { createShippingBill, updateShippingBill } from '../services/shippingService';
 
 interface Props {
   vendors: Vendor[];
@@ -13,16 +14,22 @@ interface Props {
   terms: Term[];
   transactions: Transaction[];
   classes: QBClass[];
-  onSave: (bill: Transaction) => void;
+  shipVia?: ShipViaEntry[];
+  onSave: (bill: Transaction) => Promise<void> | void;
   onClose: () => void;
   initialData?: Transaction;
 }
 
-const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms, transactions, classes, onSave, onClose, initialData }) => {
+const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms, transactions, classes, shipVia = [], onSave, onClose, initialData }) => {
   const { handleSaveRecurringTemplate } = useData();
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Expenses');
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // Shipping module state
+  const [selectedShipViaId, setSelectedShipViaId] = useState(
+    initialData?.shipViaId || (shipVia ?? []).find(sv => sv.isDefault)?.id || ''
+  );
+  const [shippingCost, setShippingCost] = useState<number>(initialData?.shippingCost || 0);
   const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
   const [refNo, setRefNo] = useState('');
   const [selectedTermId, setSelectedTermId] = useState('');
@@ -131,7 +138,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
     setItemRows(newRows);
   };
 
-  const handleRecord = () => {
+  const handleRecord = async () => {
     if (!selectedVendorId) return alert("Please select a vendor.");
     const validItems = [
       ...expenseRows.filter(r => r.accountId).map(r => ({
@@ -154,6 +161,8 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
 
     if (validItems.length === 0) return alert("Please add at least one line item.");
 
+    const selectedShipViaEntry = shipVia.find(sv => sv.id === selectedShipViaId);
+
     const bill: Transaction = {
       id: initialData?.id || Math.random().toString(),
       type: 'BILL',
@@ -170,9 +179,25 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
       memo,
       attachments,
       lotNumber: lotNumber || undefined,
-      BillAddr: { Line1: address }
+      BillAddr: { Line1: address },
+      shipVia: selectedShipViaEntry?.name,
+      shipViaId: selectedShipViaId || undefined,
+      shippingCost: shippingCost > 0 ? shippingCost : undefined,
+      shippingBillId: initialData?.shippingBillId,
     };
-    onSave(bill);
+    await onSave(bill);
+
+    // Auto-generate a separate carrier bill for the shipping cost if carrier has a vendor link
+    if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
+      const existingBillId = initialData?.shippingBillId;
+      if (existingBillId) {
+        const existingCarrierBill = transactions.find(t => t.id === existingBillId);
+        await updateShippingBill(bill, existingBillId, shippingCost, existingCarrierBill, onSave as any);
+      } else {
+        await createShippingBill(bill, selectedShipViaEntry, shippingCost, onSave as any);
+      }
+    }
+
     onClose();
   };
 
@@ -219,6 +244,54 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
               </div>
             )}
           </div>
+
+          {/* Shipping section */}
+          {shipVia.length > 0 && (
+            <div className="mb-4 p-4 bg-blue-50/40 border border-blue-100 rounded-lg space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Inbound Shipping Cost</p>
+              <div className="flex gap-4 items-end flex-wrap">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Carrier (Ship Via)</label>
+                  <select
+                    className="border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none focus:border-blue-500 font-bold min-w-[160px]"
+                    value={selectedShipViaId}
+                    onChange={e => setSelectedShipViaId(e.target.value)}
+                  >
+                    <option value="">-- Select --</option>
+                    {shipVia.filter(sv => sv.isActive).map(sv => (
+                      <option key={sv.id} value={sv.id}>{sv.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1 text-gray-400 text-xs">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="border border-gray-300 rounded pl-5 pr-2 py-1 text-xs w-28 outline-none focus:border-blue-500 font-bold"
+                      value={shippingCost || ''}
+                      onChange={e => setShippingCost(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                {selectedShipViaId && (
+                  <p className="text-[9px] pb-1">
+                    {shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
+                      ? <span className="text-green-600 font-bold">✓ Carrier bill auto-generated on save</span>
+                      : <span className="text-orange-500">⚠ No vendor linked</span>
+                    }
+                  </p>
+                )}
+                {initialData?.shippingBillId && (
+                  <p className="text-[9px] text-blue-600 font-bold pb-1">Carrier Bill: #{initialData.shippingBillId.slice(-6)}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-8">
             <div className="text-right">

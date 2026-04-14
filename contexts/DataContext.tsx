@@ -153,7 +153,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>(INITIAL_DATA.recurringTemplates || []);
 
     const [companyConfig, setCompanyConfig] = useState<CompanyConfig>(INITIAL_DATA.companyConfig as any);
-    const [uiPrefs, setUiPrefs] = useState<UIPreferences>({ showIconBar: true, showOpenWindowList: true, openWindowListPosition: 'SIDEBAR', favoriteReports: [] });
+    const [uiPrefs, setUiPrefs] = useState<UIPreferences>({ showIconBar: true, showOpenWindowList: true, openWindowListPosition: 'SIDEBAR', favoriteReports: [], fontSizes: { heading: 16, subheading: 13, body: 12, label: 11, data: 12, small: 10 } });
     const [homePrefs, setHomePrefs] = useState<HomePagePreferences>({
         showOverallHealth: true,
         showCashIn: true,
@@ -320,7 +320,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if ((data as any).billPrefs) setBillPrefs((data as any).billPrefs);
             if ((data as any).checkingPrefs) setCheckingPrefs((data as any).checkingPrefs);
             if ((data as any).formLayouts) setFormLayouts((data as any).formLayouts);
-            if ((data as any).uiPrefs) setUiPrefs((data as any).uiPrefs);
+            if ((data as any).uiPrefs) setUiPrefs(prev => ({ ...prev, ...(data as any).uiPrefs, fontSizes: { ...prev.fontSizes, ...(data as any).uiPrefs?.fontSizes } }));
             if ((data as any).userRole) setUserRole((data as any).userRole);
             if ((data as any).closingDate) setClosingDate((data as any).closingDate);
             if (data.recurringTemplates) setRecurringTemplates(data.recurringTemplates);

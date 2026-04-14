@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account, Warehouse } from '../types';
+import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account, Warehouse, ShipViaEntry } from '../types';
 import AddressSelector, { formatAddress } from './AddressSelector';
 import { fetchWarehouses, fetchNextRefNo } from '../services/api';
+import { createShippingBill, updateShippingBill } from '../services/shippingService';
 
 
 interface Props {
@@ -12,12 +13,13 @@ interface Props {
   classes: QBClass[];
   accounts: Account[];
   transactions: Transaction[];
-  onSave: (po: Transaction) => void;
+  shipVia?: ShipViaEntry[];
+  onSave: (po: Transaction) => Promise<void> | void;
   onClose: () => void;
   initialData?: any;
 }
 
-const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes, accounts, transactions, onSave, onClose, initialData }) => {
+const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes, accounts, transactions, shipVia = [], onSave, onClose, initialData }) => {
   const [activeTab, setActiveTab] = useState<'Expenses' | 'Items'>('Items');
   const [vendorId, setVendorId] = useState(initialData?.entityId || '');
   const [poDate, setPoDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
@@ -27,6 +29,11 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
   const [vendorMessage, setVendorMessage] = useState(initialData?.vendorMessage || '');
   const [shipToEntityId, setShipToEntityId] = useState(initialData?.customerId || '');
   const [attachments, setAttachments] = useState<Attachment[]>(initialData?.attachments || []);
+  // Shipping module state
+  const [selectedShipViaId, setSelectedShipViaId] = useState(
+    initialData?.shipViaId || shipVia.find(sv => sv.isDefault)?.id || ''
+  );
+  const [shippingCost, setShippingCost] = useState<number>(initialData?.shippingCost || 0);
   const [classId, setClassId] = useState(initialData?.classId || '');
   const [customerInvoiceNo, setCustomerInvoiceNo] = useState(initialData?.customerInvoiceNo || '');
   const [shipToWarehouseId, setShipToWarehouseId] = useState(initialData?.shipToWarehouseId || '');
@@ -102,7 +109,7 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
     return expTotal + itemTotal;
   };
 
-  const handleRecord = () => {
+  const handleRecord = async () => {
     if (!vendorId) return alert("Please select a vendor.");
 
     const allItems: TransactionItem[] = [
@@ -122,6 +129,8 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
     ];
 
     if (allItems.length === 0) return alert("Please add at least one line item.");
+
+    const selectedShipViaEntry = shipVia.find(sv => sv.id === selectedShipViaId);
 
     const po: Transaction = {
       id: initialData?.id || Math.random().toString(),
@@ -143,10 +152,27 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
       attachments,
       ShipAddr: selectedShipTo
         ? { Line1: selectedShipTo.name, Line2: selectedShipTo.address }
-        : { Line1: 'Omnificode LTD', Line2: 'Jhang Sadar, Punjab' }
+        : { Line1: 'Omnificode LTD', Line2: 'Jhang Sadar, Punjab' },
+      // Shipping module fields
+      shipVia: selectedShipViaEntry?.name || undefined,
+      shipViaId: selectedShipViaId || undefined,
+      shippingCost: shippingCost > 0 ? shippingCost : undefined,
+      shippingBillId: initialData?.shippingBillId,
     };
 
-    onSave(po);
+    await onSave(po);
+
+    // Auto-generate a carrier bill if shipping cost entered and carrier has a linked vendor
+    if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
+      const existingBillId = initialData?.shippingBillId;
+      if (existingBillId) {
+        const existingBill = transactions.find(t => t.id === existingBillId);
+        await updateShippingBill(po, existingBillId, shippingCost, existingBill, onSave as any);
+      } else {
+        await createShippingBill(po, selectedShipViaEntry, shippingCost, onSave as any);
+      }
+    }
+
     onClose();
   };
 
@@ -511,18 +537,62 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
             </div>
 
             <div className="col-span-4 bg-gray-50 border-2 border-gray-100 p-8 rounded-2xl flex flex-col gap-4">
+              {/* Shipping section */}
+              <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-bold uppercase text-blue-700 tracking-widest">Shipping</p>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Ship Via</label>
+                  <select
+                    className="border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none focus:border-blue-500 font-bold"
+                    value={selectedShipViaId}
+                    onChange={e => setSelectedShipViaId(e.target.value)}
+                  >
+                    <option value="">-- Select Carrier --</option>
+                    {shipVia.filter(sv => sv.isActive).map(sv => (
+                      <option key={sv.id} value={sv.id}>{sv.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1 text-gray-400 text-xs">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="border border-gray-300 rounded pl-5 pr-2 py-1 text-xs w-full outline-none focus:border-blue-500 font-bold"
+                      value={shippingCost || ''}
+                      onChange={e => setShippingCost(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                {selectedShipViaId && shipVia.find(sv => sv.id === selectedShipViaId) && (
+                  <div className="text-[9px] text-gray-500">
+                    {shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
+                      ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated on save</span>
+                      : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created. Link a vendor in Ship Via List.</span>
+                    }
+                  </div>
+                )}
+                {initialData?.shippingBillId && (
+                  <div className="text-[9px] text-blue-600 font-bold">Carrier Bill: #{initialData.shippingBillId.slice(-6)}</div>
+                )}
+              </div>
+
               <div className="flex justify-between items-center text-gray-500">
                 <span className="text-xs font-bold uppercase">Subtotal</span>
                 <span className="font-mono text-sm font-bold">${calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between items-center text-gray-500">
                 <span className="text-xs font-bold uppercase">Shipping</span>
-                <span className="font-mono text-sm font-bold">$0.00</span>
+                <span className="font-mono text-sm font-bold">${shippingCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
                 <span className="text-sm font-black text-blue-900 uppercase tracking-tighter">Grand Total</span>
                 <span className="text-4xl font-black text-[#003366] font-mono leading-none tracking-tighter">
-                  ${calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${(calculateTotal() + shippingCost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>

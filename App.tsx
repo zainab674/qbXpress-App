@@ -140,6 +140,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigateTo]);
 
+  const fsBody = uiPrefs.fontSizes?.body ?? 12;
+  const fsScale = fsBody / 12;
+
+  // Drive the global --fs-scale CSS variable — all text classes in index.css
+  // use calc(originalPx * var(--fs-scale)) so no component needs editing.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--fs-scale', String(fsScale));
+  }, [fsScale]);
+
   const windowHandlers = {
     onOpenWindow: navigateTo,
     onCloseWindow: (id: string) => closeWindow(id),

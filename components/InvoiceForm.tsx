@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { sendEmail, fetchAvailableLots, fetchSerialNumbers } from '../services/api';
 import { useData } from '../contexts/DataContext';
-import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, TimeEntry, Term, PriceLevel, RecurringTemplate } from '../types';
+import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, TimeEntry, Term, PriceLevel, RecurringTemplate, ShipViaEntry } from '../types';
 import AddressSelector, { formatAddress } from './AddressSelector';
 import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 import { generatePDF } from '../services/printService';
+import { createOutboundShippingBill, updateOutboundShippingBill } from '../services/shippingService';
 
 interface Props {
   customers: Customer[];
   items: Item[];
   classes: QBClass[];
   salesReps: SalesRep[];
-  shipVia: { id: string; name: string }[];
+  shipVia: ShipViaEntry[];
   terms: Term[];
   transactions: Transaction[];
   timeEntries: TimeEntry[];
@@ -52,7 +53,9 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const [showColumnSettings, setShowColumnSettings] = useState(false);
 
   const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
-    initialData?.items?.map(i => ({ ...i, id: i.id || crypto.randomUUID() })) ||
+    initialData?.items
+      ?.filter(i => i.id !== initialData.shippingInvoiceLineId)
+      .map(i => ({ ...i, id: i.id || crypto.randomUUID() })) ||
     [{ id: crypto.randomUUID(), description: '', quantity: 0, rate: 0, amount: 0, tax: true, classId: '', lotNumber: '' }]
   );
 
@@ -93,6 +96,10 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
     outerBoxDimensions: { length: 0, width: 0, height: 0, unit: 'in' },
     masterCartonDimensions: { length: 0, width: 0, height: 0, unit: 'in' }
   });
+  // Shipping module: charge passed to the customer
+  const [shippingCharge, setShippingCharge] = useState<number>(initialData?.shippingCost || 0);
+  // Shipping module: what we pay the carrier for outbound delivery
+  const [outboundCarrierCost, setOutboundCarrierCost] = useState<number>(initialData?.outboundCarrierCost || 0);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const subtotal = lineItems.reduce((acc, item) => acc + (item.amount || 0), 0);
@@ -102,7 +109,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
   const taxAmount = lineItems.filter(i => i.tax).reduce((acc, item) => acc + (item.amount || 0) * taxRate, 0);
 
   const discountVal = isDiscountPercentage ? (subtotal * (discountPercentage / 100)) : discountAmount;
-  const total = subtotal + taxAmount + lateFee + tip - discountVal - deposit;
+  const total = subtotal + taxAmount + lateFee + tip + shippingCharge - discountVal - deposit;
   const balanceDue = (customer?.balance || 0) + total;
 
   const getDueDate = () => {
@@ -289,7 +296,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
     }
   };
 
-  const handleSave = (stayOpen = false) => {
+  const handleSave = async (stayOpen = false) => {
     if (!selectedCustomerId) { alert("Please select a customer."); return; }
     const validItems = lineItems.filter(i => (i.amount || 0) !== 0 || i.description);
     if (validItems.length === 0) { alert("Please add at least one line item."); return; }
@@ -314,8 +321,60 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
       return;
     }
 
+    // Inject shipping line item so customer is charged
+    // Strip any previously-injected shipping line before re-injecting (prevents duplicates on re-save)
+    const nonShippingItems = validItems.filter(i => !i.isShippingLine && i.id !== initialData?.shippingInvoiceLineId);
+    const shippingLineId = crypto.randomUUID();
+    const finalItems = shippingCharge > 0 && selectedShipVia
+      ? [
+          ...nonShippingItems.map(i => ({
+            id: i.id || crypto.randomUUID(),
+            itemId: i.itemId,
+            description: i.description || '',
+            quantity: i.quantity || 0,
+            rate: i.rate || 0,
+            amount: i.amount || 0,
+            tax: !!i.tax,
+            customerId: i.customerId,
+            isBillable: i.isBillable,
+            classId: i.classId,
+            lotNumber: i.lotNumber,
+            serialNumber: i.serialNumber,
+            estimatedQty: i.estimatedQty,
+            estimatedAmount: i.estimatedAmount,
+            progressPercent: i.progressPercent,
+          })),
+          {
+            id: shippingLineId,
+            description: `Shipping via ${selectedShipVia}`,
+            quantity: 1,
+            rate: shippingCharge,
+            amount: shippingCharge,
+            tax: false,
+            isShippingLine: true,
+          },
+        ]
+      : nonShippingItems.map(i => ({
+          id: i.id || crypto.randomUUID(),
+          itemId: i.itemId,
+          description: i.description || '',
+          quantity: i.quantity || 0,
+          rate: i.rate || 0,
+          amount: i.amount || 0,
+          tax: !!i.tax,
+          customerId: i.customerId,
+          isBillable: i.isBillable,
+          classId: i.classId,
+          lotNumber: i.lotNumber,
+          serialNumber: i.serialNumber,
+          estimatedQty: i.estimatedQty,
+          estimatedAmount: i.estimatedAmount,
+          progressPercent: i.progressPercent,
+        }));
+
+    const invoiceId = initialData?.id || crypto.randomUUID();
     onSave({
-      id: initialData?.id || crypto.randomUUID(),
+      id: invoiceId,
       type: 'INVOICE',
       refNo: invoiceNo,
       date: date,
@@ -349,29 +408,41 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
       internalNotes,
       exchangeRate,
       shippingDetails,
-      items: validItems.map(i => ({
-        id: i.id || crypto.randomUUID(),
-        itemId: i.itemId,
-        description: i.description || '',
-        quantity: i.quantity || 0,
-        rate: i.rate || 0,
-        amount: i.amount || 0,
-        tax: !!i.tax,
-        customerId: i.customerId,
-        isBillable: i.isBillable,
-        classId: i.classId,
-        lotNumber: i.lotNumber,
-        serialNumber: i.serialNumber,
-        estimatedQty: i.estimatedQty,
-        estimatedAmount: i.estimatedAmount,
-        progressPercent: i.progressPercent,
-      })),
+      shippingCost: shippingCharge > 0 ? shippingCharge : undefined,
+      shippingInvoiceLineId: shippingCharge > 0 ? shippingLineId : undefined,
+      outboundCarrierCost: outboundCarrierCost > 0 ? outboundCarrierCost : undefined,
+      outboundShippingBillId: initialData?.outboundShippingBillId,
+      items: finalItems,
       BillAddr: { Line1: billAddr },
       ShipAddr: { Line1: shipAddr },
       estimateId: selectedEstimateId || undefined,
       progressType: selectedEstimateId ? progressData.type : undefined,
       progressPercent: selectedEstimateId && progressData.type === 'PERCENT' ? progressData.percent : undefined,
     } as any);
+
+    // Auto-generate outbound carrier bill if carrier cost entered and carrier has a linked vendor
+    const shipViaEntry = shipVia.find(sv => sv.name === selectedShipVia || sv.id === (initialData?.shipViaId));
+    if (shipViaEntry?.vendorId && outboundCarrierCost > 0) {
+      const invoiceTx: Transaction = {
+        id: invoiceId,
+        type: 'INVOICE',
+        refNo: invoiceNo,
+        date,
+        entityId: selectedCustomerId,
+        items: finalItems,
+        total,
+        status: 'OPEN',
+        outboundCarrierCost,
+        outboundShippingBillId: initialData?.outboundShippingBillId,
+      } as any;
+      const existingBillId = initialData?.outboundShippingBillId;
+      if (existingBillId) {
+        const existingBill = transactions.find(t => t.id === existingBillId);
+        if (existingBill) await updateOutboundShippingBill(outboundCarrierCost, existingBill, onSave as any);
+      } else {
+        await createOutboundShippingBill(invoiceTx, shipViaEntry, outboundCarrierCost, onSave as any);
+      }
+    }
 
     if (!stayOpen) onClose();
     else {
@@ -903,6 +974,58 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
               </div>
             </div>
 
+            {/* Shipping section — carrier cost (what we pay) + charge to customer */}
+            <div className="border-t pt-2 flex flex-col gap-2">
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-cyan-700">🚚 Shipping</span>
+                {selectedShipVia && <span className="text-[9px] text-gray-400">via {selectedShipVia}</span>}
+              </div>
+              <div className="flex justify-between text-sm text-gray-700 items-center">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-gray-600">Carrier Cost</span>
+                  <span className="text-[9px] text-gray-400">What you pay the carrier</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-2 top-1 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    className="w-32 border-2 border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm font-black focus:border-blue-500 outline-none"
+                    value={outboundCarrierCost || ''}
+                    onChange={e => setOutboundCarrierCost(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-between text-sm text-gray-700 items-center">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold">Shipping Charge</span>
+                  <span className="text-[9px] text-gray-400">Billed to customer</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-2 top-1 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    className="w-32 border-2 border-gray-300 rounded pl-5 pr-2 py-1 text-right text-sm font-black focus:border-blue-500 outline-none"
+                    value={shippingCharge || ''}
+                    onChange={e => setShippingCharge(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              {(outboundCarrierCost > 0 || shippingCharge > 0) && (
+                <div className="flex justify-between text-[10px] text-gray-500 px-1">
+                  <span>Shipping margin</span>
+                  <span className={shippingCharge >= outboundCarrierCost ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>
+                    {shippingCharge >= outboundCarrierCost ? '+' : ''}{(shippingCharge - outboundCarrierCost).toLocaleString(undefined, { minimumFractionDigits: 2, style: 'currency', currency: 'USD' })}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between text-sm text-gray-700 items-center border-t pt-2">
               <span className="font-bold">Deposit</span>
               <div className="relative">
@@ -1268,6 +1391,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
             internalNotes,
             exchangeRate,
             attachments,
+            shippingCost: shippingCharge > 0 ? shippingCharge : undefined,
             items: lineItems.filter(i => (i.amount || 0) !== 0 || i.description).map(i => ({
               id: i.id || crypto.randomUUID(),
               itemId: i.itemId,

@@ -267,6 +267,51 @@ const transactionController = {
             next(err);
         }
     },
+
+    // ── Shipping Module Summary ───────────────────────────────────────────────
+    shippingSummary: async (req, res, next) => {
+        try {
+            const { startDate, endDate } = req.query;
+            const baseFilter = { userId: req.user.id, companyId: req.companyId };
+            if (startDate || endDate) {
+                baseFilter.date = {};
+                if (startDate) baseFilter.date.$gte = startDate;
+                if (endDate) baseFilter.date.$lte = endDate;
+            }
+
+            // Source transactions that have a shipping bill linked
+            const sourceTxsWithShipping = await Transaction.find(
+                { ...baseFilter, shippingBillId: { $exists: true, $ne: null } },
+                { shippingBillId: 1, shipVia: 1, shippingCost: 1, refNo: 1, type: 1, date: 1 }
+            );
+
+            const shippingBillIds = sourceTxsWithShipping.map(t => t.shippingBillId).filter(Boolean);
+
+            const inboundBills = shippingBillIds.length
+                ? await Transaction.find({ ...baseFilter, id: { $in: shippingBillIds } })
+                : [];
+
+            // Outbound: invoices / SOs with a shipping charge to the customer
+            const outboundFilter = { ...baseFilter, type: { $in: ['INVOICE', 'SALES_ORDER'] }, shippingCost: { $exists: true, $gt: 0 } };
+            if (startDate || endDate) outboundFilter.date = baseFilter.date;
+            const outboundTxs = await Transaction.find(outboundFilter);
+
+            const totalPaidToCarriers = inboundBills.reduce((s, b) => s + (b.total || 0), 0);
+            const totalChargedToCustomers = outboundTxs.reduce((s, i) => s + (i.shippingCost || 0), 0);
+
+            res.json({
+                inboundBills,
+                outboundTxs,
+                summary: {
+                    totalPaidToCarriers,
+                    totalChargedToCustomers,
+                    netShippingCost: totalPaidToCarriers - totalChargedToCustomers,
+                },
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
 };
 
 module.exports = transactionController;

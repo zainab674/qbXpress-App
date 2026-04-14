@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { ShipViaEntry } from '../types';
+import { ShipViaEntry, Vendor, Account } from '../types';
 
 interface ShipViaListProps {
     shipVia: ShipViaEntry[];
     onUpdateShipVia: (shipVia: ShipViaEntry[]) => void;
+    vendors?: Vendor[];
+    accounts?: Account[];
 }
 
 const EMPTY: Partial<ShipViaEntry> = {
@@ -17,7 +19,9 @@ const ShipViaDialog: React.FC<{
     onClose: () => void;
     onSave: (entry: Partial<ShipViaEntry>) => void;
     initialData?: ShipViaEntry;
-}> = ({ isOpen, onClose, onSave, initialData }) => {
+    vendors?: Vendor[];
+    accounts?: Account[];
+}> = ({ isOpen, onClose, onSave, initialData, vendors = [], accounts = [] }) => {
     const [form, setForm] = useState<Partial<ShipViaEntry>>(EMPTY);
 
     useEffect(() => {
@@ -133,6 +137,62 @@ const ShipViaDialog: React.FC<{
                         </div>
                     </div>
 
+                    {/* Shipping Module: Default carrier + Vendor + GL Account */}
+                    <div className="border-t border-gray-200 pt-4">
+                        <p className="text-[10px] font-bold uppercase text-[#003366] tracking-wide mb-3">
+                            Shipping Module — Billing Defaults
+                        </p>
+                        <label className="flex items-center gap-2 mb-4 cursor-pointer select-none w-fit">
+                            <input
+                                type="checkbox"
+                                checked={!!form.isDefault}
+                                onChange={e => set('isDefault', e.target.checked || undefined)}
+                                className="w-4 h-4 accent-[#003366]"
+                            />
+                            <span className="text-sm font-bold text-[#003366]">Set as default carrier</span>
+                            <span className="text-[9px] text-gray-400 font-normal">(pre-selected on new POs, Receipts and Bills)</span>
+                        </label>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wide">
+                                    Carrier Vendor
+                                    <span className="ml-1 text-gray-400 font-normal normal-case">(for auto-bill generation)</span>
+                                </label>
+                                <select
+                                    value={form.vendorId || ''}
+                                    onChange={e => set('vendorId', e.target.value || undefined)}
+                                    className="border border-gray-400 px-2 py-1.5 text-sm outline-none focus:border-[#003366] focus:ring-1 focus:ring-[#003366] bg-white"
+                                >
+                                    <option value="">-- Not linked --</option>
+                                    {vendors.map(v => (
+                                        <option key={v.id} value={v.id}>{v.name}</option>
+                                    ))}
+                                </select>
+                                <span className="text-[9px] text-gray-400">
+                                    Link this carrier to a Vendor so the system can auto-create bills when shipping costs are entered on POs/receipts.
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wide">
+                                    Default Expense Account
+                                    <span className="ml-1 text-gray-400 font-normal normal-case">(e.g. Freight Expense)</span>
+                                </label>
+                                <select
+                                    value={form.defaultShippingAccountId || ''}
+                                    onChange={e => set('defaultShippingAccountId', e.target.value || undefined)}
+                                    className="border border-gray-400 px-2 py-1.5 text-sm outline-none focus:border-[#003366] focus:ring-1 focus:ring-[#003366] bg-white"
+                                >
+                                    <option value="">-- None --</option>
+                                    {accounts
+                                        .filter(a => a.type === 'Expense' || a.type === 'Cost of Goods Sold' || a.accountType === 'Expense')
+                                        .map(a => (
+                                            <option key={a.id} value={a.id}>{a.name}</option>
+                                        ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Notes */}
                     <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wide">Notes</label>
@@ -167,7 +227,7 @@ const ShipViaDialog: React.FC<{
     );
 };
 
-const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia }) => {
+const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia, vendors = [], accounts = [] }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [dialog, setDialog] = useState<{ open: boolean; data?: ShipViaEntry }>({ open: false });
 
@@ -188,15 +248,22 @@ const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia }) =
     };
 
     const handleSave = (data: Partial<ShipViaEntry>) => {
+        // Only one carrier can be default — clear isDefault on all others when saving a new default
+        const clearOthers = (list: ShipViaEntry[], exceptId: string) =>
+            data.isDefault ? list.map(s => s.id === exceptId ? s : { ...s, isDefault: false }) : list;
+
         if (dialog.data) {
-            onUpdateShipVia(shipVia.map(s => s.id === dialog.data!.id ? { ...s, ...data } as ShipViaEntry : s));
+            const updated = shipVia.map(s => s.id === dialog.data!.id ? { ...s, ...data } as ShipViaEntry : s);
+            onUpdateShipVia(clearOthers(updated, dialog.data.id));
         } else {
-            onUpdateShipVia([...shipVia, { ...data, id: Math.random().toString(36).slice(2), isActive: true } as ShipViaEntry]);
+            const newId = Math.random().toString(36).slice(2);
+            const withNew = [...shipVia, { ...data, id: newId, isActive: true } as ShipViaEntry];
+            onUpdateShipVia(clearOthers(withNew, newId));
         }
         setDialog({ open: false });
     };
 
-    const sorted = [...shipVia].sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = [...shipVia].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
 
     return (
         <div className="flex flex-col h-full bg-[#f0f0f0]">
@@ -207,9 +274,10 @@ const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia }) =
                             <th className="px-3 border-r border-gray-300 font-bold uppercase">Method Name</th>
                             <th className="px-3 border-r border-gray-300 font-bold uppercase">Carrier</th>
                             <th className="px-3 border-r border-gray-300 font-bold uppercase">Service Type</th>
+                            <th className="px-3 border-r border-gray-300 font-bold uppercase">Carrier Vendor</th>
+                            <th className="px-3 border-r border-gray-300 font-bold uppercase">Expense Account</th>
                             <th className="px-3 border-r border-gray-300 font-bold uppercase">Account #</th>
                             <th className="px-3 border-r border-gray-300 font-bold uppercase">Phone</th>
-                            <th className="px-3 border-r border-gray-300 font-bold uppercase">Email</th>
                             <th className="px-3 border-r border-gray-300 font-bold uppercase text-right">Est. Days</th>
                             <th className="px-3 font-bold uppercase">Tracking URL</th>
                         </tr>
@@ -217,32 +285,48 @@ const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia }) =
                     <tbody>
                         {sorted.length === 0 ? (
                             <tr>
-                                <td colSpan={8} className="px-4 py-10 text-center text-gray-400 italic text-xs">
+                                <td colSpan={9} className="px-4 py-10 text-center text-gray-400 italic text-xs">
                                     No shipping methods defined. Click Ship Via ▼ → New to add one.
                                 </td>
                             </tr>
                         ) : (
-                            sorted.map(s => (
-                                <tr
-                                    key={s.id}
-                                    onClick={() => setSelectedId(s.id)}
-                                    onDoubleClick={() => { setSelectedId(s.id); setDialog({ open: true, data: s }); }}
-                                    className={`h-5 border-b border-gray-100 cursor-default ${selectedId === s.id ? 'bg-[#003366] text-white' : 'hover:bg-blue-50'}`}
-                                >
-                                    <td className="px-3 font-bold">{s.name}</td>
-                                    <td className="px-3">{s.carrier || '--'}</td>
-                                    <td className="px-3">{s.serviceType || '--'}</td>
-                                    <td className="px-3">{s.accountNumber || '--'}</td>
-                                    <td className="px-3">{s.phone || '--'}</td>
-                                    <td className="px-3 max-w-[160px] truncate" title={s.email}>{s.email || '--'}</td>
-                                    <td className="px-3 text-right">{s.estimatedDays != null ? `${s.estimatedDays}d` : '--'}</td>
-                                    <td className="px-3 max-w-[180px] truncate" title={s.trackingUrl}>
-                                        {s.trackingUrl
-                                            ? <span className={selectedId === s.id ? 'text-blue-200 underline' : 'text-blue-600 underline'}>{s.trackingUrl}</span>
-                                            : '--'}
-                                    </td>
-                                </tr>
-                            ))
+                            sorted.map((s, i) => {
+                                const linkedVendor = vendors.find(v => v.id === s.vendorId);
+                                const linkedAccount = accounts.find(a => a.id === s.defaultShippingAccountId);
+                                return (
+                                    <tr
+                                        key={s.id ?? i}
+                                        onClick={() => setSelectedId(s.id)}
+                                        onDoubleClick={() => { setSelectedId(s.id); setDialog({ open: true, data: s }); }}
+                                        className={`h-5 border-b border-gray-100 cursor-default ${selectedId === s.id ? 'bg-[#003366] text-white' : 'hover:bg-blue-50'}`}
+                                    >
+                                        <td className="px-3 font-bold">
+                                            {s.name}
+                                            {s.isDefault && (
+                                                <span className={`ml-2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide ${selectedId === s.id ? 'bg-white text-[#003366]' : 'bg-[#003366] text-white'}`}>
+                                                    Default
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-3">{s.carrier || '--'}</td>
+                                        <td className="px-3">{s.serviceType || '--'}</td>
+                                        <td className="px-3">
+                                            {linkedVendor
+                                                ? <span className={selectedId === s.id ? 'text-green-300 font-bold' : 'text-green-700 font-bold'}>{linkedVendor.name}</span>
+                                                : <span className="text-gray-400 italic text-[10px]">Not linked</span>}
+                                        </td>
+                                        <td className="px-3">{linkedAccount?.name || <span className="text-gray-400 italic text-[10px]">--</span>}</td>
+                                        <td className="px-3">{s.accountNumber || '--'}</td>
+                                        <td className="px-3">{s.phone || '--'}</td>
+                                        <td className="px-3 text-right">{s.estimatedDays != null ? `${s.estimatedDays}d` : '--'}</td>
+                                        <td className="px-3 max-w-[180px] truncate" title={s.trackingUrl}>
+                                            {s.trackingUrl
+                                                ? <span className={selectedId === s.id ? 'text-blue-200 underline' : 'text-blue-600 underline'}>{s.trackingUrl}</span>
+                                                : '--'}
+                                        </td>
+                                    </tr>
+                                );
+                            })
                         )}
                     </tbody>
                 </table>
@@ -267,6 +351,8 @@ const ShipViaList: React.FC<ShipViaListProps> = ({ shipVia, onUpdateShipVia }) =
                 initialData={dialog.data}
                 onClose={() => setDialog({ open: false })}
                 onSave={handleSave}
+                vendors={vendors}
+                accounts={accounts}
             />
         </div>
     );
