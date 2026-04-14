@@ -32,7 +32,7 @@ const AddressDialog: React.FC<Props> = ({ isOpen, onClose, onSave, initialAddres
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[500] p-4 font-sans">
-            <div className="bg-white w-[500px] rounded shadow-2xl border border-gray-400 overflow-hidden">
+            <div className="bg-white w-[95vw] h-[95vh] rounded shadow-2xl border border-gray-400 overflow-hidden flex flex-col">
                 {/* Title Bar */}
                 <div className="bg-[#003366] p-2 text-white font-bold text-xs flex justify-between items-center select-none">
                     <span>{title}</span>

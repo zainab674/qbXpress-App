@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, BankTransaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory, ItemCategory, UOMSet } from '../types';
+import { ViewState, AppWindow, Account, Customer, Vendor, Employee, Item, Transaction, BankTransaction, QBClass, SalesRep, PriceLevel, Budget, MemorizedReport, PayrollLiability, Lead, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, CompanyConfig, HomePagePreferences, UIPreferences, AccountingPreferences, BillsPreferences, CheckingPreferences, CustomFieldDefinition, Term, SalesTaxCode, VendorCreditCategory, CustomerCreditCategory, ItemCategory, UOMSet, ShipViaEntry } from '../types';
 import EntityForm from './EntityForm';
 import ItemForm from './ItemForm';
 import PreferencesDialog from './PreferencesDialog';
@@ -140,7 +140,7 @@ interface WindowRendererProps {
         checkingPrefs: CheckingPreferences;
         userRole: 'Admin' | 'Standard';
         closingDate: string;
-        shipVia: string[];
+        shipVia: ShipViaEntry[];
         vehicles: Vehicle[];
         customFields: CustomFieldDefinition[];
         customerTypes: string[];
@@ -173,7 +173,7 @@ interface WindowRendererProps {
         onUpdatePaymentMethods: (m: string[]) => void;
         onUpdateCustomerMessages: (m: string[]) => void;
         onUpdateReps: (reps: SalesRep[]) => void;
-        onUpdateShipVia: (sv: string[]) => void;
+        onUpdateShipVia: (sv: ShipViaEntry[]) => void;
         onUpdateUOMs: (u: any[]) => void;
         onSaveUOMSet: (s: UOMSet) => Promise<void>;
         onDeleteUOMSet: (id: string) => Promise<void>;

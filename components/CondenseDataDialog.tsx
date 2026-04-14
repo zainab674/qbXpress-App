@@ -33,7 +33,7 @@ const CondenseDataDialog: React.FC<Props> = ({ isOpen, onClose, onCondense }) =>
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[460px] rounded-sm flex flex-col overflow-hidden">
+            <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[95vw] h-[95vh] rounded-sm flex flex-col overflow-hidden">
                 {/* Title bar */}
                 <div className="bg-gradient-to-r from-[#003366] to-[#0055aa] text-white px-3 py-2 flex items-center justify-between">
                     <span className="font-bold text-xs uppercase tracking-wider">Condense Data</span>

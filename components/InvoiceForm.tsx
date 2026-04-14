@@ -11,7 +11,7 @@ interface Props {
   items: Item[];
   classes: QBClass[];
   salesReps: SalesRep[];
-  shipVia: string[];
+  shipVia: { id: string; name: string }[];
   terms: Term[];
   transactions: Transaction[];
   timeEntries: TimeEntry[];
@@ -480,7 +480,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
                 <label className="text-[11px] font-bold text-gray-600 uppercase">Ship Via</label>
                 <select className="border-2 border-gray-300 rounded px-2 py-1 text-sm bg-white outline-none focus:border-blue-500 font-bold" value={selectedShipVia} onChange={e => setSelectedShipVia(e.target.value)}>
                   <option value="">--Select--</option>
-                  {shipVia.map(v => <option key={v} value={v}>{v}</option>)}
+                  {shipVia.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
@@ -925,7 +925,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
 
       {showBillableModal && (
         <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-[#003366] w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white border-4 border-[#003366] w-[95vw] h-[95vh] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
             <div className="bg-[#003366] p-3 flex justify-between items-center text-white">
               <h3 className="font-bold uppercase tracking-widest text-xs">Choose Billable Time and Expenses</h3>
               <button onClick={() => setShowBillableModal(false)} className="hover:text-red-400">✕</button>
@@ -961,7 +961,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
 
       {showEstimateModal && (
         <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-[#003366] w-full max-w-lg shadow-2xl">
+          <div className="bg-white border-4 border-[#003366] w-[95vw] h-[95vh] shadow-2xl flex flex-col overflow-hidden">
             <div className="bg-[#003366] p-3 flex justify-between items-center text-white">
               <h3 className="font-bold uppercase tracking-widest text-xs">Available Estimates</h3>
               <button onClick={() => setShowEstimateModal(false)} className="hover:text-red-400">✕</button>
@@ -1019,7 +1019,7 @@ const InvoiceForm: React.FC<Props> = ({ customers, items: availableItems, classe
 
         return (
           <div className="fixed inset-0 bg-black/50 z-[1100] flex items-center justify-center p-4">
-            <div className="bg-white border-4 border-[#003366] w-full max-w-2xl shadow-2xl flex flex-col" style={{ maxHeight: '90vh' }}>
+            <div className="bg-white border-4 border-[#003366] w-[95vw] h-[95vh] shadow-2xl flex flex-col overflow-hidden">
               {/* Header */}
               <div className="bg-[#003366] p-3 flex justify-between items-center text-white flex-shrink-0">
                 <span className="font-bold uppercase tracking-widest text-xs">Create Progress Invoice — Estimate #{est.refNo}</span>

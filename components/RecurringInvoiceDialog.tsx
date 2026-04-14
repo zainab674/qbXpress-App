@@ -77,7 +77,7 @@ const RecurringInvoiceDialog: React.FC<Props> = ({ entities, entityType, initial
 
     return (
         <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
-            <div className="bg-white border-4 border-[#003366] w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-white border-4 border-[#003366] w-[95vw] h-[95vh] shadow-2xl flex flex-col">
                 <div className="bg-[#003366] p-2 flex justify-between items-center text-white">
                     <h3 className="font-bold uppercase tracking-widest text-xs">Memorize Transaction</h3>
                     <button onClick={onClose} className="hover:text-red-400">✕</button>

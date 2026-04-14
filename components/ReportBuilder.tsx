@@ -333,7 +333,7 @@ const ReportBuilder: React.FC<Props> = ({ reportType, customTitle, customCompany
             {/* Save As Modal */}
             {showSaveAs && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white rounded-lg shadow-xl w-[95vw] h-[95vh] overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="bg-[#f4f5f8] px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                             <h3 className="font-bold text-gray-800 text-sm">Memorize Report</h3>
                             <button onClick={() => setShowSaveAs(false)} className="text-gray-400 hover:text-gray-600 text-lg">&times;</button>

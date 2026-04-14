@@ -79,7 +79,7 @@ const UOMSetForm: React.FC<FormProps> = ({ initial, onSave, onCancel }) => {
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]">
-            <div className="bg-[#f0f0f0] border-4 border-[#003366] w-[680px] max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-[#f0f0f0] border-4 border-[#003366] w-[95vw] h-[95vh] overflow-y-auto shadow-2xl">
                 {/* Header */}
                 <div className="bg-[#003366] px-4 py-2 flex justify-between items-center">
                     <h3 className="text-white font-bold text-xs uppercase tracking-widest">

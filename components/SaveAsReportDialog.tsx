@@ -20,7 +20,7 @@ const SaveAsReportDialog: React.FC<Props> = ({ isOpen, onClose, onSave, defaultN
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[3000] animate-in fade-in duration-200">
-            <div className="bg-white w-[500px] shadow-2xl border border-gray-300 rounded-sm overflow-hidden flex flex-col font-sans animate-in zoom-in-95 duration-200">
+            <div className="bg-white w-[95vw] h-[95vh] shadow-2xl border border-gray-300 rounded-sm overflow-hidden flex flex-col font-sans animate-in zoom-in-95 duration-200">
                 {/* Header */}
                 <div className="bg-[#003366] p-2 text-white font-bold text-[13px] flex justify-between items-center select-none shadow-sm">
                     <span>Save as new report?</span>

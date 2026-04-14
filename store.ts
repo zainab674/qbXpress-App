@@ -41,7 +41,13 @@ export const INITIAL_DATA: AppStore = {
   salesReps: [],
   customerTypes: ['Referral', 'Retail', 'Wholesale', 'Commercial'],
   vendorTypes: ['Consultant', 'Subcontractor', 'Supplier', 'Tax Agency', 'Utilities'],
-  shipVia: ['FedEx', 'UPS', 'USPS', 'Delivery', 'Customer Pickup'],
+  shipVia: [
+    { id: 'sv1', name: 'FedEx Ground', carrier: 'FedEx', serviceType: 'Ground', trackingUrl: 'https://www.fedex.com/fedextrack/', estimatedDays: 5, isActive: true },
+    { id: 'sv2', name: 'UPS Ground', carrier: 'UPS', serviceType: 'Ground', trackingUrl: 'https://www.ups.com/track', estimatedDays: 5, isActive: true },
+    { id: 'sv3', name: 'USPS Priority Mail', carrier: 'USPS', serviceType: 'Priority Mail', trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction', estimatedDays: 3, isActive: true },
+    { id: 'sv4', name: 'Local Delivery', carrier: 'In-House', serviceType: 'Delivery', estimatedDays: 1, isActive: true },
+    { id: 'sv5', name: 'Customer Pickup', carrier: 'N/A', serviceType: 'Pickup', estimatedDays: 0, isActive: true },
+  ],
   mileageEntries: [],
   currencies: [
     { id: 'curr1', name: 'US Dollar', code: 'USD', symbol: '$', isHome: true }

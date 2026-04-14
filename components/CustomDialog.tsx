@@ -15,7 +15,7 @@ const CustomDialog: React.FC<CustomDialogProps> = ({ isOpen, title, message, typ
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[400px] rounded-sm flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[95vw] h-[95vh] rounded-sm flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="bg-gradient-to-r from-[#003366] to-[#0055aa] text-white px-3 py-2 flex items-center justify-between">
                     <span className="font-bold text-xs uppercase tracking-wider">{title}</span>
                     <button onClick={onCancel || onConfirm} className="hover:bg-red-500 rounded px-1.5 transition-colors">✕</button>

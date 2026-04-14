@@ -21,7 +21,7 @@ const SalesTaxCodeDialog: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[400px] rounded-sm flex flex-col overflow-hidden">
+      <div className="bg-[#f0f0f0] border-2 border-[#003366] shadow-2xl w-[95vw] h-[95vh] rounded-sm flex flex-col overflow-hidden">
         <div className="bg-[#003366] text-white px-3 py-1 flex items-center justify-between font-sans">
           <span className="font-bold text-xs uppercase tracking-wider">{initialData ? 'Edit' : 'New'} Sales Tax Code</span>
           <button onClick={onClose} className="hover:bg-red-500 rounded px-1 transition-colors">✕</button>

@@ -75,7 +75,7 @@ const ManageCustomColumnsModal: React.FC<Props> = ({ isOpen, onClose, reportType
     return (
         <>
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9998]">
-                <div className="bg-white rounded-lg shadow-2xl w-[600px] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-lg shadow-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                     {/* Header */}
                     <div className="bg-[#003366] text-white p-4 flex justify-between items-center">
                         <div>

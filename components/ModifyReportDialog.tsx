@@ -119,7 +119,7 @@ const ModifyReportDialog: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000] animate-in slide-in-from-top-1">
-      <div className="bg-white w-[850px] h-[600px] shadow-2xl border border-gray-400 overflow-hidden flex flex-col font-sans">
+      <div className="bg-white w-[95vw] h-[95vh] shadow-2xl border border-gray-400 overflow-hidden flex flex-col font-sans">
         {/* Header */}
         <div className="bg-[#003366] p-2.5 text-white font-bold text-[13px] flex justify-between items-center select-none qb-bevel-raised">
           <div className="flex items-center gap-2">

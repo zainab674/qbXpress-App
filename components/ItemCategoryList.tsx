@@ -281,7 +281,7 @@ const ItemCategoryList: React.FC<Props> = ({ categories = [], onUpdateCategories
       {/* Modal */}
       {modalMode && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000]">
-          <div className="bg-white rounded-2xl w-[420px] shadow-2xl overflow-hidden border border-white/20">
+          <div className="bg-white rounded-2xl w-[95vw] h-[95vh] shadow-2xl overflow-hidden border border-white/20 flex flex-col">
             <div className="bg-slate-50 px-6 py-4 flex justify-between items-center border-b border-slate-100">
               <div>
                 <h3 className="text-slate-800 font-bold text-sm tracking-tight">{modalTitle}</h3>

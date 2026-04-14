@@ -811,7 +811,7 @@ const InventoryCenter: React.FC<InventoryCenterProps> = ({
         {/* ── Assign Lot Modal ── */}
         {assignLotModal && (
             <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-                <div className="bg-white rounded-lg shadow-2xl w-80 p-5 flex flex-col gap-3">
+                <div className="bg-white rounded-lg shadow-2xl w-[95vw] h-[95vh] overflow-y-auto p-5 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-bold text-gray-800">Assign Lot — <span className="text-purple-700">{assignLotModal.itemName}</span></h3>
                         <button onClick={() => setAssignLotModal(null)} className="text-gray-400 hover:text-gray-700 font-bold text-lg leading-none">✕</button>

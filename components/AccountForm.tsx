@@ -303,7 +303,7 @@ const AccountForm: React.FC<Props> = ({ isOpen, onClose, onSave, existingAccount
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[5000] p-4 font-sans">
-      <div className="bg-white w-full max-w-2xl h-[700px] max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-200">
+      <div className="bg-white w-[95vw] h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-200">
         <div className="bg-white px-8 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-2.5 h-2.5 rounded-full ${initialData ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>

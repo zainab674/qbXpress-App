@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import * as api from '../services/api';
-import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory, RecurringTemplate, ItemCategory, UOMSet } from '../types';
+import { Account, Customer, Vendor, Employee, Item, Transaction, TimeEntry, PayrollLiability, MemorizedReport, Lead, Budget, SalesTaxCode, PriceLevel, Term, Shortcut, ShortcutGroup, QBClass, SalesRep, MileageEntry, Currency, ExchangeRate, AuditLogEntry, FixedAsset, Vehicle, UIPreferences, HomePagePreferences, AccountingPreferences, CompanyConfig, CustomFieldDefinition, FormLayout, BillsPreferences, CheckingPreferences, BankTransaction, VendorCreditCategory, CustomerCreditCategory, RecurringTemplate, ItemCategory, UOMSet, ShipViaEntry } from '../types';
 import { INITIAL_DATA } from '../store';
 
 interface DataContextType {
@@ -27,7 +27,7 @@ interface DataContextType {
     shortcutGroups: ShortcutGroup[];
     classes: QBClass[];
     salesReps: SalesRep[];
-    shipVia: string[];
+    shipVia: ShipViaEntry[];
     mileageEntries: MileageEntry[];
     currencies: Currency[];
     exchangeRates: ExchangeRate[];
@@ -73,7 +73,7 @@ interface DataContextType {
     handleSaveSalesTaxCode: (code: SalesTaxCode) => Promise<void>;
     handleSaveMileageEntry: (entry: MileageEntry) => Promise<void>;
     handleUpdateReps: (reps: SalesRep[]) => Promise<void>;
-    handleUpdateShipVia: (shipVia: string[]) => Promise<void>;
+    handleUpdateShipVia: (shipVia: ShipViaEntry[]) => Promise<void>;
     handleUpdateUOMs: (uoms: any[]) => Promise<void>;
     uomSets: UOMSet[];
     handleSaveUOMSet: (set: UOMSet) => Promise<void>;
@@ -136,7 +136,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [uoms, setUOMs] = useState<any[]>(INITIAL_DATA.uoms || []);
     const [uomSets, setUOMSets] = useState<UOMSet[]>([]);
     const [salesReps, setSalesReps] = useState<SalesRep[]>(INITIAL_DATA.salesReps || []);
-    const [shipVia, setShipVia] = useState<string[]>(INITIAL_DATA.shipVia || []);
+    const [shipVia, setShipVia] = useState<ShipViaEntry[]>(INITIAL_DATA.shipVia || []);
     const [mileageEntries, setMileageEntries] = useState<MileageEntry[]>(INITIAL_DATA.mileageEntries || []);
     const [currencies, setCurrencies] = useState<Currency[]>(INITIAL_DATA.currencies || []);
     const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(INITIAL_DATA.exchangeRates || []);
@@ -589,7 +589,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await api.syncEntity('sales-reps', reps);
         await refreshData();
     };
-    const handleUpdateShipVia = async (sv: string[]) => {
+    const handleUpdateShipVia = async (sv: ShipViaEntry[]) => {
         if (!activeCompanyId) throw new Error("No active company");
         await api.saveSettings({ shipVia: sv });
         await refreshData();

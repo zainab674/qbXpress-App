@@ -492,7 +492,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
 
       {showReceiptDialog && (
         <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-[#003366] w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white border-4 border-[#003366] w-[95vw] h-[95vh] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
             <div className="bg-[#003366] p-3 flex justify-between items-center">
               <h3 className="text-white font-bold uppercase tracking-widest text-xs">Open Item Receipts</h3>
               <button onClick={() => setShowReceiptDialog(false)} className="text-white hover:text-red-400">✕</button>

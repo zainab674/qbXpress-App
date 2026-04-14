@@ -11,7 +11,7 @@ interface Props {
     items: Item[];
     classes: QBClass[];
     salesReps: SalesRep[];
-    shipVia: string[];
+    shipVia: { id: string; name: string }[];
     terms: Term[];
     transactions: Transaction[];
     initialData?: Transaction;

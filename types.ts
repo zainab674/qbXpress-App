@@ -1057,6 +1057,20 @@ export interface Vehicle {
   isActive: boolean;
 }
 
+export interface ShipViaEntry {
+  id: string;
+  name: string;
+  carrier: string;
+  serviceType: string;
+  accountNumber?: string;
+  phone?: string;
+  email?: string;
+  trackingUrl?: string;
+  estimatedDays?: number;
+  notes?: string;
+  isActive: boolean;
+}
+
 export interface AppStore {
   accounts: Account[];
   customers: Customer[];
@@ -1085,7 +1099,7 @@ export interface AppStore {
   salesReps: SalesRep[];
   customerTypes: string[];
   vendorTypes: string[];
-  shipVia: string[];
+  shipVia: ShipViaEntry[];
   mileageEntries: MileageEntry[];
   currencies: Currency[];
   exchangeRates: ExchangeRate[];

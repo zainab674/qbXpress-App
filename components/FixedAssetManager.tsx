@@ -164,7 +164,7 @@ const FixedAssetManager: React.FC<Props> = ({ fixedAssets, accounts, vendors, on
                 {/* Popup Modal Form */}
                 {isAdding && (
                     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md flex flex-col overflow-hidden ring-1 ring-slate-200 animate-in zoom-in-95 duration-200">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden ring-1 ring-slate-200 animate-in zoom-in-95 duration-200">
                             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">New Asset Entry</h3>
                                 <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600 p-1 transition-colors">

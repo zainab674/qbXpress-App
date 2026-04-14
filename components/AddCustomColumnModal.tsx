@@ -51,7 +51,7 @@ const AddCustomColumnModal: React.FC<Props> = ({ isOpen, onClose, onSave, availa
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-            <div className="bg-white rounded-lg shadow-2xl w-[500px] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-lg shadow-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-[#003366] text-white p-4 flex justify-between items-center">
                     <h2 className="text-sm font-bold uppercase tracking-widest">{initialData ? 'Edit Formula Column' : 'Add Custom Formula Column'}</h2>
                     <button onClick={onClose} className="hover:text-gray-300 transition-colors">

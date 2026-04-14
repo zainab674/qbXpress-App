@@ -390,7 +390,7 @@ const LotQCWorkflow: React.FC<Props> = ({ items, onClose }) => {
             {/* Quarantine / Release Modal */}
             {modalMode && selectedLot && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-6">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                    <div className="bg-white rounded-2xl shadow-2xl w-[95vw] h-[95vh] overflow-y-auto p-6">
                         <h3 className={`text-lg font-black mb-1 ${modalMode === 'release' ? 'text-green-700' : 'text-orange-700'}`}>
                             {modalMode === 'release' ? '✓ Release Lot from QC' : '⏸ Quarantine / Hold Lot'}
                         </h3>

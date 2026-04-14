@@ -16,7 +16,7 @@ const PrintFormsDialog: React.FC<PrintFormsProps> = ({ isOpen, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1100]">
-            <div className="bg-[#f0f0f0] w-[500px] border border-gray-400 shadow-2xl flex flex-col">
+            <div className="bg-[#f0f0f0] w-[95vw] h-[95vh] border border-gray-400 shadow-2xl flex flex-col">
                 <div className="bg-[#003366] text-white px-2 py-1 flex justify-between items-center text-sm font-bold">
                     <span>Print Forms Queue</span>
                     <button onClick={onClose} className="hover:bg-red-600 px-1">✕</button>

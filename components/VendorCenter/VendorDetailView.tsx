@@ -128,7 +128,7 @@ const VendorDetailView: React.FC<VendorDetailViewProps> = ({
             {/* Merge Dialog */}
             {showMergeDialog && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-[420px]">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-[95vw] h-[95vh] overflow-y-auto">
                         <h3 className="text-lg font-bold text-gray-900 mb-2">Merge Vendor</h3>
                         <p className="text-sm text-gray-500 mb-6">
                             Select which vendor to merge <strong>{vendor.name}</strong> into. All transactions will move to the target vendor and <strong>{vendor.name}</strong> will be deleted.

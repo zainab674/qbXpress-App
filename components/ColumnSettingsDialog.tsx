@@ -41,7 +41,7 @@ const ColumnSettingsDialog: React.FC<Props> = ({ isOpen, onClose, availableColum
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[120] backdrop-blur-sm">
-            <div className="bg-white rounded-lg shadow-2xl w-[500px] flex flex-col animate-in zoom-in-95 duration-200 border border-gray-300">
+            <div className="bg-white rounded-lg shadow-2xl w-[95vw] h-[95vh] flex flex-col animate-in zoom-in-95 duration-200 border border-gray-300">
                 <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
                     <h2 className="text-xl font-bold text-gray-800">Organize columns</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

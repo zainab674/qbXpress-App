@@ -218,7 +218,7 @@ const App: React.FC = () => {
     onUpdatePaymentMethods: setPaymentMethods,
     onUpdateCustomerMessages: setCustomerMessages,
     onUpdateReps: (reps: any[]) => handleUpdateReps(reps),
-    onUpdateShipVia: (sv: string[]) => handleUpdateShipVia(sv),
+    onUpdateShipVia: (sv: any[]) => handleUpdateShipVia(sv),
     onUpdateUOMs: (u: any[]) => handleUpdateUOMs(u),
     onSaveUOMSet: handleSaveUOMSet,
     onDeleteUOMSet: handleDeleteUOMSet,

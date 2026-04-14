@@ -68,7 +68,7 @@ const WarehouseFormModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[520]">
-            <div className="bg-white w-[420px] rounded shadow-2xl border border-gray-400 overflow-hidden">
+            <div className="bg-white w-[95vw] h-[95vh] rounded shadow-2xl border border-gray-400 overflow-hidden flex flex-col">
                 <div className="bg-[#003366] px-4 py-2.5 text-white font-bold text-sm flex justify-between items-center">
                     <span>{form.id ? 'Edit' : 'New'} Warehouse</span>
                     <button onClick={onClose} className="text-white/70 hover:text-white text-lg leading-none">×</button>
@@ -139,7 +139,7 @@ const BinFormModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[520]">
-            <div className="bg-white w-[480px] rounded shadow-2xl border border-gray-400 overflow-hidden">
+            <div className="bg-white w-[95vw] h-[95vh] rounded shadow-2xl border border-gray-400 overflow-hidden flex flex-col">
                 <div className="bg-[#003366] px-4 py-2.5 text-white font-bold text-sm flex justify-between items-center">
                     <span>{form.id ? 'Edit' : 'New'} Bin</span>
                     <button onClick={onClose} className="text-white/70 hover:text-white text-lg leading-none">×</button>
@@ -830,7 +830,7 @@ const TransferTab: React.FC<{
             {/* ── Bin Capacity Modal ─────────────────────────────────── */}
             {splitState && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                    <div className="bg-white border border-gray-300 rounded shadow-lg w-full max-w-lg p-6 space-y-4">
+                    <div className="bg-white border border-gray-300 rounded shadow-lg w-[95vw] h-[95vh] overflow-y-auto p-6 space-y-4">
                         <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Bin Capacity Exceeded</h3>
                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                             <strong>{splitState.binName}</strong> can only accept <strong>{splitState.available}</strong> more unit(s).
