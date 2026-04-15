@@ -79,7 +79,7 @@ const transactionService = {
                 await auditLog.save({ session });
 
                 // 4. Apply New Accounting Logic
-                await transactionService.processAccounting(savedTx, session, 1);
+                await transactionService.processAccounting(savedTx, session, 1, autoPOsCreated);
 
                 // 5. Special Case: If this is a BILL against a RECEIVE_ITEM, 
                 // we should reverse the original receipt's accounting impact to avoid double counting.
@@ -128,7 +128,7 @@ const transactionService = {
         }
     },
 
-    processAccounting: async (t, session, multiplier = 1) => {
+    processAccounting: async (t, session, multiplier = 1, autoPOsCreated = null) => {
         if (!t) return;
 
         const total = (t.total || 0) * multiplier;
@@ -139,7 +139,13 @@ const transactionService = {
         }
 
         if (t.type === 'BILL' || t.type === 'RECEIVE_ITEM') {
-            await transactionService.receiveInventoryItems(t, session, multiplier);
+            // Physical inventory receipt: RECEIVE_ITEM always receives; BILL only when
+            // explicitly flagged (created via ReceiveInventoryForm, not BillForm).
+            // This prevents BillForm's "Convert PO to Bill" from auto-receiving inventory
+            // without warehouse/bin/lot data.
+            if (t.type === 'RECEIVE_ITEM' || t.receivesInventory) {
+                await transactionService.receiveInventoryItems(t, session, multiplier);
+            }
 
             // Update Accounts Payable Account
             const apAccount = await Account.findOne({ name: 'Accounts Payable', userId: t.userId, companyId: t.companyId }).session(session);
@@ -305,13 +311,17 @@ const transactionService = {
                         { session }
                     );
                 }
-                // ── Serial Number: mark sold when invoice has serialNumber per line ──
+                // ── Serial Numbers: mark sold when invoice has serialNumbers per line ──
+                // Accepts both serialNumbers (array) and legacy serialNumber (string)
                 if (multiplier === 1) {
                     const customer = await Customer.findOne({ id: t.entityId, userId: t.userId, companyId: t.companyId }).session(session);
                     for (const li of t.items) {
-                        if (li.serialNumber) {
+                        const sns = (li.serialNumbers && li.serialNumbers.length > 0)
+                            ? li.serialNumbers.filter(Boolean)
+                            : (li.serialNumber ? [li.serialNumber] : []);
+                        for (const sn of sns) {
                             await SerialNumber.findOneAndUpdate(
-                                { serialNumber: li.serialNumber, companyId: t.companyId, userId: t.userId },
+                                { serialNumber: sn, companyId: t.companyId, userId: t.userId },
                                 {
                                     $set: {
                                         status: 'sold',
@@ -328,9 +338,12 @@ const transactionService = {
                 } else {
                     // Reversal: put serials back in-stock
                     for (const li of t.items) {
-                        if (li.serialNumber) {
+                        const sns = (li.serialNumbers && li.serialNumbers.length > 0)
+                            ? li.serialNumbers.filter(Boolean)
+                            : (li.serialNumber ? [li.serialNumber] : []);
+                        for (const sn of sns) {
                             await SerialNumber.findOneAndUpdate(
-                                { serialNumber: li.serialNumber, companyId: t.companyId, userId: t.userId },
+                                { serialNumber: sn, companyId: t.companyId, userId: t.userId },
                                 { $set: { status: 'in-stock', invoiceId: null, customerId: null, customerName: null, dateSold: null } },
                                 { session }
                             );
@@ -1083,7 +1096,7 @@ const transactionService = {
 
             // ── Auto-create POs for shortfalls on new SO saves ────────────────────
             // Only on forward save (multiplier === 1) and only if the SO is new (no existingTx)
-            if (multiplier === 1 && !t._existingTx && t.autoPO !== false) {
+            if (multiplier === 1 && !t._existingTx && t.autoPO !== false && autoPOsCreated) {
                 const newPOs = await transactionService.autoCreatePOsForSO(t, session);
                 autoPOsCreated.push(...newPOs);
             }
@@ -1205,7 +1218,9 @@ const transactionService = {
                 }
             }
         }
-        if (t.purchaseOrderId) {
+        // Only update PO received quantities when inventory is physically received
+        // (RECEIVE_ITEM always; BILL only when receivesInventory=true via ReceiveInventoryForm)
+        if (t.purchaseOrderId && (t.type === 'RECEIVE_ITEM' || t.receivesInventory)) {
             const po = await Transaction.findOne({ id: t.purchaseOrderId, userId: t.userId, companyId: t.companyId }).session(session);
             if (po) {
                 let allItemsClosed = true;

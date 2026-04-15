@@ -1,0 +1,24 @@
+employee_id,last_name,first_name,department,job_title,state,filing_status,ytd_gross,ytd_federal_income_tax,ytd_state_income_tax,ytd_social_security,ytd_medicare,ytd_additional_medicare,ytd_401k,ytd_health_insurance,ytd_dental,ytd_vision,ytd_hsa,ytd_garnishment,ytd_net
+1d71093e-9a98-4b0d-9af9-5fd8a63d74d2,Davis,Dana,Product,Director of Product,GA,head_of_household,6923.08,1058.25,365.09,411.56,96.25,0.0,0.0,250.0,25.0,10.0,0.0,0.0,4706.93
+1d89d01f-ebd6-46c9-aa14-6a25428321b1,Harris,Quinn,Sales,Sales Manager,CO,married,4615.38,339.34,180.38,254.18,59.44,0.0,230.77,250.0,25.0,10.0,0.0,0.0,3266.28
+a78f2f56-cc69-4f52-99f4-af6c627884b9,Integration,Test,Testing,Test Engineer,NY,single,2307.69,200.62,158.08,143.08,33.46,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1772.45
+803914fd-560e-4427-a33a-b77f5f40a93f,Integration,Test,Testing,Test Engineer,NY,single,2307.69,200.62,158.08,143.08,33.46,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1772.45
+83eed89c-90c8-41af-bc9d-67f99267412f,Integration,Test,Testing,Test Engineer,NY,single,2307.69,200.62,158.08,143.08,33.46,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1772.45
+ae2dc94c-29db-41be-8804-02f4c3bda553,Integration,Test,Testing,Test Engineer,NY,single,2307.69,200.62,158.08,143.08,33.46,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1772.45
+806e5ebc-fee3-4e64-89a8-bc57cecbd31b,Integration,Test,Testing,Test Engineer,NY,single,2307.69,200.62,158.08,143.08,33.46,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1772.45
+adb7f5a2-dcd5-471c-82b0-30d55d691c29,Jackson,Harper,Design,UI/UX Designer,CA,married,3461.54,228.57,295.42,196.95,46.06,0.0,0.0,250.0,25.0,10.0,0.0,0.0,2409.54
+4c33e90a-e2ec-47d3-87f8-14f656f630c5,Liu,Quinn,Design,UI/UX Designer,GA,married,3461.54,211.95,167.09,188.36,44.05,0.0,138.46,250.0,25.0,10.0,0.0,0.0,2426.63
+450d3de1-f7dc-4e60-8bb7-485cf7011a6b,Liu,Taylor,Product,Product Manager,GA,married,4807.69,361.26,235.53,265.5,62.09,0.0,240.38,250.0,25.0,10.0,0.0,0.0,3357.93
+329b29de-306c-4934-bb76-d991f745937a,Martin,Blake,Sales,SDR,IL,head_of_household,2115.38,95.68,86.42,108.24,25.31,0.0,84.62,250.0,25.0,10.0,0.0,0.0,1430.12
+f9160d21-0fa3-4b7d-8d3c-b74003e867d2,Martin,Emery,Operations,QA Engineer,NY,head_of_household,2800.0,212.11,186.05,168.39,39.38,0.0,84.0,0.0,0.0,0.0,0.0,0.0,2110.07
+1d021e21-c395-4865-8a8e-ba24828214d2,Miller,Jordan,Operations,Office Manager,TX,single,2500.0,177.49,0.0,131.13,30.67,0.0,100.0,250.0,25.0,10.0,0.0,0.0,1775.71
+4176ee09-0aef-4e61-92fc-5ed9e4beb568,Miller,Marcus,Sales,Sales Manager,CO,married,4615.38,350.42,184.44,259.9,60.78,0.0,138.46,250.0,25.0,10.0,0.0,0.0,3336.38
+592e0bbd-5bb5-4755-a75a-d8dd340defc5,Nair,Harper,Design,Senior Designer,CA,single,4423.08,547.92,364.27,242.85,56.8,0.0,221.15,250.0,25.0,10.0,0.0,0.0,2705.08
+6fada5b0-e098-4b14-9f50-309ba12886cd,Park,Danagy,Updated Dept,Senior Engineer,NY,single,5384.62,756.93,330.88,299.48,70.04,0.0,269.23,250.0,25.0,10.0,0.0,0.0,3373.05
+dcaabda5-5429-4191-bb33-f0374a1cc2dc,Park,Finley,Operations,Office Manager,WA,married,2500.0,113.18,0.0,137.33,32.12,0.0,0.0,250.0,25.0,10.0,0.0,0.0,1932.37
+c0b9d9b3-cd3c-4c69-b08a-d421ba7e83fe,Sarwar,Zainab,tax,manager,NY,single,76923.08,26645.61,5269.23,4769.23,1115.38,0.0,0.0,0.0,0.0,0.0,0.0,0.0,39123.63
+961e4775-3ac5-46ec-b571-cd395c30cc59,Taylor,Quinn,Product,Director of Product,CA,head_of_household,6923.08,1058.25,617.34,411.56,96.25,0.0,0.0,250.0,25.0,10.0,0.0,0.0,4454.68
+12de6684-1a8f-44e9-a03a-62206cd33ec3,Thomas,Jordan,Product,Director of Product,WA,single,6923.08,1190.77,0.0,411.56,96.25,0.0,0.0,250.0,25.0,10.0,0.0,0.0,4939.5
+b76a7974-c64c-4fb5-b52e-bdd624a573b8,Williams,Dana,Engineering,Software Engineer I,CO,head_of_household,3269.23,224.68,124.11,174.89,40.9,0.0,163.46,250.0,25.0,10.0,0.0,0.0,2256.19
+57100e1f-46ba-4512-99c2-14fc6bb2c7fb,Wilson,Emery,Engineering,Engineering Manager,WA,single,6153.85,947.08,0.0,348.61,81.53,0.0,246.15,250.0,25.0,10.0,0.0,0.0,4245.47
+7cda7691-dad7-4403-8e78-cb383d12b4a9,Wilson,James,Product,Product Manager,TX,head_of_household,4807.69,554.26,0.0,280.41,65.58,0.0,0.0,250.0,25.0,10.0,0.0,0.0,3622.44

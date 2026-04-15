@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Transaction, Vendor, Account, VendorCreditCategory } from '../types';
+import { uploadTransactionAttachment } from '../services/api';
 
 interface Props {
   transactions: Transaction[];
@@ -14,13 +15,16 @@ interface Props {
 
 const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendorCreditCategories, onSavePayment, onClose, initialBillId }) => {
   const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
-  const [payFromAccountId, setPayFromAccountId] = useState(accounts.find(a => a.type === 'Bank')?.id || '');
+  const [payFromAccountId, setPayFromAccountId] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [showCredits, setShowCredits] = useState(false);
   const [appliedCredits, setAppliedCredits] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<'Check' | 'Credit Card'>('Check');
+  const [paymentMethod, setPaymentMethod] = useState<'Check' | 'Credit Card' | 'Online'>('Check');
+  const [accountError, setAccountError] = useState(false);
   const [filterVendorId, setFilterVendorId] = useState('ALL');
   const [isSaving, setIsSaving] = useState(false);
+  const [billAttachments, setBillAttachments] = useState<Record<string, File[]>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Multi-select handling for initial bill
   React.useEffect(() => {
@@ -68,6 +72,10 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
 
   const handlePaySelected = async () => {
     if (selectedTxIds.length === 0 || isSaving) return;
+    if (!payFromAccountId) {
+      setAccountError(true);
+      return;
+    }
     setIsSaving(true);
 
     try {
@@ -100,6 +108,15 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
       });
 
       await onSavePayment(payments);
+
+      // Upload per-bill attachments to the source bill transaction
+      for (const [billId, files] of Object.entries(billAttachments)) {
+        if (!selectedTxIds.includes(billId)) continue;
+        for (const file of files) {
+          try { await uploadTransactionAttachment(billId, file); } catch (e) { console.error('Attachment upload failed:', e); }
+        }
+      }
+
       onClose();
     } catch (error: any) {
       console.error("Payment failed:", error);
@@ -218,7 +235,8 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
                 <th className="p-3 border-r w-32 border-gray-300">Due Date</th>
                 <th className="p-3 border-r border-gray-300">Vendor</th>
                 <th className="p-3 border-r text-right border-gray-300">Amt. Due</th>
-                <th className="p-3 text-right">Amt. To Pay</th>
+                <th className="p-3 border-r text-right">Amt. To Pay</th>
+                <th className="p-3 text-center w-20">Attach</th>
               </tr>
             </thead>
             <tbody>
@@ -231,19 +249,48 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
                     <td className={`p-2 border-r font-bold ${new Date(bill.dueDate!) < new Date() ? 'text-red-600' : 'text-gray-600'}`}>{bill.dueDate}</td>
                     <td className="p-2 border-r font-black text-gray-800 uppercase tracking-tighter">{vendor?.name}</td>
                     <td className="p-2 border-r text-right font-mono text-gray-600">${bill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td className="p-2 text-right font-black text-blue-900 font-mono">
+                    <td className="p-2 border-r text-right font-black text-blue-900 font-mono">
                       {isSelected ? (
                         <input className="border-b-2 border-blue-600 w-28 text-right bg-blue-50/50 px-2 outline-none font-bold text-blue-900" defaultValue={bill.total.toFixed(2)} />
                       ) : (
                         <span className="text-gray-300">$0.00</span>
                       )}
                     </td>
+                    <td className="p-2 text-center">
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        ref={el => { fileInputRefs.current[bill.id] = el; }}
+                        onChange={e => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length) return;
+                          setBillAttachments(prev => ({
+                            ...prev,
+                            [bill.id]: [...(prev[bill.id] || []), ...files]
+                          }));
+                          e.target.value = '';
+                        }}
+                      />
+                      <button
+                        title="Attach files to this bill"
+                        onClick={() => fileInputRefs.current[bill.id]?.click()}
+                        className="relative inline-flex items-center justify-center w-7 h-7 rounded hover:bg-blue-100 transition-colors"
+                      >
+                        <span className="text-base">📎</span>
+                        {(billAttachments[bill.id]?.length || 0) > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
+                            {billAttachments[bill.id].length}
+                          </span>
+                        )}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {openBills.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-20 text-center">
+                  <td colSpan={6} className="p-20 text-center">
                     <div className="flex flex-col items-center gap-2 opacity-30">
                       <span className="text-6xl">📝</span>
                       <p className="text-xl font-serif italic text-[#003366]">No open bills matching current filter.</p>
@@ -257,7 +304,7 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
                   </td>
                 </tr>
               )}
-              {[1, 2, 3, 4, 5].map(i => <tr key={i} className="h-10 border-b border-gray-100 opacity-20"><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td></td></tr>)}
+              {[1, 2, 3, 4, 5].map(i => <tr key={i} className="h-10 border-b border-gray-100 opacity-20"><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td className="border-r"></td><td></td></tr>)}
             </tbody>
           </table>
         </div>
@@ -284,17 +331,46 @@ const PayBillsForm: React.FC<Props> = ({ transactions, vendors, accounts, vendor
                 <select
                   className="border-b-2 border-blue-200 p-1 text-xs bg-blue-50/20 font-bold outline-none focus:border-blue-500 font-bold"
                   value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value as any)}
+                  onChange={e => {
+                    setPaymentMethod(e.target.value as any);
+                    setPayFromAccountId('');
+                    setAccountError(false);
+                  }}
                 >
                   <option>Check</option>
                   <option>Credit Card</option>
+                  <option>Online</option>
                 </select>
               </div>
               <div className="flex flex-col gap-1 col-span-2 mt-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Payment Account</label>
-                <select className="border-b-2 border-blue-200 p-1 text-sm bg-blue-50/20 font-bold outline-none focus:border-blue-500 font-bold" value={payFromAccountId} onChange={e => setPayFromAccountId(e.target.value)}>
-                  {accounts.filter(a => a.type === (paymentMethod === 'Check' ? 'Bank' : 'Credit Card')).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                <label className="text-[10px] font-black uppercase tracking-widest italic flex items-center gap-1" style={{ color: accountError ? '#dc2626' : '#9ca3af' }}>
+                  Payment Account <span className="text-red-500">*</span>
+                </label>
+                {(() => {
+                  const filteredAccounts = accounts.filter(a => {
+                    if (paymentMethod === 'Check') return a.type === 'Bank';
+                    if (paymentMethod === 'Credit Card') return a.type === 'Credit Card';
+                    return a.type === 'Bank' || a.type === 'Credit Card';
+                  });
+                  return (
+                    <>
+                      <select
+                        className={`border-b-2 p-1 text-sm bg-blue-50/20 font-bold outline-none font-bold ${accountError ? 'border-red-500 bg-red-50/20' : 'border-blue-200 focus:border-blue-500'}`}
+                        value={payFromAccountId}
+                        onChange={e => { setPayFromAccountId(e.target.value); setAccountError(false); }}
+                      >
+                        <option value="">-- Select Account --</option>
+                        {filteredAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      {filteredAccounts.length === 0 && (
+                        <span className="text-[10px] text-amber-600 font-bold mt-0.5">
+                          No {paymentMethod === 'Credit Card' ? 'Credit Card' : 'Bank'} accounts found. Add one in Chart of Accounts.
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
+                {accountError && <span className="text-[10px] text-red-600 font-bold mt-0.5">Payment account is required.</span>}
               </div>
             </div>
           </div>

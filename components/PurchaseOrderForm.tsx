@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Vendor, Item, Transaction, TransactionItem, Customer, QBClass, Attachment, Account, Warehouse, ShipViaEntry } from '../types';
 import AddressSelector, { formatAddress } from './AddressSelector';
-import { fetchWarehouses, fetchNextRefNo } from '../services/api';
+import { fetchWarehouses, fetchNextRefNo, uploadTransactionAttachment, deleteTransactionAttachment } from '../services/api';
 import { createShippingBill, updateShippingBill } from '../services/shippingService';
 
 
@@ -29,6 +29,7 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
   const [vendorMessage, setVendorMessage] = useState(initialData?.vendorMessage || '');
   const [shipToEntityId, setShipToEntityId] = useState(initialData?.customerId || '');
   const [attachments, setAttachments] = useState<Attachment[]>(initialData?.attachments || []);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   // Shipping module state
   const [selectedShipViaId, setSelectedShipViaId] = useState(
     initialData?.shipViaId || shipVia.find(sv => sv.isDefault)?.id || ''
@@ -162,14 +163,21 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
 
     await onSave(po);
 
-    // Auto-generate a carrier bill if shipping cost entered and carrier has a linked vendor
-    if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
+    // Upload any pending file attachments
+    for (const file of pendingFiles) {
+      try { await uploadTransactionAttachment(po.id, file); } catch (e) { console.error('Attachment upload failed:', e); }
+    }
+    setPendingFiles([]);
+
+    // Auto-generate a carrier bill if shipping cost entered.
+    // Use the carrier's linked vendor; fall back to the PO's own vendor.
+    if (selectedShipViaEntry && (selectedShipViaEntry.vendorId || vendorId) && shippingCost > 0) {
       const existingBillId = initialData?.shippingBillId;
       if (existingBillId) {
         const existingBill = transactions.find(t => t.id === existingBillId);
         await updateShippingBill(po, existingBillId, shippingCost, existingBill, onSave as any);
       } else {
-        await createShippingBill(po, selectedShipViaEntry, shippingCost, onSave as any);
+        await createShippingBill(po, selectedShipViaEntry, shippingCost, onSave as any, vendorId || undefined);
       }
     }
 
@@ -178,14 +186,8 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
-    const newAttachments: Attachment[] = files.map(f => ({
-      id: Math.random().toString(),
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      uploadDate: new Date().toLocaleDateString()
-    }));
-    setAttachments([...attachments, ...newAttachments]);
+    setPendingFiles(prev => [...prev, ...files]);
+    e.target.value = '';
   };
 
   return (
@@ -522,13 +524,20 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
                   <p className="text-xs text-slate-400 font-medium">PDF, DOCX or Images (Max 20MB per file)</p>
                 </div>
 
-                {attachments.length > 0 && (
+                {(attachments.length > 0 || pendingFiles.length > 0) && (
                   <div className="flex flex-wrap gap-2.5 animate-in fade-in duration-500 px-2 pt-2">
                     {attachments.map(att => (
                       <div key={att.id} className="bg-white border border-slate-200 text-slate-700 pl-4 pr-3 py-2 rounded-2xl flex items-center gap-3 text-xs font-black shadow-sm group hover:border-blue-300 transition-all">
                         <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-                        <span className="truncate max-w-[140px] tracking-tight">{att.name}</span>
-                        <button onClick={() => setAttachments(attachments.filter(a => a.id !== att.id))} className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-300 transition-colors ml-1">✕</button>
+                        {att.url ? <a href={att.url} target="_blank" rel="noreferrer" className="truncate max-w-[140px] tracking-tight hover:underline text-blue-600">{att.name}</a> : <span className="truncate max-w-[140px] tracking-tight">{att.name}</span>}
+                        <button onClick={async () => { if (att.url && initialData?.id) { try { await deleteTransactionAttachment(initialData.id, att.url.split('/').pop()!); } catch (e) { console.error(e); } } setAttachments(attachments.filter(a => a.id !== att.id)); }} className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-300 transition-colors ml-1">✕</button>
+                      </div>
+                    ))}
+                    {pendingFiles.map((f, i) => (
+                      <div key={i} className="bg-yellow-50 border border-yellow-200 text-yellow-700 pl-4 pr-3 py-2 rounded-2xl flex items-center gap-3 text-xs font-black shadow-sm">
+                        <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                        <span className="truncate max-w-[140px] tracking-tight">⏳ {f.name}</span>
+                        <button onClick={() => setPendingFiles(pendingFiles.filter((_, j) => j !== i))} className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-300 transition-colors ml-1">✕</button>
                       </div>
                     ))}
                   </div>
@@ -572,7 +581,9 @@ const PurchaseOrderForm: React.FC<Props> = ({ vendors, items, customers, classes
                   <div className="text-[9px] text-gray-500">
                     {shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
                       ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated on save</span>
-                      : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created. Link a vendor in Ship Via List.</span>
+                      : vendorId
+                        ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated using this PO's vendor on save</span>
+                        : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created. Select a vendor on this PO or link one in Ship Via List.</span>
                     }
                   </div>
                 )}

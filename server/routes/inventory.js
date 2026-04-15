@@ -28,7 +28,9 @@ router.post('/lots/:lotId/quarantine',          requirePermission('inventory', '
 router.post('/lots/:lotId/release',             requirePermission('inventory', 'adjust'), inv.releaseLot);
 router.get('/lots/:itemId',                     requirePermission('inventory', 'read'),   inv.getAvailableLots);
 router.post('/lots/:itemId/assign',             requirePermission('inventory', 'adjust'), inv.assignLot);
+router.post('/lots/:itemId/reconcile-untracked', requirePermission('inventory', 'adjust'), inv.reconcileUntrackedLot);
 router.put('/lots/:lotId',                      requirePermission('inventory', 'write'),  inv.updateLot);
+router.delete('/lots/:lotId',                   requirePermission('inventory', 'adjust'), inv.deleteLot);
 
 // ── Serial Numbers ────────────────────────────────────────────────────────────
 // GET  /inventory/serials/history/:serialNumber - Full where-used trail for a serial

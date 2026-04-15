@@ -16,8 +16,9 @@ const InventoryLotSchema = new mongoose.Schema({
     bestBeforeDate: Date,
 
     // Cost tracking (for lot-level cost accuracy)
-    unitCost: { type: Number, default: 0 },   // cost per unit when received
-    totalCost: { type: Number, default: 0 },  // unitCost * quantityReceived
+    unitCost: { type: Number, default: 0 },    // cost per unit when received
+    totalCost: { type: Number, default: 0 },   // unitCost * quantityReceived
+    salesPrice: { type: Number, default: null }, // optional lot-specific sales price (overrides item default)
 
     // Status: available, on-hold (QC), expired, quarantine
     lotStatus: {

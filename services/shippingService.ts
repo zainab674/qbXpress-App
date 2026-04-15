@@ -16,9 +16,11 @@ export async function createShippingBill(
   sourceTx: Transaction,
   shipViaEntry: ShipViaEntry,
   shippingCost: number,
-  onSaveTransaction: (tx: Transaction | Transaction[]) => Promise<void>
+  onSaveTransaction: (tx: Transaction | Transaction[]) => Promise<void>,
+  fallbackVendorId?: string
 ): Promise<void> {
-  if (!shipViaEntry.vendorId || shippingCost <= 0) return;
+  const resolvedVendorId = shipViaEntry.vendorId || fallbackVendorId;
+  if (!resolvedVendorId || shippingCost <= 0) return;
 
   const shippingBillId = crypto.randomUUID();
 
@@ -27,7 +29,7 @@ export async function createShippingBill(
     type: 'BILL',
     refNo: 'SHIP-' + Date.now().toString().slice(-5),
     date: sourceTx.date,
-    entityId: shipViaEntry.vendorId,
+    entityId: resolvedVendorId,
     items: [
       {
         id: crypto.randomUUID(),
@@ -171,7 +173,8 @@ export function buildOutboundShipments(transactions: Transaction[]): Transaction
   return transactions.filter(
     t =>
       (t.type === 'INVOICE' || t.type === 'SALES_ORDER') &&
-      (t.shippingCost ?? 0) > 0
+      (t.shippingCost ?? 0) > 0 &&
+      t.status?.toLowerCase() !== 'converted'
   );
 }
 

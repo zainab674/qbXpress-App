@@ -161,6 +161,166 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
    const [uploadingForId, setUploadingForId] = React.useState<string | null>(null);
    const [viewingAttachmentsId, setViewingAttachmentsId] = React.useState<string | null>(null);
 
+   // Recent Transactions Tab State
+   const [activeTab, setActiveTab] = React.useState<'feed' | 'transactions' | 'accounts'>('feed');
+   const [txFilterAccount, setTxFilterAccount] = React.useState<string>('ALL');
+   const [txSearch, setTxSearch] = React.useState('');
+   const [txDateFrom, setTxDateFrom] = React.useState('');
+   const [txDateTo, setTxDateTo] = React.useState('');
+   const [txAttachUploading, setTxAttachUploading] = React.useState<string | null>(null);
+   const txFileInputRef = React.useRef<HTMLInputElement>(null);
+   const [txAttachTargetId, setTxAttachTargetId] = React.useState<string | null>(null);
+
+   const handleTxAttachClick = (txId: string) => {
+      setTxAttachTargetId(txId);
+      txFileInputRef.current?.click();
+   };
+
+   const handleTxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length || !txAttachTargetId) return;
+      setTxAttachUploading(txAttachTargetId);
+      try {
+         for (const file of files) {
+            await api.uploadTransactionAttachment(txAttachTargetId, file);
+         }
+         await refreshData();
+      } catch (err) {
+         console.error('Attachment upload failed:', err);
+         alert('Failed to upload attachment.');
+      } finally {
+         setTxAttachUploading(null);
+         setTxAttachTargetId(null);
+         e.target.value = '';
+      }
+   };
+
+   const handleTxDeleteAttachment = async (txId: string, fileName: string) => {
+      if (!window.confirm(`Delete attachment "${fileName}"?`)) return;
+      try {
+         await api.deleteTransactionAttachment(txId, fileName);
+         await refreshData();
+      } catch (err) {
+         console.error('Delete failed:', err);
+         alert('Failed to delete attachment.');
+      }
+   };
+
+   // Chart of Accounts Tab State
+   const ACCOUNT_TYPES = ['Bank', 'Accounts Receivable', 'Other Current Asset', 'Fixed Asset', 'Other Asset',
+      'Accounts Payable', 'Credit Card', 'Other Current Liability', 'Long Term Liability', 'Equity',
+      'Income', 'Cost of Goods Sold', 'Expense', 'Other Income', 'Other Expense'];
+   const [acctSearch, setAcctSearch] = React.useState('');
+   const [acctTypeFilter, setAcctTypeFilter] = React.useState('All');
+   const [showAcctForm, setShowAcctForm] = React.useState(false);
+   const [editingAcct, setEditingAcct] = React.useState<any>(null);
+   const [acctForm, setAcctForm] = React.useState({
+      name: '', number: '', type: 'Expense', description: '',
+      openingBalance: '', openingBalanceDate: '', isActive: true
+   });
+   const [acctSaving, setAcctSaving] = React.useState(false);
+
+   const filteredAccounts = React.useMemo(() => {
+      return accounts
+         .filter(a => acctTypeFilter === 'All' || a.type === acctTypeFilter)
+         .filter(a => {
+            if (!acctSearch) return true;
+            const t = acctSearch.toLowerCase();
+            return a.name.toLowerCase().includes(t) || a.number?.toLowerCase().includes(t) || a.description?.toLowerCase().includes(t);
+         })
+         .sort((a, b) => {
+            const typeOrder = ACCOUNT_TYPES.indexOf(a.type) - ACCOUNT_TYPES.indexOf(b.type);
+            if (typeOrder !== 0) return typeOrder;
+            return a.name.localeCompare(b.name);
+         });
+   }, [accounts, acctSearch, acctTypeFilter]);
+
+   const openNewAcctForm = () => {
+      setEditingAcct(null);
+      setAcctForm({ name: '', number: '', type: 'Expense', description: '', openingBalance: '', openingBalanceDate: '', isActive: true });
+      setShowAcctForm(true);
+   };
+
+   const openEditAcctForm = (acct: any) => {
+      setEditingAcct(acct);
+      setAcctForm({
+         name: acct.name || '',
+         number: acct.number || '',
+         type: acct.type || 'Expense',
+         description: acct.description || '',
+         openingBalance: acct.openingBalance != null ? String(acct.openingBalance) : '',
+         openingBalanceDate: acct.openingBalanceDate || '',
+         isActive: acct.isActive !== false
+      });
+      setShowAcctForm(true);
+   };
+
+   const handleSaveAcct = async () => {
+      if (!acctForm.name.trim()) { alert('Account name is required.'); return; }
+      setAcctSaving(true);
+      try {
+         await api.saveAccount({
+            ...(editingAcct ? { id: editingAcct.id } : {}),
+            name: acctForm.name.trim(),
+            number: acctForm.number.trim(),
+            type: acctForm.type,
+            description: acctForm.description.trim(),
+            openingBalance: acctForm.openingBalance !== '' ? parseFloat(acctForm.openingBalance) : undefined,
+            openingBalanceDate: acctForm.openingBalanceDate || undefined,
+            isActive: acctForm.isActive,
+            balance: editingAcct ? editingAcct.balance : 0,
+         });
+         await refreshData();
+         setShowAcctForm(false);
+      } catch (err: any) {
+         alert(`Failed to save account: ${err.message}`);
+      } finally {
+         setAcctSaving(false);
+      }
+   };
+
+   const handleDeleteAcct = async (acct: any) => {
+      if (!window.confirm(`Delete account "${acct.name}"? This cannot be undone.`)) return;
+      try {
+         await api.deleteAccount(acct.id);
+         await refreshData();
+      } catch (err: any) {
+         alert(`Failed to delete account: ${err.message}`);
+      }
+   };
+
+   // Compute filtered ledger transactions for the Account Transactions tab
+   const filteredLedgerTx = React.useMemo(() => {
+      return transactions
+         .filter(tx => {
+            if (txFilterAccount === 'ALL') return true;
+            return (
+               tx.bankAccountId === txFilterAccount ||
+               tx.depositToId === txFilterAccount ||
+               tx.transferFromId === txFilterAccount ||
+               tx.transferToId === txFilterAccount ||
+               tx.items?.some((item: any) => item.accountId === txFilterAccount)
+            );
+         })
+         .filter(tx => {
+            if (!txSearch) return true;
+            const term = txSearch.toLowerCase();
+            const entity = [...customers, ...vendors].find(e => e.id === tx.entityId);
+            return (
+               tx.refNo?.toLowerCase().includes(term) ||
+               tx.type?.toLowerCase().includes(term) ||
+               tx.memo?.toLowerCase().includes(term) ||
+               entity?.name?.toLowerCase().includes(term)
+            );
+         })
+         .filter(tx => {
+            if (txDateFrom && tx.date < txDateFrom) return false;
+            if (txDateTo && tx.date > txDateTo) return false;
+            return true;
+         })
+         .sort((a, b) => b.date.localeCompare(a.date));
+   }, [transactions, txFilterAccount, txSearch, txDateFrom, txDateTo, customers, vendors]);
+
    const handleAttachmentClick = (id: string, hasAttachments: boolean) => {
       if (hasAttachments) {
          setViewingAttachmentsId(viewingAttachmentsId === id ? null : id);
@@ -270,6 +430,331 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
 
             {/* Right Panel: Review Area */}
             <div className="flex-1 bg-[#f4f7f9] border border-slate-300 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+               {/* Tabs */}
+               <div className="bg-white border-b flex">
+                  <button
+                     onClick={() => setActiveTab('feed')}
+                     className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'feed' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                     Bank Feed
+                  </button>
+                  <button
+                     onClick={() => setActiveTab('transactions')}
+                     className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'transactions' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                     Recent Transactions
+                  </button>
+                  <button
+                     onClick={() => setActiveTab('accounts')}
+                     className={`px-6 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'accounts' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  >
+                     Chart of Accounts
+                  </button>
+               </div>
+
+               {activeTab === 'accounts' ? (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                     {/* Accounts Toolbar */}
+                     <div className="p-4 bg-white border-b flex flex-wrap gap-3 items-center">
+                        <button
+                           onClick={openNewAcctForm}
+                           className="px-4 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1"
+                        >
+                           + New Account
+                        </button>
+                        <select
+                           value={acctTypeFilter}
+                           onChange={e => setAcctTypeFilter(e.target.value)}
+                           className="px-3 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none focus:border-blue-400"
+                        >
+                           <option value="All">All Types</option>
+                           {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <div className="relative">
+                           <input
+                              type="text" placeholder="Search accounts…" value={acctSearch}
+                              onChange={e => setAcctSearch(e.target.value)}
+                              className="pl-8 pr-3 py-1.5 border border-slate-300 rounded text-xs w-56 outline-none focus:border-blue-400"
+                           />
+                           <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+                        </div>
+                        <span className="ml-auto text-xs text-slate-400 font-medium">{filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''}</span>
+                     </div>
+
+                     {/* Accounts Table */}
+                     <div className="flex-1 overflow-auto bg-white">
+                        <table className="w-full text-xs text-left border-collapse min-w-[900px]">
+                           <thead className="sticky top-0 bg-[#f4f7f9] border-b-2 border-slate-200 text-slate-500 font-black uppercase text-[9px] z-10">
+                              <tr>
+                                 <th className="p-3 border-r w-20">Number</th>
+                                 <th className="p-3 border-r">Name</th>
+                                 <th className="p-3 border-r w-44">Type</th>
+                                 <th className="p-3 border-r">Description</th>
+                                 <th className="p-3 border-r w-32 text-right">Balance</th>
+                                 <th className="p-3 border-r w-16 text-center">Active</th>
+                                 <th className="p-3 w-24 text-center">Actions</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                              {filteredAccounts.length === 0 ? (
+                                 <tr>
+                                    <td colSpan={7} className="p-10 text-center text-slate-400 italic text-sm">
+                                       No accounts found.
+                                    </td>
+                                 </tr>
+                              ) : filteredAccounts.map((acct, i) => (
+                                 <tr key={acct.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-blue-50/30 transition-colors group`}>
+                                    <td className="p-3 border-r font-mono text-slate-500">{acct.number || '—'}</td>
+                                    <td className="p-3 border-r font-bold text-slate-800">{acct.name}</td>
+                                    <td className="p-3 border-r">
+                                       <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold text-[10px]">{acct.type}</span>
+                                    </td>
+                                    <td className="p-3 border-r text-slate-500 italic truncate max-w-[200px]" title={acct.description}>{acct.description || ''}</td>
+                                    <td className="p-3 border-r text-right font-medium text-slate-700">
+                                       {acct.balance != null ? `$${Number(acct.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}
+                                    </td>
+                                    <td className="p-3 border-r text-center">
+                                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${acct.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                          {acct.isActive !== false ? 'YES' : 'NO'}
+                                       </span>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                       <div className="flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button
+                                             onClick={() => openEditAcctForm(acct)}
+                                             className="px-2 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors"
+                                          >
+                                             Edit
+                                          </button>
+                                          <button
+                                             onClick={() => handleDeleteAcct(acct)}
+                                             className="px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded text-[10px] font-bold hover:bg-red-100 transition-colors"
+                                          >
+                                             Del
+                                          </button>
+                                       </div>
+                                    </td>
+                                 </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
+
+                     {/* Account Form Modal */}
+                     {showAcctForm && (
+                        <div className="fixed inset-0 bg-black/40 z-[2000] flex items-center justify-center">
+                           <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[90vh] flex flex-col overflow-hidden">
+                              <div className="bg-[#003366] text-white px-6 py-4 flex justify-between items-center">
+                                 <h2 className="font-bold text-sm">{editingAcct ? 'Edit Account' : 'New Account'}</h2>
+                                 <button onClick={() => setShowAcctForm(false)} className="text-white/70 hover:text-white text-lg leading-none">&times;</button>
+                              </div>
+                              <div className="p-6 flex flex-col gap-4">
+                                 <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex flex-col gap-1">
+                                       <label className="text-[9px] font-black text-slate-500 uppercase">Account Name *</label>
+                                       <input
+                                          type="text" value={acctForm.name} onChange={e => setAcctForm(f => ({ ...f, name: e.target.value }))}
+                                          className="px-3 py-2 border border-slate-300 rounded text-xs outline-none focus:border-blue-400"
+                                          placeholder="e.g. Office Supplies"
+                                       />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                       <label className="text-[9px] font-black text-slate-500 uppercase">Account Number</label>
+                                       <input
+                                          type="text" value={acctForm.number} onChange={e => setAcctForm(f => ({ ...f, number: e.target.value }))}
+                                          className="px-3 py-2 border border-slate-300 rounded text-xs outline-none focus:border-blue-400"
+                                          placeholder="e.g. 6100"
+                                       />
+                                    </div>
+                                 </div>
+                                 <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-black text-slate-500 uppercase">Account Type *</label>
+                                    <select
+                                       value={acctForm.type} onChange={e => setAcctForm(f => ({ ...f, type: e.target.value }))}
+                                       className="px-3 py-2 border border-slate-300 rounded text-xs bg-white outline-none focus:border-blue-400"
+                                    >
+                                       {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                 </div>
+                                 <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-black text-slate-500 uppercase">Description</label>
+                                    <input
+                                       type="text" value={acctForm.description} onChange={e => setAcctForm(f => ({ ...f, description: e.target.value }))}
+                                       className="px-3 py-2 border border-slate-300 rounded text-xs outline-none focus:border-blue-400"
+                                       placeholder="Optional description"
+                                    />
+                                 </div>
+                                 <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex flex-col gap-1">
+                                       <label className="text-[9px] font-black text-slate-500 uppercase">Opening Balance</label>
+                                       <input
+                                          type="number" step="0.01" value={acctForm.openingBalance}
+                                          onChange={e => setAcctForm(f => ({ ...f, openingBalance: e.target.value }))}
+                                          className="px-3 py-2 border border-slate-300 rounded text-xs outline-none focus:border-blue-400"
+                                          placeholder="0.00"
+                                       />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                       <label className="text-[9px] font-black text-slate-500 uppercase">As of Date</label>
+                                       <input
+                                          type="date" value={acctForm.openingBalanceDate}
+                                          onChange={e => setAcctForm(f => ({ ...f, openingBalanceDate: e.target.value }))}
+                                          className="px-3 py-2 border border-slate-300 rounded text-xs outline-none focus:border-blue-400"
+                                       />
+                                    </div>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                    <input
+                                       type="checkbox" id="acctActive" checked={acctForm.isActive}
+                                       onChange={e => setAcctForm(f => ({ ...f, isActive: e.target.checked }))}
+                                       className="w-4 h-4"
+                                    />
+                                    <label htmlFor="acctActive" className="text-xs text-slate-700 font-medium">Account is Active</label>
+                                 </div>
+                              </div>
+                              <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
+                                 <button onClick={() => setShowAcctForm(false)} className="px-4 py-2 text-xs border border-slate-300 rounded hover:bg-slate-100 transition-colors">Cancel</button>
+                                 <button
+                                    onClick={handleSaveAcct} disabled={acctSaving}
+                                    className="px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                 >
+                                    {acctSaving ? 'Saving…' : (editingAcct ? 'Save Changes' : 'Create Account')}
+                                 </button>
+                              </div>
+                           </div>
+                        </div>
+                     )}
+                  </div>
+               ) : activeTab === 'transactions' ? (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                     {/* Transactions Filter Bar */}
+                     <div className="p-4 bg-white border-b flex flex-wrap gap-3 items-end">
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[9px] font-black text-slate-400 uppercase">Account</label>
+                           <select
+                              value={txFilterAccount}
+                              onChange={e => setTxFilterAccount(e.target.value)}
+                              className="px-3 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none focus:border-blue-400 min-w-[200px]"
+                           >
+                              <option value="ALL">All Accounts ({transactions.length})</option>
+                              {accounts.map(acc => (
+                                 <option key={acc.id} value={acc.id}>{acc.name}</option>
+                              ))}
+                           </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[9px] font-black text-slate-400 uppercase">From</label>
+                           <input type="date" value={txDateFrom} onChange={e => setTxDateFrom(e.target.value)}
+                              className="px-3 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none focus:border-blue-400" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                           <label className="text-[9px] font-black text-slate-400 uppercase">To</label>
+                           <input type="date" value={txDateTo} onChange={e => setTxDateTo(e.target.value)}
+                              className="px-3 py-1.5 border border-slate-300 rounded text-xs bg-white outline-none focus:border-blue-400" />
+                        </div>
+                        <div className="relative">
+                           <input type="text" placeholder="Search payee, ref, memo…" value={txSearch} onChange={e => setTxSearch(e.target.value)}
+                              className="pl-8 pr-3 py-1.5 border border-slate-300 rounded text-xs w-56 outline-none focus:border-blue-400" />
+                           <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+                        </div>
+                        {(txFilterAccount !== 'ALL' || txSearch || txDateFrom || txDateTo) && (
+                           <button onClick={() => { setTxFilterAccount('ALL'); setTxSearch(''); setTxDateFrom(''); setTxDateTo(''); }}
+                              className="px-3 py-1.5 text-xs text-slate-500 border border-slate-300 rounded hover:bg-slate-50">
+                              Clear
+                           </button>
+                        )}
+                        <span className="ml-auto text-xs text-slate-400 font-medium self-end">{filteredLedgerTx.length} transaction{filteredLedgerTx.length !== 1 ? 's' : ''}</span>
+                     </div>
+
+                     {/* Hidden file input for row-level attachment upload */}
+                     <input ref={txFileInputRef} type="file" multiple className="hidden" onChange={handleTxFileChange} />
+
+                     {/* Transactions Table */}
+                     <div className="flex-1 overflow-auto bg-white">
+                        <table className="w-full text-xs text-left border-collapse min-w-[1000px]">
+                           <thead className="sticky top-0 bg-[#f4f7f9] border-b-2 border-slate-200 text-slate-500 font-black uppercase text-[9px] z-10">
+                              <tr>
+                                 <th className="p-3 border-r w-24">Date</th>
+                                 <th className="p-3 border-r w-28">Type</th>
+                                 <th className="p-3 border-r w-24">Ref #</th>
+                                 <th className="p-3 border-r">Payee / Entity</th>
+                                 <th className="p-3 border-r">Account</th>
+                                 <th className="p-3 border-r w-28 text-right">Debit</th>
+                                 <th className="p-3 border-r w-28 text-right">Credit</th>
+                                 <th className="p-3 border-r w-40">Memo</th>
+                                 <th className="p-3 w-36">Attachments</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                              {filteredLedgerTx.length === 0 ? (
+                                 <tr>
+                                    <td colSpan={9} className="p-10 text-center text-slate-400 italic text-sm">
+                                       No transactions found for the selected filters.
+                                    </td>
+                                 </tr>
+                              ) : filteredLedgerTx.map((tx, i) => {
+                                 const entity = [...customers, ...vendors].find(e => e.id === tx.entityId);
+                                 const topLevelAccountId = tx.bankAccountId || tx.depositToId || tx.transferFromId || tx.transferToId;
+                                 const lineItemAccountId = !topLevelAccountId && tx.items?.length > 0
+                                    ? tx.items.find((item: any) => item.accountId)?.accountId
+                                    : undefined;
+                                 const acct = accounts.find(a =>
+                                    a.id === topLevelAccountId ||
+                                    a.id === lineItemAccountId
+                                 );
+                                 const isDebit = ['CHECK', 'BILL_PAYMENT', 'CC_CHARGE', 'PAYCHECK', 'TAX_PAYMENT'].includes(tx.type);
+                                 const debitAmt = isDebit ? tx.total : 0;
+                                 const creditAmt = !isDebit ? tx.total : 0;
+                                 const txAttachments: any[] = (tx as any).attachments || [];
+                                 const isUploading = txAttachUploading === tx.id;
+                                 return (
+                                    <tr key={tx.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-blue-50/30 transition-colors`}>
+                                       <td className="p-3 border-r text-slate-500 whitespace-nowrap">{tx.date}</td>
+                                       <td className="p-3 border-r">
+                                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[10px]">{tx.type.replace('_', ' ')}</span>
+                                       </td>
+                                       <td className="p-3 border-r font-mono text-slate-600">{tx.refNo || '—'}</td>
+                                       <td className="p-3 border-r font-bold text-slate-800">{entity?.name || <span className="italic text-slate-400">—</span>}</td>
+                                       <td className="p-3 border-r text-slate-600">
+                                          {acct ? acct.name : <span className="italic text-slate-400">—</span>}
+                                       </td>
+                                       <td className="p-3 border-r text-right text-red-600 font-medium">{debitAmt > 0 ? `$${debitAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''}</td>
+                                       <td className="p-3 border-r text-right text-green-700 font-medium">{creditAmt > 0 ? `$${creditAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''}</td>
+                                       <td className="p-3 border-r text-slate-400 italic truncate max-w-[160px]" title={tx.memo}>{tx.memo || ''}</td>
+                                       <td className="p-3">
+                                          <div className="flex flex-col gap-1">
+                                             {txAttachments.map((att: any, ai: number) => (
+                                                <div key={ai} className="flex items-center gap-1 group">
+                                                   {att.url
+                                                      ? <a href={att.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate max-w-[100px]" title={att.name}>📎 {att.name}</a>
+                                                      : <span className="text-[10px] text-slate-500 truncate max-w-[100px]">📎 {att.name}</span>
+                                                   }
+                                                   <button
+                                                      onClick={() => handleTxDeleteAttachment(tx.id, att.url?.split('/').pop() || att.name)}
+                                                      className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] leading-none"
+                                                      title="Delete"
+                                                   >✕</button>
+                                                </div>
+                                             ))}
+                                             <button
+                                                onClick={() => handleTxAttachClick(tx.id)}
+                                                disabled={isUploading}
+                                                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors mt-0.5 disabled:opacity-50"
+                                                title="Attach file"
+                                             >
+                                                {isUploading ? <span className="animate-pulse">uploading…</span> : <><span>📎</span><span>Attach</span></>}
+                                             </button>
+                                          </div>
+                                       </td>
+                                    </tr>
+                                 );
+                              })}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               ) : (
+               <React.Fragment>
                {/* Top Filter Bar */}
                <div className="p-4 bg-white border-b flex flex-col gap-4">
                   <div className="flex justify-between items-center">
@@ -475,6 +960,8 @@ const BankFeedCenter: React.FC<Props> = ({ onOpenWindow, onClose }) => {
                      </tbody>
                   </table>
                </div>
+            </React.Fragment>
+            )}
             </div>
          </div>
 

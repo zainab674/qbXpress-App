@@ -32,7 +32,9 @@ const ItemSchema = new mongoose.Schema({
     reorderPoint: Number,
     taxCode: String,
     customFieldValues: Object,
-});
+    trackLots: Boolean,
+    trackSerialNumbers: Boolean,
+}, { strict: false });
 
 const CustomerSchema = new mongoose.Schema({
     id: String,
@@ -127,6 +129,8 @@ const TransactionSchema = new mongoose.Schema({
     paymentMethod: String,
     appliedCreditIds: Array,
     purchaseOrderId: String,
+    itemReceiptId: String,
+    receivesInventory: Boolean,
     BillAddr: Object,
     ShipAddr: Object,
 });

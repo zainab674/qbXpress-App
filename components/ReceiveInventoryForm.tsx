@@ -11,6 +11,7 @@ interface Props {
   shipVia?: ShipViaEntry[];
   onSave: (receipt: Transaction) => Promise<void> | void;
   onClose: () => void;
+  onOpenWindow?: (type: string, title: string, params?: any) => void;
   initialVendorId?: string;
   initialPoId?: string;
 }
@@ -30,7 +31,7 @@ interface DirectLine {
   serials: string[];
 }
 
-const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, shipVia = [], onSave, onClose, initialVendorId = '', initialPoId = '' }) => {
+const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, shipVia = [], onSave, onClose, onOpenWindow, initialVendorId = '', initialPoId = '' }) => {
   const [vendorId, setVendorId] = useState(initialVendorId);
   const [selectedPoId, setSelectedPoId] = useState(initialPoId);
   const [receiveWithBill, setReceiveWithBill] = useState(true);
@@ -56,6 +57,8 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
   // ── Shipping module state ──────────────────────────────────────────────────
   const [selectedShipViaId, setSelectedShipViaId] = useState(shipVia.find(sv => sv.isDefault)?.id || '');
   const [shippingCost, setShippingCost] = useState(0);
+  // true when shipping values were carried in from the PO/Bill (no new bill needed)
+  const [shippingFromSource, setShippingFromSource] = useState(false);
   // ── Warehouse + Bin selection ──────────────────────────────────────────────
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [allBins, setAllBins] = useState<Bin[]>([]);
@@ -84,6 +87,10 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
   // Helper: bins for any warehouse (for per-line and direct-line selects)
   const getBinsForWarehouse = (whId: string) => allBins.filter((b: Bin) => b.warehouseId === whId && b.isActive);
 
+  // Track the mode: PO-based, Bill-based, or Direct
+  const [billMode, setBillMode] = useState<'PO' | 'BILL'>('PO');
+  const [selectedBillId, setSelectedBillId] = useState('');
+
   // Show OPEN and PARTIALLY_RECEIVED POs for partial receiving
   const vendorPos = transactions.filter(
     t => t.type === 'PURCHASE_ORDER' &&
@@ -91,6 +98,22 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
       (t.status === 'OPEN' || t.status === 'PARTIALLY_RECEIVED')
   );
   const selectedPo = vendorPos.find(p => p.id === selectedPoId);
+
+  // Open bills for this vendor that have NOT yet been matched to a receipt
+  const vendorBills = transactions.filter(
+    t => t.type === 'BILL' &&
+      t.entityId === vendorId &&
+      !t.itemReceiptId &&
+      !t.receivesInventory &&
+      (t.status === 'OPEN' || t.status === 'PARTIALLY_PAID')
+  );
+  const selectedBill = vendorBills.find(b => b.id === selectedBillId);
+
+  // If the selected PO/Bill already has a shipping bill, lock that section
+  const sourceDoc = selectedPo ?? selectedBill ?? null;
+  const existingShippingBill = sourceDoc?.shippingBillId
+    ? transactions.find(t => t.id === sourceDoc.shippingBillId)
+    : null;
 
   // All receipts (BILL or RECEIVE_ITEM) against this PO, for history
   const priorReceipts = useMemo(() =>
@@ -109,16 +132,17 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
     setClosedLines(prev => ({ ...prev, [lineId]: checked }));
   };
 
-  // Per-line data: ordered, previously received, remaining, default receive qty
+  // Per-line data: works for both PO-based and Bill-based receiving
   const lineData = useMemo(() => {
-    if (!selectedPo) return [];
-    return selectedPo.items.map(item => {
+    const source = selectedPo ?? selectedBill ?? null;
+    if (!source) return [];
+    return source.items.map(item => {
       const orderedQty = item.quantity;
+      // Bills created from BillForm never set receivedQuantity, so treat as 0
       const prevReceived = item.receivedQuantity ?? 0;
       const remaining = Math.max(0, orderedQty - prevReceived);
-      const defaultQty = remaining;
       const lineId = item.id!;
-      const qtyToReceive = receivedQtys[lineId] !== undefined ? receivedQtys[lineId] : defaultQty;
+      const qtyToReceive = receivedQtys[lineId] !== undefined ? receivedQtys[lineId] : remaining;
       const isForceClosed = closedLines[lineId] ?? item.isClosed ?? false;
       const progressPct = orderedQty > 0 ? Math.min(100, ((prevReceived + qtyToReceive) / orderedQty) * 100) : 0;
       return {
@@ -133,7 +157,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
         lineTotal: qtyToReceive * item.rate,
       };
     });
-  }, [selectedPo, receivedQtys, closedLines]);
+  }, [selectedPo, selectedBill, receivedQtys, closedLines]);
 
   const currentTotal = lineData.reduce((sum, l) => sum + l.lineTotal, 0);
 
@@ -200,9 +224,12 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
         shipVia: selectedShipViaEntry?.name,
         shipViaId: selectedShipViaId || undefined,
         shippingCost: shippingCost > 0 ? shippingCost : undefined,
+        // Flag: tells the server this BILL carries a physical inventory receipt
+        ...(receiveWithBill ? { receivesInventory: true } : {}),
       };
       await onSave(receipt);
-      if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
+      // Only create a carrier bill if no shipping bill already exists for this source
+      if (!existingShippingBill && !shippingFromSource && selectedShipViaEntry?.vendorId && shippingCost > 0) {
         await createShippingBill(receipt, selectedShipViaEntry, shippingCost, onSave as any);
       }
 
@@ -275,26 +302,42 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
       }));
 
     const selectedShipViaEntry2 = shipVia.find(sv => sv.id === selectedShipViaId);
+
+    // When receiving against an existing bill (bill-mode), always create a
+    // RECEIVE_ITEM (the bill already exists — we just link receipt to it).
+    // When receiving with a new bill (receiveWithBill=true, PO mode), create
+    // a BILL flagged with receivesInventory so the server knows to update stock.
+    const isBillMode = !!(selectedBillId && selectedBill);
+    const txType = isBillMode ? 'RECEIVE_ITEM' : (receiveWithBill ? 'BILL' : 'RECEIVE_ITEM');
+
     const receipt: Transaction = {
       id: Math.random().toString(),
-      type: receiveWithBill ? 'BILL' : 'RECEIVE_ITEM',
+      type: txType,
       refNo: refNo,
       date: new Date().toLocaleDateString('en-US'),
       entityId: vendorId,
       items: receiptItems,
       total: currentTotal,
-      status: receiveWithBill ? 'OPEN' : 'RECEIVED',
-      purchaseOrderId: selectedPoId,
+      status: isBillMode ? 'RECEIVED' : (receiveWithBill ? 'OPEN' : 'RECEIVED'),
+      purchaseOrderId: selectedPoId || selectedBill?.purchaseOrderId || undefined,
       warehouseId: warehouseId || undefined,
       binId: binId || undefined,
       memo: memoText || undefined,
       shipVia: selectedShipViaEntry2?.name,
       shipViaId: selectedShipViaId || undefined,
       shippingCost: shippingCost > 0 ? shippingCost : undefined,
+      // Flag: tells the server this BILL carries a physical inventory receipt
+      ...(txType === 'BILL' ? { receivesInventory: true } : {}),
     };
 
     await onSave(receipt);
-    if (selectedShipViaEntry2?.vendorId && shippingCost > 0) {
+
+    // If receiving against an existing bill, link the receipt to that bill
+    if (isBillMode && selectedBill) {
+      await onSave({ ...selectedBill, itemReceiptId: receipt.id, status: 'OPEN' });
+    }
+    // Only create a carrier bill if shipping was NOT already billed on the source PO/Bill
+    if (!shippingFromSource && selectedShipViaEntry2?.vendorId && shippingCost > 0) {
       await createShippingBill(receipt, selectedShipViaEntry2, shippingCost, onSave as any);
     }
 
@@ -334,7 +377,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
 
   const canSave = directReceiptMode
     ? vendorId && directLines.some(l => l.itemId && l.qty > 0)
-    : selectedPoId && lineData.some(l => l.qtyToReceive > 0 || l.isForceClosed);
+    : (selectedPoId || selectedBillId) && lineData.some(l => l.qtyToReceive > 0 || l.isForceClosed);
 
   return (
     <div className="bg-[#f0f0f0] h-full flex flex-col p-4 font-sans">
@@ -400,7 +443,14 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
               <select
                 className="border-b-2 border-blue-200 p-2 text-lg font-bold bg-blue-50/10 outline-none focus:border-blue-600 text-[#003366] transition-colors"
                 value={vendorId}
-                onChange={e => { setVendorId(e.target.value); setSelectedPoId(''); setReceivedQtys({}); setClosedLines({}); }}
+                onChange={e => {
+                  setVendorId(e.target.value);
+                  setSelectedPoId('');
+                  setSelectedBillId('');
+                  setReceivedQtys({});
+                  setClosedLines({});
+                  setShippingFromSource(false);
+                }}
               >
                 <option value="">--Select Vendor--</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -409,53 +459,136 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
 
             {vendorId && !directReceiptMode && (
               <div className="flex flex-col gap-2 animate-in slide-in-from-right-4 duration-300">
-                <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic">
-                  Purchase Order (Open &amp; Partial)
-                </label>
-                <select
-                  className="border-b-2 border-blue-200 p-2 text-sm bg-blue-50/20 font-black outline-none focus:border-blue-600 text-[#003366] shadow-sm"
-                  value={selectedPoId}
-                  onChange={e => {
-                    const poId = e.target.value;
-                    setSelectedPoId(poId);
-                    setReceivedQtys({});
-                    setClosedLines({});
-                    const po = vendorPos.find(p => p.id === poId);
-                    if (po) {
-                      // Reset per-line lot assignments when PO changes
-                      setLineLots({});
-                      setAvailableLotsMap({});
-                      // Auto-prefill warehouse from PO's ship-to warehouse
-                      if (po.shipToWarehouseId) {
-                        setWarehouseId(po.shipToWarehouseId);
-                        setBinId('');
-                      }
-                      // Pre-load available lots for each inventory item on this PO
-                      po.items.forEach(async (li: any) => {
-                        if (li.itemId) {
-                          try {
-                            const lots = await fetchAvailableLots(li.itemId);
-                            setAvailableLotsMap((prev: Record<string, any[]>) => ({ ...prev, [li.itemId]: lots }));
-                          } catch { /* silent */ }
+                {/* PO / Bill toggle */}
+                <div className="flex gap-2 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => { setBillMode('PO'); setSelectedBillId(''); setReceivedQtys({}); setClosedLines({}); setLineLots({}); }}
+                    className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border transition-colors ${billMode === 'PO' ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300 hover:border-blue-600'}`}
+                  >
+                    Against PO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBillMode('BILL'); setSelectedPoId(''); setReceivedQtys({}); setClosedLines({}); setLineLots({}); }}
+                    className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border transition-colors ${billMode === 'BILL' ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-300 hover:border-indigo-600'}`}
+                  >
+                    Against Existing Bill
+                  </button>
+                </div>
+
+                {billMode === 'PO' ? (
+                  <>
+                    <label className="text-[10px] font-black text-blue-900 uppercase tracking-widest italic">
+                      Purchase Order (Open &amp; Partial)
+                    </label>
+                    <select
+                      className="border-b-2 border-blue-200 p-2 text-sm bg-blue-50/20 font-black outline-none focus:border-blue-600 text-[#003366] shadow-sm"
+                      value={selectedPoId}
+                      onChange={e => {
+                        const poId = e.target.value;
+                        setSelectedPoId(poId);
+                        setReceivedQtys({});
+                        setClosedLines({});
+                        const po = vendorPos.find(p => p.id === poId);
+                        if (po) {
+                          setLineLots({});
+                          setAvailableLotsMap({});
+                          if (po.shipToWarehouseId) {
+                            setWarehouseId(po.shipToWarehouseId);
+                            setBinId('');
+                          }
+                          // Pre-fill shipping from PO if present
+                          if (po.shipViaId || po.shippingCost) {
+                            if (po.shipViaId) setSelectedShipViaId(po.shipViaId);
+                            setShippingCost(po.shippingCost || 0);
+                            setShippingFromSource(true);
+                          } else {
+                            setShippingFromSource(false);
+                          }
+                          po.items.forEach(async (li: any) => {
+                            if (li.itemId) {
+                              try {
+                                const lots = await fetchAvailableLots(li.itemId);
+                                setAvailableLotsMap((prev: Record<string, any[]>) => ({ ...prev, [li.itemId]: lots }));
+                              } catch { /* silent */ }
+                            }
+                          });
+                        } else {
+                          setShippingFromSource(false);
                         }
-                      });
-                    }
-                  }}
-                >
-                  <option value="">--Choose PO--</option>
-                  {vendorPos.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.refNo} ({p.date}) — ${p.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} [{p.status}]
-                    </option>
-                  ))}
-                </select>
-                {selectedPo && (
-                  <div className="flex items-center gap-2 mt-1">
-                    {statusBadge(selectedPo.status)}
-                    {selectedPo.status === 'PARTIALLY_RECEIVED' && (
-                      <span className="text-[9px] text-amber-700 font-bold">Prior receipts exist — enter remaining quantities below</span>
+                      }}
+                    >
+                      <option value="">--Choose PO--</option>
+                      {vendorPos.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.refNo} ({p.date}) — ${p.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} [{p.status}]
+                        </option>
+                      ))}
+                    </select>
+                    {selectedPo && (
+                      <div className="flex items-center gap-2 mt-1">
+                        {statusBadge(selectedPo.status)}
+                        {selectedPo.status === 'PARTIALLY_RECEIVED' && (
+                          <span className="text-[9px] text-amber-700 font-bold">Prior receipts exist — enter remaining quantities below</span>
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
+                ) : (
+                  <>
+                    <label className="text-[10px] font-black text-indigo-900 uppercase tracking-widest italic">
+                      Existing Bill (not yet received)
+                    </label>
+                    <select
+                      className="border-b-2 border-indigo-300 p-2 text-sm bg-indigo-50/20 font-black outline-none focus:border-indigo-600 text-[#003366] shadow-sm"
+                      value={selectedBillId}
+                      onChange={e => {
+                        const billId = e.target.value;
+                        setSelectedBillId(billId);
+                        setReceivedQtys({});
+                        setClosedLines({});
+                        setLineLots({});
+                        setAvailableLotsMap({});
+                        const bill = vendorBills.find(b => b.id === billId);
+                        if (bill) {
+                          // Pre-fill shipping from the bill if it has carrier/cost info
+                          if (bill.shipViaId || bill.shippingCost) {
+                            if (bill.shipViaId) setSelectedShipViaId(bill.shipViaId);
+                            setShippingCost(bill.shippingCost || 0);
+                            setShippingFromSource(true);
+                          } else {
+                            setShippingFromSource(false);
+                          }
+                          bill.items.forEach(async (li: any) => {
+                            if (li.itemId) {
+                              try {
+                                const lots = await fetchAvailableLots(li.itemId);
+                                setAvailableLotsMap((prev: Record<string, any[]>) => ({ ...prev, [li.itemId]: lots }));
+                              } catch { /* silent */ }
+                            }
+                          });
+                        } else {
+                          setShippingFromSource(false);
+                        }
+                      }}
+                    >
+                      <option value="">--Choose Bill--</option>
+                      {vendorBills.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.refNo} ({b.date}) — ${b.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} [{b.status}]
+                        </option>
+                      ))}
+                    </select>
+                    {vendorBills.length === 0 && (
+                      <span className="text-[9px] text-gray-400 italic mt-1">No unmatched bills found for this vendor</span>
+                    )}
+                    {selectedBill && (
+                      <span className="text-[9px] text-indigo-700 font-bold mt-1">
+                        Items pre-loaded from bill — assign warehouse/bin/lot below before receiving
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -556,24 +689,28 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
           )}
 
           {/* Document Chain Panel */}
-          {selectedPo && (
+          {(selectedPo || selectedBill) && (
             <div className="bg-white border-2 border-indigo-100 rounded shadow-lg p-5">
               <div className="text-[10px] font-black uppercase tracking-widest text-indigo-700 mb-3 flex items-center gap-2">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 Document Chain
               </div>
+              {(() => {
+                const sourceDoc = selectedPo ?? selectedBill!;
+                const sourceLabel = selectedPo ? 'PO' : 'BILL';
+                return (
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Source PO card */}
+                {/* Source document card */}
                 <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded px-3 py-2">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded">PO</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded">{sourceLabel}</span>
                   <div>
-                    <div className="text-[10px] font-black text-indigo-900">#{selectedPo.refNo}</div>
-                    <div className="text-[9px] text-indigo-500">{selectedPo.date} · ${selectedPo.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    <div className="text-[10px] font-black text-indigo-900">#{sourceDoc.refNo}</div>
+                    <div className="text-[9px] text-indigo-500">{sourceDoc.date} · ${sourceDoc.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                   </div>
                   <span className={`ml-1 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                    selectedPo.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-700' :
-                    selectedPo.status === 'CLOSED' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700'
-                  }`}>{selectedPo.status}</span>
+                    sourceDoc.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-700' :
+                    sourceDoc.status === 'CLOSED' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700'
+                  }`}>{sourceDoc.status}</span>
                 </div>
 
                 {priorReceipts.length > 0 && (
@@ -595,12 +732,13 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
 
                 <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 <div className="flex items-center gap-2 bg-green-50 border border-green-200 border-dashed rounded px-3 py-2 opacity-70">
-                  <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${receiveWithBill ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                    {receiveWithBill ? 'Bill' : 'Receipt'}
+                  <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${selectedBillId ? 'bg-blue-100 text-blue-700' : receiveWithBill ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {selectedBillId ? 'Receipt' : receiveWithBill ? 'Bill' : 'Receipt'}
                   </span>
                   <span className="text-[10px] font-black text-green-800 italic">New · {refNo}</span>
                 </div>
               </div>
+              ); })()}
 
               {/* Backorder alert: items remaining after this receipt */}
               {(() => {
@@ -641,8 +779,8 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
             </div>
           )}
 
-          {/* Overall Progress Bar (only when PO selected) */}
-          {selectedPo && (
+          {/* Overall Progress Bar (only when PO or Bill selected) */}
+          {(selectedPo || selectedBill) && (
             <div className="bg-white border-2 border-gray-100 rounded shadow-lg p-5">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Overall Receiving Progress</span>
@@ -671,7 +809,7 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
 
           {/* Line Items Table */}
           <div className="bg-white border-2 border-gray-300 rounded shadow-2xl overflow-hidden min-h-[300px]">
-            {selectedPo ? (
+            {(selectedPo || selectedBill) ? (
               <table className="w-full text-[11px] text-left border-collapse">
                 <thead className="bg-[#e8e8e8] border-b-2 border-gray-400 text-[#003366] font-black uppercase">
                   <tr>
@@ -1139,49 +1277,117 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
           </div>
 
           {/* Shipping */}
-          {(selectedPo || directReceiptMode) && shipVia.length > 0 && (
-            <div className="bg-blue-50/40 border-2 border-blue-100 rounded shadow-lg p-5 space-y-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Inbound Shipping</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase text-gray-500">Carrier (Ship Via)</label>
-                  <select
-                    className="border border-gray-300 rounded px-2 py-1.5 text-xs bg-white outline-none focus:border-blue-500 font-bold"
-                    value={selectedShipViaId}
-                    onChange={e => setSelectedShipViaId(e.target.value)}
-                  >
-                    <option value="">-- Select --</option>
-                    {shipVia.filter(sv => sv.isActive).map(sv => (
-                      <option key={sv.id} value={sv.id}>{sv.name}</option>
-                    ))}
-                  </select>
+          {(selectedPo || selectedBill || directReceiptMode) && shipVia.length > 0 && (() => {
+            if (existingShippingBill) {
+              // Read-only view — shipping bill already exists, no editing allowed
+              const carrierName = existingShippingBill.shipVia ||
+                shipVia.find(sv => sv.id === existingShippingBill.shipViaId)?.name ||
+                vendors.find(v => v.id === existingShippingBill.entityId)?.name ||
+                'Carrier';
+              return (
+                <div className="bg-blue-50/40 border-2 border-blue-200 rounded shadow-lg p-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Inbound Shipping</p>
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-green-100 text-green-700 border border-green-300 px-2 py-0.5 rounded-full">
+                      Bill Already Created
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase text-gray-400">Carrier (Ship Via)</label>
+                      <div className="border border-gray-200 rounded px-2 py-1.5 text-xs bg-gray-50 text-gray-600 font-bold cursor-not-allowed">
+                        {carrierName}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase text-gray-400">Shipping Cost</label>
+                      <div className="border border-gray-200 rounded px-2 py-1.5 text-xs bg-gray-50 text-gray-600 font-bold cursor-not-allowed">
+                        ${existingShippingBill.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-green-600 font-bold">
+                    ✓ Shipping bill{' '}
+                    {onOpenWindow ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenWindow('BILL_DISPLAY', `Bill #${existingShippingBill.refNo}`, { transactionId: existingShippingBill.id })}
+                        className="text-blue-600 hover:text-blue-900 underline transition-colors"
+                      >
+                        #{existingShippingBill.refNo}
+                      </button>
+                    ) : (
+                      <span>#{existingShippingBill.refNo}</span>
+                    )}{' '}
+                    ({existingShippingBill.date}) — status: {existingShippingBill.status}. No new bill will be created.
+                  </p>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Cost</label>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      className="border border-gray-300 rounded pl-5 pr-2 py-1.5 text-xs w-full outline-none focus:border-blue-500 font-bold"
-                      value={shippingCost || ''}
-                      onChange={e => setShippingCost(parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                    />
+              );
+            }
+
+            // No existing shipping bill — allow input (pre-filled from source if available)
+            return (
+              <div className="bg-blue-50/40 border-2 border-blue-100 rounded shadow-lg p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Inbound Shipping</p>
+                  {shippingFromSource && (
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 border border-blue-300 px-2 py-0.5 rounded-full">
+                      From {selectedBillId ? 'Bill' : 'PO'}
+                    </span>
+                  )}
+                  {shippingFromSource && (
+                    <button
+                      type="button"
+                      onClick={() => { setShippingFromSource(false); setSelectedShipViaId(''); setShippingCost(0); }}
+                      className="text-[9px] text-gray-400 underline hover:text-red-500 transition-colors"
+                    >
+                      Clear &amp; enter new
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Carrier (Ship Via)</label>
+                    <select
+                      className={`border rounded px-2 py-1.5 text-xs bg-white outline-none focus:border-blue-500 font-bold ${shippingFromSource ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300'}`}
+                      value={selectedShipViaId}
+                      onChange={e => { setSelectedShipViaId(e.target.value); setShippingFromSource(false); }}
+                    >
+                      <option value="">-- Select --</option>
+                      {shipVia.filter(sv => sv.isActive).map(sv => (
+                        <option key={sv.id} value={sv.id}>{sv.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-500">Shipping Cost</label>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        className={`border rounded pl-5 pr-2 py-1.5 text-xs w-full outline-none focus:border-blue-500 font-bold ${shippingFromSource ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-300'}`}
+                        value={shippingCost || ''}
+                        onChange={e => { setShippingCost(parseFloat(e.target.value) || 0); setShippingFromSource(false); }}
+                        placeholder="0.00"
+                      />
+                    </div>
                   </div>
                 </div>
+                {selectedShipViaId && (
+                  <p className="text-[9px]">
+                    {shippingFromSource
+                      ? <span className="text-blue-600 font-bold">✓ Shipping info carried from {selectedBillId ? 'bill' : 'PO'} — a new carrier bill will be created on save</span>
+                      : shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
+                        ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated on save</span>
+                        : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created</span>
+                    }
+                  </p>
+                )}
               </div>
-              {selectedShipViaId && (
-                <p className="text-[9px]">
-                  {shipVia.find(sv => sv.id === selectedShipViaId)?.vendorId
-                    ? <span className="text-green-600 font-bold">✓ Carrier bill will be auto-generated on save</span>
-                    : <span className="text-orange-500">⚠ No vendor linked — bill will not be auto-created</span>
-                  }
-                </p>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Memo */}
           {(selectedPo || directReceiptMode) && (
@@ -1216,7 +1422,23 @@ const ReceiveInventoryForm: React.FC<Props> = ({ vendors, transactions, items, s
                 <tbody className="divide-y divide-amber-50">
                   {priorReceipts.map((r, i) => (
                     <tr key={i} className="hover:bg-amber-50/30">
-                      <td className="p-3 font-mono font-bold text-gray-700">{r.refNo}</td>
+                      <td className="p-3 font-mono font-bold">
+                        {onOpenWindow ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const viewType = r.type === 'RECEIVE_ITEM' ? 'ITEM_RECEIPT_DISPLAY' : 'BILL_DISPLAY';
+                              const title = r.type === 'RECEIVE_ITEM' ? `Item Receipt #${r.refNo}` : `Bill #${r.refNo}`;
+                              onOpenWindow(viewType, title, { transactionId: r.id });
+                            }}
+                            className="text-blue-700 hover:text-blue-900 hover:underline transition-colors cursor-pointer"
+                          >
+                            {r.refNo}
+                          </button>
+                        ) : (
+                          <span className="text-gray-700">{r.refNo}</span>
+                        )}
+                      </td>
                       <td className="p-3 text-gray-600">{r.date}</td>
                       <td className="p-3">
                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${r.type === 'RECEIVE_ITEM' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>

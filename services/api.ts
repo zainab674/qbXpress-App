@@ -189,6 +189,36 @@ export const deleteTransaction = (id: string) => remove(`transactions/${id}`);
 export const fetchNextRefNo = (type: string): Promise<{ refNo: string }> =>
     get(`transactions/next-ref-no?type=${encodeURIComponent(type)}`);
 
+export const uploadTransactionAttachment = async (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('attachment', file);
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/transactions/${id}/attachments`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'x-company-id': companyId || '' },
+        body: formData,
+    });
+    if (!res.ok) throw new Error('Attachment upload failed');
+    return res.json();
+};
+
+export const deleteTransactionAttachment = async (id: string, fileName: string) => {
+    const token = localStorage.getItem('authToken');
+    const companyId = localStorage.getItem('activeCompanyId');
+    const res = await fetch(`${API_BASE_URL}/transactions/${id}/attachments`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-company-id': companyId || '',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileName }),
+    });
+    if (!res.ok) throw new Error('Attachment deletion failed');
+    return res.json();
+};
+
 // Allocation: assign/unassign products from a Manufacturing/Work Order
 export const assignAllocation = (moId: string, data: {
     targetTransactionId: string;
@@ -218,6 +248,7 @@ export const deleteItem = (id: string) => remove(`items/${id}`);
 export const fetchItemByBarcode = (barcode: string) => get(`items/barcode/${encodeURIComponent(barcode)}`);
 export const fetchBOMHistory = (itemId: string) => get(`items/${itemId}/bom-history`);
 export const saveAccount = (account: any) => post('accounts', account);
+export const deleteAccount = (id: string) => remove(`accounts/${id}`);
 export const saveLead = (lead: any) => post('leads', lead);
 export const saveClass = (cls: any) => post('classes', cls);
 export const saveSalesRep = (rep: any) => post('sales-reps', rep);
@@ -439,6 +470,12 @@ export const fetchAvailableLots = (itemId: string, warehouseId?: string) =>
 
 export const assignLot = (itemId: string, data: { lotNumber: string; quantity: number; unitCost?: number; expirationDate?: string; manufacturingDate?: string; warehouseId?: string; notes?: string; vendorName?: string }) =>
     post(`inventory/lots/${itemId}/assign`, data);
+
+export const reconcileUntrackedLot = (itemId: string) =>
+    post(`inventory/lots/${itemId}/reconcile-untracked`, {});
+
+export const deleteLot = (lotId: string) =>
+    remove(`inventory/lots/${lotId}`);
 
 // QB Enterprise: lot expiration alerts — lots expiring within N days
 export const fetchExpiringLots = (days: number = 30) =>

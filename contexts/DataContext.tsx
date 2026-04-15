@@ -249,7 +249,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setBankFeeds(bFeeds);
 
         if (data) {
-            if (data.accounts) setAccounts(data.accounts);
+            if (data.accounts && data.accounts.length > 0) setAccounts(data.accounts);
             if (data.customers) setCustomers(data.customers);
             if (data.vendors) setVendors(data.vendors);
             if (data.employees) setEmployees(data.employees);

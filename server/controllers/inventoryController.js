@@ -74,7 +74,28 @@ const updateLot = async (req, res, next) => {
     }
 };
 
-/** Directly assign existing on-hand inventory to a named lot (no quantity change) */
+const deleteLot = async (req, res, next) => {
+    try {
+        const { lotId } = req.params;
+        const lot = await InventoryLot.findOne({ _id: lotId, companyId: req.companyId, userId: req.user.id });
+        if (!lot) return res.status(404).json({ message: 'Lot not found' });
+
+        // Restore quantity back to item onHand before removing the lot
+        if (lot.quantityRemaining > 0) {
+            await Item.findOneAndUpdate(
+                { id: lot.itemId, companyId: req.companyId, userId: req.user.id },
+                { $inc: { onHand: -lot.quantityRemaining } }
+            );
+        }
+
+        await lot.deleteOne();
+        res.json({ message: 'Lot deleted', lotId, quantityRemoved: lot.quantityRemaining });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/** Directly assign existing on-hand inventory to a named lot (reassigns from UNTRACKED pool) */
 const assignLot = async (req, res, next) => {
     try {
         const { itemId } = req.params;
@@ -91,7 +112,32 @@ const assignLot = async (req, res, next) => {
         const duplicate = await InventoryLot.findOne({ itemId, lotNumber: lotNumber.trim(), companyId: req.companyId, userId: req.user.id });
         if (duplicate) return res.status(409).json({ message: `Lot number "${lotNumber}" already exists for this item` });
 
-        const costPerUnit = unitCost ?? item.cost ?? 0;
+        // Deduct from UNTRACKED lot(s) — assignment is a reassignment, not new inventory
+        let remaining = quantity;
+        const untrackedLots = await InventoryLot.find({
+            itemId,
+            companyId: req.companyId,
+            userId: req.user.id,
+            lotNumber: /^UNTRACKED-/,
+            quantityRemaining: { $gt: 0 },
+        }).sort({ dateReceived: 1 });
+
+        const totalUntracked = untrackedLots.reduce((sum, l) => sum + l.quantityRemaining, 0);
+        if (totalUntracked < quantity) {
+            return res.status(400).json({
+                message: `Only ${totalUntracked} untracked unit(s) available to assign. Cannot assign ${quantity}.`
+            });
+        }
+
+        for (const ul of untrackedLots) {
+            if (remaining <= 0) break;
+            const deduct = Math.min(ul.quantityRemaining, remaining);
+            ul.quantityRemaining -= deduct;
+            remaining -= deduct;
+            await ul.save();
+        }
+
+        const costPerUnit = unitCost ?? item.averageCost ?? item.cost ?? 0;
         const lot = await InventoryLot.create({
             itemId,
             lotNumber: lotNumber.trim(),
@@ -111,6 +157,56 @@ const assignLot = async (req, res, next) => {
         });
 
         res.status(201).json(lot);
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * Reconcile UNTRACKED lot(s) for an item so total lot qty matches item.onHand.
+ * Fixes existing data where assignLot created named lots without deducting UNTRACKED.
+ */
+const reconcileUntrackedLot = async (req, res, next) => {
+    try {
+        const { itemId } = req.params;
+        const item = await Item.findOne({ id: itemId, userId: req.user.id, companyId: req.companyId });
+        if (!item) return res.status(404).json({ message: 'Item not found' });
+
+        const allLots = await InventoryLot.find({
+            itemId, companyId: req.companyId, userId: req.user.id, quantityRemaining: { $gt: 0 }
+        });
+
+        const namedTotal = allLots
+            .filter(l => !/^UNTRACKED-/.test(l.lotNumber))
+            .reduce((sum, l) => sum + l.quantityRemaining, 0);
+
+        const untrackedLots = allLots
+            .filter(l => /^UNTRACKED-/.test(l.lotNumber))
+            .sort((a, b) => new Date(a.dateReceived).getTime() - new Date(b.dateReceived).getTime());
+
+        const onHand = item.onHand || 0;
+        const correctUntracked = Math.max(0, onHand - namedTotal);
+        const currentUntracked = untrackedLots.reduce((sum, l) => sum + l.quantityRemaining, 0);
+
+        if (currentUntracked === correctUntracked) {
+            return res.json({ message: 'No reconciliation needed', onHand, namedTotal, untrackedTotal: currentUntracked });
+        }
+
+        // Adjust UNTRACKED lots to match correct total
+        let target = correctUntracked;
+        for (const ul of untrackedLots) {
+            ul.quantityRemaining = Math.min(ul.quantityRemaining, target);
+            target -= ul.quantityRemaining;
+            await ul.save();
+        }
+
+        res.json({
+            message: 'Reconciled',
+            onHand,
+            namedTotal,
+            untrackedBefore: currentUntracked,
+            untrackedAfter: correctUntracked,
+        });
     } catch (err) {
         next(err);
     }
@@ -1247,7 +1343,9 @@ module.exports = {
     // Lots
     getAvailableLots,
     assignLot,
+    reconcileUntrackedLot,
     updateLot,
+    deleteLot,
     refreshLotStatuses,
     getExpiringLots,
     // Lot Traceability + QC

@@ -242,7 +242,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'SALES_ORDER': return <SalesOrderForm customers={data.customers} items={data.items} classes={data.classes} salesReps={data.salesReps} shipVia={data.shipVia} terms={data.terms} transactions={data.transactions} priceLevels={data.priceLevels} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'BILL': return <BillForm vendors={data.vendors} accounts={data.accounts} items={data.items} customers={data.customers} terms={data.terms} transactions={data.transactions} classes={data.classes} shipVia={data.shipVia} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
         case 'PURCHASE_ORDER': return <PurchaseOrderForm vendors={data.vendors} items={data.items} customers={data.customers} classes={data.classes} accounts={data.accounts} transactions={data.transactions} shipVia={data.shipVia} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialData={params?.initialData} />;
-        case 'RECEIVE_INVENTORY': return <ReceiveInventoryForm vendors={data.vendors} transactions={data.transactions} items={data.items} shipVia={data.shipVia} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} initialVendorId={params?.initialVendorId} initialPoId={params?.initialPoId} />;
+        case 'RECEIVE_INVENTORY': return <ReceiveInventoryForm vendors={data.vendors} transactions={data.transactions} items={data.items} shipVia={data.shipVia} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} onOpenWindow={onOpenWindow} initialVendorId={params?.initialVendorId} initialPoId={params?.initialPoId} />;
         case 'INVENTORY_ADJUSTMENT': return <InventoryAdjustmentForm items={data.items} accounts={data.accounts} onSave={onSaveTransaction} onClose={() => onCloseWindow(winId)} />;
         case 'BUILD_ASSEMBLY': return <BuildAssemblyForm
             items={data.items}
@@ -387,7 +387,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
 
                         // Pass SO id as linked document so DataContext can confirm Converted status
                         const { id: soId, refNo: _refNo, ...invoiceData } = updatedSO;
-                        onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invoiceData, linkedDocumentIds: [soId] } as any });
+                        onOpenWindow('INVOICE', 'Invoice', { initialData: { ...invoiceData, linkedDocumentIds: [soId], salesOrderId: soId } as any });
                     }}
                     onCreatePO={(s) => {
                         const { _id, __v, ...cleanSO } = s as any;
@@ -581,7 +581,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({ win, data, handl
         case 'CLASS_LIST': return <ClassList classes={data.classes} onUpdateClasses={onUpdateClasses} />;
         case 'SALES_REP_LIST': return <SalesRepList salesReps={data.salesReps} employees={data.employees} vendors={data.vendors} onUpdateReps={onUpdateReps} />;
         case 'SHIP_VIA_LIST': return <ShipViaList shipVia={data.shipVia} onUpdateShipVia={onUpdateShipVia} vendors={data.vendors} accounts={data.accounts} />;
-        case 'SHIPPING_MODULE': return <ShippingModule transactions={data.transactions} vendors={data.vendors} customers={data.customers} shipVia={data.shipVia} onOpenWindow={onOpenWindow} onClose={() => onCloseWindow(winId)} />;
+        case 'SHIPPING_MODULE': return <ShippingModule transactions={data.transactions} vendors={data.vendors} customers={data.customers} accounts={data.accounts} shipVia={data.shipVia} onUpdateShipVia={onUpdateShipVia} onOpenWindow={onOpenWindow} onClose={() => onCloseWindow(winId)} />;
         case 'INVENTORY_CENTER': return <InventoryCenter items={data.items} transactions={data.transactions} onUpdateItems={onUpdateItems} onOpenForm={(item) => onOpenItemForm(item)} onOpenAdjustment={() => onOpenWindow('INVENTORY_ADJUSTMENT', 'Adjust Quantity/Value on Hand')} onOpenBuild={() => onOpenWindow('BUILD_ASSEMBLY', 'Build Assemblies')} onOpenPO={() => onOpenWindow('PURCHASE_ORDER', 'Purchase Orders')} onOpenReceive={() => onOpenWindow('RECEIVE_INVENTORY', 'Receive Items')} onOpenWindow={onOpenWindow} />;
         case 'WAREHOUSE_CENTER': return <WarehouseCenter items={data.items} showAlert={showAlert} />;
         case 'LOT_TRACEABILITY': return <LotTraceabilityView onClose={() => onCloseWindow(winId)} initialLotNumber={params?.lotNumber} />;

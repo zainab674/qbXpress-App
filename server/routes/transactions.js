@@ -7,7 +7,7 @@ const requirePermission = require('../middleware/requirePermission');
 const validate = require('../middleware/validate');
 const { transactionSchema } = require('../validations/transactionSchema');
 const multer = require('multer');
-const upload = multer();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(auth);
 
@@ -32,5 +32,9 @@ router.patch('/:id/fulfillment', requirePermission('transactions', 'write'), tra
 // ── Allocation: assign / unassign products from an MO to an SO or target MO ─
 router.post('/:id/allocations', requirePermission('transactions', 'write'), transactionController.assignAllocation);
 router.delete('/:id/allocations/:allocationId', requirePermission('transactions', 'write'), transactionController.unassignAllocation);
+
+// ── Attachments ───────────────────────────────────────────────────────────────
+router.post('/:id/attachments', requirePermission('transactions', 'write'), upload.single('attachment'), transactionController.uploadAttachment);
+router.delete('/:id/attachments', requirePermission('transactions', 'write'), transactionController.deleteAttachment);
 
 module.exports = router;

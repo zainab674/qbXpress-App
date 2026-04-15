@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendEmail, fetchAvailableLots, fetchWarehouses, fetchSerialNumbers, fetchItemByBarcode } from '../services/api';
+import { sendEmail, fetchAvailableLots, fetchWarehouses, fetchSerialNumbers, fetchItemByBarcode, uploadTransactionAttachment, deleteTransactionAttachment } from '../services/api';
 import BarcodeScanner from './BarcodeScanner';
 import { useData } from '../contexts/DataContext';
 import { Customer, Item, Transaction, TransactionItem, QBClass, SalesRep, Term, PriceLevel, Warehouse } from '../types';
@@ -39,6 +39,8 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
         initialData?.linkedDocumentIds?.find(id => transactions.find(t => t.id === id && t.type === 'PURCHASE_ORDER')) ||
         ''
     );
+    const [attachments, setAttachments] = useState<any[]>(initialData?.attachments || []);
+    const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
     const [lineItems, setLineItems] = useState<Partial<TransactionItem>[]>(
         initialData?.items?.map(i => ({ ...i, id: i.id || crypto.randomUUID() })) ||
@@ -52,6 +54,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
     const [email, setEmail] = useState(initialData?.email || '');
     const [availableLotsMap, setAvailableLotsMap] = useState<Record<string, any[]>>({});
     const [availableSerialsMap, setAvailableSerialsMap] = useState<Record<string, any[]>>({});
+    const [serialPickerLine, setSerialPickerLine] = useState<{ lineId: string; itemId: string; qty: number } | null>(null);
     const [oosSubstituteSuggestion, setOosSubstituteSuggestion] = useState<{ lineId: string; itemName: string; substitutes: { itemId: string; reason?: string }[] } | null>(null);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [fulfillmentWarehouseId, setFulfillmentWarehouseId] = useState(initialData?.fulfillmentWarehouseId || '');
@@ -107,7 +110,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
     };
 
     const updateLineItem = (id: string, updates: Partial<TransactionItem>) => {
-        setLineItems(lineItems.map(item => {
+        setLineItems(prev => prev.map(item => {
             if (item.id === id) {
                 const updated = { ...item, ...updates };
                 if (updates.quantity !== undefined || updates.rate !== undefined) {
@@ -148,7 +151,14 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                     const lots = await fetchAvailableLots(item.id);
                     setAvailableLotsMap(prev => ({ ...prev, [item.id]: lots }));
                     if (lots && lots.length > 0) {
-                        updateLineItem(id, { lotNumber: lots[0].lotNumber });
+                        const firstLot = lots[0];
+                        const lotUpdates: any = { lotNumber: firstLot.lotNumber };
+                        const lotPrice = firstLot.salesPrice ?? (firstLot.unitCost > 0 ? firstLot.unitCost : null);
+                        if (lotPrice != null) {
+                            lotUpdates.rate = lotPrice;
+                            lotUpdates.amount = (lineItems.find(l => l.id === id)?.quantity || 0) * lotPrice;
+                        }
+                        updateLineItem(id, lotUpdates);
                     }
                 } catch (err) {
                     console.error('Error fetching lots:', err);
@@ -159,10 +169,21 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
             // Fetch available in-stock serials for serial-tracked items
             if ((item.type === 'Inventory Part' || item.type === 'Inventory Assembly') && item.trackSerialNumbers) {
                 fetchSerialNumbers(itemId, 'in-stock')
-                    .then((serials: any[]) => setAvailableSerialsMap(prev => ({ ...prev, [itemId]: serials })))
+                    .then((serials: any[]) => {
+                        setAvailableSerialsMap(prev => ({ ...prev, [itemId]: serials }));
+                        if (serials && serials.length > 0) {
+                            // Auto-select first N serials based on current quantity
+                            setLineItems(prev => {
+                                const line = prev.find(l => l.id === id);
+                                const qty = Math.max(1, Math.round(line?.quantity || 1));
+                                const auto = serials.slice(0, qty).map((s: any) => s.serialNumber);
+                                return prev.map(l => l.id === id ? { ...l, serialNumbers: auto } : l);
+                            });
+                        }
+                    })
                     .catch(() => {});
             } else {
-                updateLineItem(id, { serialNumber: '' });
+                updateLineItem(id, { serialNumbers: [] });
             }
             // QB Enterprise: if item is out of stock and has substitutes, suggest them
             const subs = (item as any).substituteItems as { itemId: string; reason?: string }[] | undefined;
@@ -189,14 +210,19 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
             alert(`Lot number is required for "${itm?.name || missingLot.itemId}". Please select or enter a lot number before saving.`);
             return;
         }
-        // Serial number required for serial-tracked items
+        // Serial numbers required for serial-tracked items (one per unit)
         const missingSerial = validItems.find(li => {
             const itm = availableItems.find(a => a.id === li.itemId);
-            return itm?.trackSerialNumbers && !li.serialNumber;
+            if (!itm?.trackSerialNumbers) return false;
+            const needed = Math.round(li.quantity || 0);
+            const have = (li.serialNumbers || []).filter(Boolean).length;
+            return have < needed;
         });
         if (missingSerial) {
             const itm = availableItems.find(a => a.id === missingSerial.itemId);
-            alert(`Serial number is required for "${itm?.name || missingSerial.itemId}". Please select a serial number before saving.`);
+            const needed = Math.round(missingSerial.quantity || 0);
+            const have = (missingSerial.serialNumbers || []).filter(Boolean).length;
+            alert(`"${itm?.name || missingSerial.itemId}" requires ${needed} serial number(s) — ${have} selected. Please select all serials before saving.`);
             return;
         }
 
@@ -230,6 +256,7 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                 fulfillmentWarehouseId: fulfillmentWarehouseId || undefined,
                 linkedDocumentIds: existingLinkedIds.length > 0 ? existingLinkedIds : undefined,
                 shippingCost: shippingCharge > 0 ? shippingCharge : undefined,
+                attachments,
                 items: validItems.map(i => ({
                     id: i.id || crypto.randomUUID(),
                     itemId: i.itemId,
@@ -240,11 +267,17 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                     tax: !!i.tax,
                     classId: i.classId,
                     lotNumber: i.lotNumber,
-                    serialNumber: i.serialNumber,
+                    serialNumbers: i.serialNumbers?.filter(Boolean),
                 })),
                 BillAddr: { Line1: billAddr },
                 ShipAddr: { Line1: shipAddr }
             } as any);
+
+            // Upload any pending file attachments
+            for (const file of pendingFiles) {
+                try { await uploadTransactionAttachment(soId, file); } catch (e) { console.error('Attachment upload failed:', e); }
+            }
+            setPendingFiles([]);
 
             // Bidirectional: also update the linked PO to reference this SO
             if (linkedPOId) {
@@ -488,7 +521,16 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                                                             ${isExpired ? 'text-red-700' : expiringSoon ? 'text-amber-700' : ''}
                                                             ${missingRequired ? 'border-l-2 border-red-400' : ''}`}
                                                         value={item.lotNumber || ''}
-                                                        onChange={e => updateLineItem(item.id!, { lotNumber: e.target.value })}
+                                                        onChange={e => {
+                                                            const chosenLot = (availableLotsMap[item.itemId!] || []).find((l: any) => l.lotNumber === e.target.value);
+                                                            const updates: any = { lotNumber: e.target.value };
+                                                            const lotPrice = chosenLot?.salesPrice ?? (chosenLot?.unitCost > 0 ? chosenLot.unitCost : null);
+                                                            if (lotPrice != null) {
+                                                                updates.rate = lotPrice;
+                                                                updates.amount = (item.quantity || 0) * lotPrice;
+                                                            }
+                                                            updateLineItem(item.id!, updates);
+                                                        }}
                                                     >
                                                         <option value="">-- Required * --</option>
                                                         {lots.map((lot: any) => {
@@ -515,21 +557,18 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                                             if (!lineItem?.trackSerialNumbers) {
                                                 return <span className="px-4 py-3 block text-gray-300 text-xs select-none">—</span>;
                                             }
-                                            const serials = availableSerialsMap[item.itemId!] || [];
-                                            const missing = !item.serialNumber;
+                                            const qty = Math.max(1, Math.round(item.quantity || 1));
+                                            const selected = (item.serialNumbers || []).filter(Boolean);
+                                            const missing = selected.length < qty;
                                             return (
-                                                <select
-                                                    className={`w-full px-4 py-3 bg-transparent outline-none appearance-none font-bold text-xs text-teal-800 ${missing ? 'border-l-2 border-red-400' : ''}`}
-                                                    value={item.serialNumber || ''}
-                                                    onChange={e => updateLineItem(item.id!, { serialNumber: e.target.value })}
+                                                <button
+                                                    className={`w-full px-3 py-3 text-left text-xs font-bold transition-colors ${missing ? 'text-red-500 border-l-2 border-red-400' : 'text-teal-700'}`}
+                                                    onClick={() => setSerialPickerLine({ lineId: item.id!, itemId: item.itemId!, qty })}
                                                 >
-                                                    <option value="">-- Required * --</option>
-                                                    {serials.map((sn: any) => (
-                                                        <option key={sn.serialNumber} value={sn.serialNumber}>
-                                                            {sn.serialNumber}{sn.warehouseId && sn.warehouseId !== 'DEFAULT' ? ` · ${sn.warehouseId}` : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    {missing
+                                                        ? `${selected.length}/${qty} selected`
+                                                        : qty === 1 ? selected[0] : `${qty} selected`}
+                                                </button>
                                             );
                                         })()}
                                     </td>
@@ -543,11 +582,100 @@ const SalesOrderForm: React.FC<Props> = ({ customers, items: availableItems, cla
                     </table>
                 </div>
 
+                <div className="mt-6 border-t pt-4">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Attachments</label>
+                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-5 flex flex-col items-center justify-center bg-gray-50/30 hover:bg-gray-50 transition-colors group cursor-pointer relative overflow-hidden">
+                        <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => { setPendingFiles(prev => [...prev, ...Array.from(e.target.files || []) as File[]]); e.target.value = ''; }} />
+                        <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">📎</div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Drop files here or click to upload</p>
+                    </div>
+                    {(attachments.length > 0 || pendingFiles.length > 0) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {attachments.map((att, i) => (
+                                <div key={i} className="bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full flex items-center gap-2">
+                                    {att.url ? <a href={att.url} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-700 truncate max-w-[150px] hover:underline">{att.name}</a> : <span className="text-[10px] font-bold text-blue-700 truncate max-w-[150px]">{att.name}</span>}
+                                    <button onClick={async () => { if (att.url && initialData?.id) { try { await deleteTransactionAttachment(initialData.id, att.url.split('/').pop()!); } catch (e) { console.error(e); } } setAttachments(attachments.filter((_, j) => j !== i)); }} className="text-blue-300 hover:text-red-500 transition-colors">✕</button>
+                                </div>
+                            ))}
+                            {pendingFiles.map((f, i) => (
+                                <div key={i} className="bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-full flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-yellow-700 truncate max-w-[150px]">⏳ {f.name}</span>
+                                    <button onClick={() => setPendingFiles(pendingFiles.filter((_, j) => j !== i))} className="text-yellow-300 hover:text-red-500 transition-colors">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 <div className="mt-8 flex justify-end gap-3 border-t pt-6">
                     <button onClick={() => handleSave(true)} className="px-8 py-2 bg-white border border-gray-400 rounded-sm text-xs font-bold hover:bg-gray-50 shadow-sm active:translate-y-px transition-all">Save & New</button>
                     <button onClick={() => handleSave(false)} className="px-8 py-2 bg-[#0077c5] text-white rounded-sm text-xs font-bold hover:bg-[#005fa0] shadow-md active:translate-y-px transition-all">Save & Close</button>
                 </div>
             </div>
+
+            {/* ── Serial Picker Modal ── */}
+            {serialPickerLine && (() => {
+                const { lineId, itemId, qty } = serialPickerLine;
+                const line = lineItems.find(l => l.id === lineId);
+                const selected: string[] = (line?.serialNumbers || []).filter(Boolean) as string[];
+                const available = availableSerialsMap[itemId] || [];
+                const toggle = (sn: string) => {
+                    const next = selected.includes(sn)
+                        ? selected.filter(s => s !== sn)
+                        : selected.length < qty ? [...selected, sn] : selected;
+                    updateLineItem(lineId, { serialNumbers: next });
+                };
+                return (
+                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                        <div className="bg-white rounded-lg shadow-2xl w-[380px] max-h-[80vh] flex flex-col">
+                            <div className="flex items-center justify-between px-4 py-3 border-b">
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-800">Select Serial Numbers</h3>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">Choose {qty} serial(s) — <span className={selected.length < qty ? 'text-red-500 font-bold' : 'text-teal-600 font-bold'}>{selected.length}/{qty} selected</span></p>
+                                </div>
+                                <button onClick={() => setSerialPickerLine(null)} className="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+                            </div>
+                            <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-1">
+                                {available.length === 0 && (
+                                    <p className="text-xs text-gray-400 text-center py-6">No serials in stock for this item.<br/>Add them via Inventory Center → "+ Add Serials".</p>
+                                )}
+                                {available.map((sn: any) => {
+                                    const isSelected = selected.includes(sn.serialNumber);
+                                    const isDisabled = !isSelected && selected.length >= qty;
+                                    return (
+                                        <button
+                                            key={sn.serialNumber}
+                                            onClick={() => toggle(sn.serialNumber)}
+                                            disabled={isDisabled}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded text-xs font-mono text-left transition-colors
+                                                ${isSelected ? 'bg-teal-600 text-white' : isDisabled ? 'bg-gray-50 text-gray-300' : 'bg-gray-100 hover:bg-teal-50 text-gray-800'}`}
+                                        >
+                                            <span className={`w-4 h-4 rounded-sm border flex items-center justify-center flex-shrink-0 text-[10px] font-black
+                                                ${isSelected ? 'bg-white border-white text-teal-600' : 'border-gray-400'}`}>
+                                                {isSelected ? '✓' : ''}
+                                            </span>
+                                            {sn.serialNumber}
+                                            {sn.warehouseId && sn.warehouseId !== 'DEFAULT' && (
+                                                <span className="ml-auto text-[10px] opacity-60">{sn.warehouseId}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="px-4 py-3 border-t flex gap-2">
+                                <button
+                                    onClick={() => setSerialPickerLine(null)}
+                                    className="flex-1 bg-teal-600 text-white text-xs font-bold py-1.5 rounded hover:bg-teal-700"
+                                >Done</button>
+                                <button
+                                    onClick={() => { updateLineItem(lineId, { serialNumbers: [] }); setSerialPickerLine(null); }}
+                                    className="flex-1 border border-gray-300 text-xs font-bold py-1.5 rounded hover:bg-gray-50 text-gray-600"
+                                >Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

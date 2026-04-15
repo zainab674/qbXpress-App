@@ -34,14 +34,14 @@ const BillCenter: React.FC<BillCenterProps> = ({ transactions, vendors, onOpenWi
             if (b.dueDate) {
                 const due = new Date(b.dueDate);
                 due.setHours(0, 0, 0, 0);
-                return due < today;
+                return due <= today;
             }
             // Fallback: assume Net 30 if no dueDate
             const billDate = new Date(b.date);
             if (isNaN(billDate.getTime())) return false;
             billDate.setDate(billDate.getDate() + 30);
             billDate.setHours(0, 0, 0, 0);
-            return billDate < today;
+            return billDate <= today;
         });
     }, [unpaidBills]);
 

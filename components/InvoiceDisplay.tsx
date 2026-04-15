@@ -66,29 +66,35 @@ const InvoiceDisplay: React.FC<InvoiceDisplayProps> = ({ invoice, customer, item
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-6 bg-slate-50 border-y-2 border-slate-300 py-10 px-10 mb-12 shadow-sm">
+                    <div className="grid gap-6 bg-slate-50 border-y-2 border-slate-300 py-10 px-10 mb-12 shadow-sm" style={{ gridTemplateColumns: `repeat(${[true, !!invoice.dueDate, !!invoice.terms, true, !!invoice.shipVia].filter(Boolean).length}, minmax(0, 1fr))` }}>
                         <div>
                             <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Invoice Date</p>
                             <p className="text-xl font-black text-slate-900 italic">{invoice.date}</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Due Date</p>
-                            <p className={`text-xl font-black italic ${invoice.status === 'PAID' ? 'text-green-600' : 'text-red-700 underline'}`}>
-                                {invoice.dueDate || 'N/A'}
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Terms</p>
-                            <p className="text-xl font-black text-slate-900 italic">{invoice.terms || 'N/A'}</p>
-                        </div>
+                        {invoice.dueDate && (
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Due Date</p>
+                                <p className={`text-xl font-black italic ${invoice.status === 'PAID' ? 'text-green-600' : 'text-red-700 underline'}`}>
+                                    {invoice.dueDate}
+                                </p>
+                            </div>
+                        )}
+                        {invoice.terms && (
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Terms</p>
+                                <p className="text-xl font-black text-slate-900 italic">{invoice.terms}</p>
+                            </div>
+                        )}
                         <div>
                             <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Invoice No.</p>
                             <p className="text-xl font-black text-slate-900 font-mono tracking-tighter">#{invoice.refNo}</p>
                         </div>
-                        <div className="text-right border-l border-slate-200 pl-6">
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ship Via</p>
-                            <p className="text-xl font-black text-blue-900 italic">{invoice.shipVia || 'Standard'}</p>
-                        </div>
+                        {invoice.shipVia && (
+                            <div className="text-right border-l border-slate-200 pl-6">
+                                <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ship Via</p>
+                                <p className="text-xl font-black text-blue-900 italic">{invoice.shipVia}</p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex-1">
@@ -151,46 +157,73 @@ const InvoiceDisplay: React.FC<InvoiceDisplayProps> = ({ invoice, customer, item
 
                     <div className="mt-auto border-t-[12px] border-slate-900 pt-16">
                         {/* Shipping & Logistics Info Section */}
-                        <div className="grid grid-cols-2 gap-10 mb-12">
-                            <div className="bg-blue-50/50 p-6 rounded-lg border-2 border-blue-100 shadow-inner">
-                                <h3 className="text-sm font-black text-blue-900 uppercase tracking-[0.2em] mb-4 border-b border-blue-200 pb-2">Shipping Details</h3>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-bold text-slate-500 uppercase">Tracking Number</span>
-                                        <span className="text-sm font-black text-slate-900 bg-white px-3 py-1 rounded shadow-sm border border-slate-200">{invoice.trackingNo || 'Not Assigned'}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-bold text-slate-500 uppercase">Ship Date</span>
-                                        <span className="text-sm font-black text-slate-900">{invoice.shipDate || 'Pending'}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-bold text-slate-500 uppercase">FOB</span>
-                                        <span className="text-sm font-black text-slate-900">{invoice.fob || 'Origin'}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-t border-blue-200 pt-3 mt-2">
-                                        <span className="text-xs font-black text-blue-800 uppercase">Shipment Cost</span>
-                                        <span className="text-base font-black text-blue-900">${(invoice.shippingDetails?.shipmentCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-slate-50 p-6 rounded-lg border-2 border-slate-200">
-                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.2em] mb-4 border-b border-slate-300 pb-2">Packaging Hierarchy</h3>
-                                <div className="space-y-3">
-                                    {[
-                                        { label: 'Inner Pack', dim: invoice.shippingDetails?.innerPackDimensions },
-                                        { label: 'Outer Box', dim: invoice.shippingDetails?.outerBoxDimensions },
-                                        { label: 'Master Carton', dim: invoice.shippingDetails?.masterCartonDimensions }
-                                    ].map((box, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm">
-                                            <span className="text-xs font-bold text-slate-500 uppercase">{box.label}</span>
-                                            <span className="text-sm font-black text-slate-900 italic">
-                                                {box.dim ? `${box.dim.length} x ${box.dim.width} x ${box.dim.height} ${box.dim.unit}` : 'N/A'}
-                                            </span>
+                        {(() => {
+                            const hasTracking = !!invoice.trackingNo;
+                            const hasShipDate = !!invoice.shipDate;
+                            const hasFob = !!invoice.fob;
+                            const hasShipmentCost = (invoice.shippingDetails?.shipmentCost || 0) > 0;
+                            const hasShippingDetails = hasTracking || hasShipDate || hasFob || hasShipmentCost;
+
+                            const packagingBoxes = [
+                                { label: 'Inner Pack', dim: invoice.shippingDetails?.innerPackDimensions },
+                                { label: 'Outer Box', dim: invoice.shippingDetails?.outerBoxDimensions },
+                                { label: 'Master Carton', dim: invoice.shippingDetails?.masterCartonDimensions }
+                            ].filter(box => box.dim && (box.dim.length > 0 || box.dim.width > 0 || box.dim.height > 0));
+                            const hasPackaging = packagingBoxes.length > 0;
+
+                            if (!hasShippingDetails && !hasPackaging) return null;
+
+                            return (
+                                <div className={`grid gap-10 mb-12 ${hasShippingDetails && hasPackaging ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                    {hasShippingDetails && (
+                                        <div className="bg-blue-50/50 p-6 rounded-lg border-2 border-blue-100 shadow-inner">
+                                            <h3 className="text-sm font-black text-blue-900 uppercase tracking-[0.2em] mb-4 border-b border-blue-200 pb-2">Shipping Details</h3>
+                                            <div className="space-y-4">
+                                                {hasTracking && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase">Tracking Number</span>
+                                                        <span className="text-sm font-black text-slate-900 bg-white px-3 py-1 rounded shadow-sm border border-slate-200">{invoice.trackingNo}</span>
+                                                    </div>
+                                                )}
+                                                {hasShipDate && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase">Ship Date</span>
+                                                        <span className="text-sm font-black text-slate-900">{invoice.shipDate}</span>
+                                                    </div>
+                                                )}
+                                                {hasFob && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase">FOB</span>
+                                                        <span className="text-sm font-black text-slate-900">{invoice.fob}</span>
+                                                    </div>
+                                                )}
+                                                {hasShipmentCost && (
+                                                    <div className="flex justify-between items-center border-t border-blue-200 pt-3 mt-2">
+                                                        <span className="text-xs font-black text-blue-800 uppercase">Shipment Cost</span>
+                                                        <span className="text-base font-black text-blue-900">${invoice.shippingDetails!.shipmentCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    ))}
+                                    )}
+                                    {hasPackaging && (
+                                        <div className="bg-slate-50 p-6 rounded-lg border-2 border-slate-200">
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.2em] mb-4 border-b border-slate-300 pb-2">Packaging Hierarchy</h3>
+                                            <div className="space-y-3">
+                                                {packagingBoxes.map((box, i) => (
+                                                    <div key={i} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase">{box.label}</span>
+                                                        <span className="text-sm font-black text-slate-900 italic">
+                                                            {`${box.dim!.length} x ${box.dim!.width} x ${box.dim!.height} ${box.dim!.unit}`}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        </div>
+                            );
+                        })()}
 
                         <div className="bg-slate-50 p-10 rounded-lg border-2 border-slate-200 shadow-sm relative overflow-hidden mb-12">
                             <div className="flex justify-between items-center mb-6">

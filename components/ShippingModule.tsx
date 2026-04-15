@@ -1,12 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Vendor, Customer, ShipViaEntry, ViewState } from '../types';
+import { Transaction, Vendor, Customer, ShipViaEntry, Account, ViewState } from '../types';
 import { buildInboundShipments, buildOutboundShipments, getShippingBillSource } from '../services/shippingService';
+import ShipViaList from './ShipViaList';
 
 interface Props {
   transactions: Transaction[];
   vendors: Vendor[];
   customers: Customer[];
+  accounts: Account[];
   shipVia: ShipViaEntry[];
+  onUpdateShipVia: (shipVia: ShipViaEntry[]) => void;
   onOpenWindow: (type: ViewState, title: string, params?: any) => void;
   onClose: () => void;
 }
@@ -15,11 +18,13 @@ const ShippingModule: React.FC<Props> = ({
   transactions,
   vendors,
   customers,
+  accounts,
   shipVia,
+  onUpdateShipVia,
   onOpenWindow,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'inbound' | 'outbound'>('inbound');
+  const [activeTab, setActiveTab] = useState<'inbound' | 'outbound' | 'shipvia'>('inbound');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -100,21 +105,25 @@ const ShippingModule: React.FC<Props> = ({
       {/* Date filters + Tabs */}
       <div className="bg-white border-b border-gray-200 px-4 pt-2 pb-0 flex items-end justify-between">
         <div className="flex gap-1">
-          {(['inbound', 'outbound'] as const).map(tab => (
+          {([
+            { key: 'inbound', label: '📦 Inbound (What We Pay)' },
+            { key: 'outbound', label: '📬 Outbound (What We Charge)' },
+            { key: 'shipvia', label: '🚚 Ship Via' },
+          ] as const).map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
               className={`px-6 py-2 text-xs font-black uppercase tracking-widest border-t border-l border-r rounded-t-sm transition-colors ${
-                activeTab === tab
+                activeTab === tab.key
                   ? 'bg-white border-gray-400 text-[#003366]'
                   : 'bg-gray-100 border-transparent text-gray-400 hover:bg-gray-50'
               }`}
             >
-              {tab === 'inbound' ? '📦 Inbound (What We Pay)' : '📬 Outbound (What We Charge)'}
+              {tab.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3 pb-2">
+        <div className={`flex items-center gap-3 pb-2 ${activeTab === 'shipvia' ? 'invisible' : ''}`}>
           <label className="text-[10px] font-bold uppercase text-gray-500">From</label>
           <input
             type="date"
@@ -147,13 +156,14 @@ const ShippingModule: React.FC<Props> = ({
                 <th className="px-3 border-r border-gray-300 font-bold uppercase">Bill #</th>
                 <th className="px-3 border-r border-gray-300 font-bold uppercase">Source Document</th>
                 <th className="px-3 border-r border-gray-300 font-bold uppercase">Status</th>
+                <th className="px-3 border-r border-gray-300 font-bold uppercase">Action</th>
                 <th className="px-3 font-bold uppercase text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {inboundBills.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center text-gray-400 italic">
+                  <td colSpan={8} className="px-4 py-16 text-center text-gray-400 italic">
                     No inbound shipping bills found.
                     {!inboundBills.length && <p className="text-[10px] mt-2">Enter a shipping cost on a PO or Receipt with a carrier that has a Vendor linked in Ship Via List.</p>}
                   </td>
@@ -190,6 +200,16 @@ const ShippingModule: React.FC<Props> = ({
                         ) : '--'}
                       </td>
                       <td className="px-3">{statusBadge(bill.status)}</td>
+                      <td className="px-3">
+                        {bill.status === 'OPEN' && (
+                          <button
+                            className="px-2 py-0.5 bg-[#003366] text-white text-[10px] font-black uppercase rounded hover:bg-blue-800 transition-colors"
+                            onClick={() => onOpenWindow('PAY_BILLS', 'Pay Bills', { billId: bill.id })}
+                          >
+                            Pay
+                          </button>
+                        )}
+                      </td>
                       <td className="px-3 text-right font-black">{fmt(bill.total)}</td>
                     </tr>
                   );
@@ -199,13 +219,13 @@ const ShippingModule: React.FC<Props> = ({
             {inboundBills.length > 0 && (
               <tfoot className="sticky bottom-0 bg-[#e8e8e8] border-t-2 border-gray-400">
                 <tr className="h-7">
-                  <td colSpan={6} className="px-3 font-black uppercase text-right text-[11px]">Total Paid to Carriers</td>
+                  <td colSpan={7} className="px-3 font-black uppercase text-right text-[11px]">Total Paid to Carriers</td>
                   <td className="px-3 font-black text-right text-red-700">{fmt(totalPaid)}</td>
                 </tr>
               </tfoot>
             )}
           </table>
-        ) : (
+        ) : activeTab === 'outbound' ? (
           <table className="w-full text-xs text-left border-collapse">
             <thead className="sticky top-0 bg-[#e8e8e8] border-b-2 border-gray-400 z-10">
               <tr className="h-7">
@@ -289,6 +309,13 @@ const ShippingModule: React.FC<Props> = ({
               </tfoot>
             )}
           </table>
+        ) : (
+          <ShipViaList
+            shipVia={shipVia}
+            onUpdateShipVia={onUpdateShipVia}
+            vendors={vendors}
+            accounts={accounts}
+          />
         )}
       </div>
     </div>

@@ -914,8 +914,9 @@ export interface TransactionItem {
   exchangeRate?: number; // Multi-currency
   accountId?: string;    // Expense Account
   creditCategoryId?: string; // Vendor Credit Category
-  lotNumber?: string;    // Lot Number Tracking
-  serialNumber?: string; // Serial Number Tracking
+  lotNumber?: string;      // Lot Number Tracking
+  serialNumber?: string;   // Serial Number Tracking (single, legacy)
+  serialNumbers?: string[]; // Serial Number Tracking (multi — one per unit)
   isShippingLine?: boolean; // Shipping module: injected carrier charge line (excluded from line item table)
   isOneTime?: boolean;   // Recurring Template: Only includes in first generation
   receivedQuantity?: number; // PO Tracking
@@ -955,6 +956,7 @@ export interface Transaction {
   expectedDate?: string;
   vendorMessage?: string;
   itemReceiptId?: string;
+  receivesInventory?: boolean; // true only on BILLs created via ReceiveInventoryForm — prevents BillForm from auto-receiving
   classId?: string;     // Transaction-level Class
   salesRepId?: string;  // Sales Rep
   shipVia?: string;     // Ship Via

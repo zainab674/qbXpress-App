@@ -5,6 +5,7 @@ import AddressSelector, { formatAddress } from './AddressSelector';
 import { useData } from '../contexts/DataContext';
 import RecurringInvoiceDialog from './RecurringInvoiceDialog';
 import { createShippingBill, updateShippingBill } from '../services/shippingService';
+import { uploadTransactionAttachment, deleteTransactionAttachment } from '../services/api';
 
 interface Props {
   vendors: Vendor[];
@@ -37,6 +38,7 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
   const [memo, setMemo] = useState('');
   const [address, setAddress] = useState(initialData?.BillAddr?.Line1 || '');
   const [attachments, setAttachments] = useState<any[]>(initialData?.attachments || []);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [lotNumber, setLotNumber] = useState(initialData?.lotNumber || '');
 
   const [expenseRows, setExpenseRows] = useState<any[]>([{ id: Math.random().toString(), accountId: '', amount: 0, memo: '', customerId: '', isBillable: false, classId: '' }]);
@@ -186,6 +188,12 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
       shippingBillId: initialData?.shippingBillId,
     };
     await onSave(bill);
+
+    // Upload any pending file attachments
+    for (const file of pendingFiles) {
+      try { await uploadTransactionAttachment(bill.id, file); } catch (e) { console.error('Attachment upload failed:', e); }
+    }
+    setPendingFiles([]);
 
     // Auto-generate a separate carrier bill for the shipping cost if carrier has a vendor link
     if (selectedShipViaEntry?.vendorId && shippingCost > 0) {
@@ -522,15 +530,9 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                   multiple
                   className="absolute inset-0 opacity-0 cursor-pointer"
                   onChange={e => {
-                    const files = Array.from(e.target.files || []);
-                    const newAttachments = files.map((f: File) => ({
-                      id: Math.random().toString(),
-                      name: f.name,
-                      size: f.size,
-                      type: f.type,
-                      uploadDate: new Date().toLocaleDateString()
-                    }));
-                    setAttachments([...attachments, ...newAttachments]);
+                    const files = Array.from(e.target.files || []) as File[];
+                    setPendingFiles(prev => [...prev, ...files]);
+                    e.target.value = '';
                   }}
                 />
                 <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">📎</div>
@@ -538,17 +540,23 @@ const BillForm: React.FC<Props> = ({ vendors, accounts, items, customers, terms,
                 <p className="text-[9px] text-gray-400 mt-1">Maximum file size: 20 MB</p>
               </div>
 
-              {attachments.length > 0 && (
+              {(attachments.length > 0 || pendingFiles.length > 0) && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {attachments.map(att => (
                     <div key={att.id} className="bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full flex items-center gap-2 animate-in zoom-in duration-200">
-                      <span className="text-[10px] font-bold text-blue-700 truncate max-w-[150px]">{att.name}</span>
-                      <button
-                        onClick={() => setAttachments(attachments.filter(a => a.id !== att.id))}
-                        className="text-blue-300 hover:text-red-500 transition-colors"
-                      >
-                        ✕
-                      </button>
+                      {att.url ? <a href={att.url} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-700 truncate max-w-[150px] hover:underline">{att.name}</a> : <span className="text-[10px] font-bold text-blue-700 truncate max-w-[150px]">{att.name}</span>}
+                      <button onClick={async () => {
+                        if (att.url && initialData?.id) {
+                          try { await deleteTransactionAttachment(initialData.id, att.url.split('/').pop()!); } catch (e) { console.error(e); }
+                        }
+                        setAttachments(attachments.filter(a => a.id !== att.id));
+                      }} className="text-blue-300 hover:text-red-500 transition-colors">✕</button>
+                    </div>
+                  ))}
+                  {pendingFiles.map((f, i) => (
+                    <div key={i} className="bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-full flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-yellow-700 truncate max-w-[150px]">⏳ {f.name}</span>
+                      <button onClick={() => setPendingFiles(pendingFiles.filter((_, j) => j !== i))} className="text-yellow-300 hover:text-red-500 transition-colors">✕</button>
                     </div>
                   ))}
                 </div>

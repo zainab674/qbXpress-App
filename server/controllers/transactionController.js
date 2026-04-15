@@ -312,6 +312,64 @@ const transactionController = {
             next(err);
         }
     },
+
+    uploadAttachment: async (req, res, next) => {
+        try {
+            if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+            const tx = await Transaction.findOne({ id: req.params.id, userId: req.user.id, companyId: req.companyId });
+            if (!tx) return res.status(404).json({ message: 'Transaction not found' });
+
+            const fs = require('fs');
+            const dir = 'uploads/attachments';
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+            const fileName = `${Date.now()}-${req.file.originalname}`;
+            const filePath = `${dir}/${fileName}`;
+            fs.writeFileSync(filePath, req.file.buffer);
+
+            const attachment = {
+                id: Date.now().toString(),
+                name: req.file.originalname,
+                url: `/uploads/attachments/${fileName}`,
+                size: req.file.size,
+                type: req.file.mimetype,
+                uploadDate: new Date().toLocaleDateString()
+            };
+
+            tx.attachments = [...(tx.attachments || []), attachment];
+            await tx.save();
+
+            res.json({ message: 'Attachment uploaded successfully', attachment });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    deleteAttachment: async (req, res, next) => {
+        try {
+            const { fileName } = req.body;
+            const tx = await Transaction.findOne({ id: req.params.id, userId: req.user.id, companyId: req.companyId });
+            if (!tx) return res.status(404).json({ message: 'Transaction not found' });
+
+            const index = (tx.attachments || []).findIndex(a => a.url && a.url.endsWith(fileName));
+            if (index === -1) return res.status(404).json({ message: 'Attachment not found' });
+
+            const attachment = tx.attachments[index];
+            const fs = require('fs');
+            const path = require('path');
+            const filePath = path.join(process.cwd(), attachment.url.replace(/^\//, ''));
+            if (fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch (e) { console.error('Failed to delete file:', e); }
+            }
+
+            tx.attachments.splice(index, 1);
+            await tx.save();
+
+            res.json({ message: 'Attachment deleted successfully' });
+        } catch (err) {
+            next(err);
+        }
+    },
 };
 
 module.exports = transactionController;
